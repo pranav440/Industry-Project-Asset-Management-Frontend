@@ -12,12 +12,14 @@ import {
 } from 'antd';
 import { LockOutlined, SafetyOutlined } from '@ant-design/icons';
 import viz from '../assets/assetmx-visualization.jpg';
+import { login } from '../api/auth';
+import type { UserRole } from '../auth/session';
 import './Login.css';
 
 const { Link } = Typography;
 
 type LoginFormValues = {
-  role?: string;
+  role: UserRole;
   identifier: string;
   password: string;
   remember?: boolean;
@@ -33,16 +35,23 @@ function LoginInner({
   const { message } = AntdApp.useApp();
   const [loading, setLoading] = useState(false);
 
-  const onFinish = (values: LoginFormValues) => {
+  const onFinish = async (values: LoginFormValues) => {
     setLoading(true);
-    // No backend yet — placeholder sign-in handler.
-    setTimeout(() => {
+    try {
+      const user = await login({
+        role: values.role,
+        identifier: values.identifier,
+        password: values.password,
+        remember: values.remember,
+      });
+      message.success(`Signed in as ${user.email} (${user.role})`);
+      onSignIn?.();
+    } catch (err) {
+      const text = err instanceof Error ? err.message : 'Sign in failed';
+      message.error(text);
+    } finally {
       setLoading(false);
-      message.success(`Signed in as ${values.identifier} (${values.role ?? 'no role'})`);
-      if (onSignIn) {
-        onSignIn();
-      }
-    }, 800);
+    }
   };
 
   return (

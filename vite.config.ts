@@ -16,7 +16,8 @@ function spaFallback() {
           path.startsWith('/src') ||
           path.startsWith('/node_modules') ||
           path.startsWith('/assets') ||
-          path.startsWith('/favicon')
+          path.startsWith('/favicon') ||
+          path.startsWith('/api')
         ) {
           return next()
         }
@@ -29,4 +30,12 @@ function spaFallback() {
 
 export default defineConfig({
   plugins: [react(), spaFallback()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 })
