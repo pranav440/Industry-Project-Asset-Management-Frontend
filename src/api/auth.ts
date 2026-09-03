@@ -49,3 +49,29 @@ export async function login(payload: LoginPayload): Promise<AuthUser> {
   saveSession(body.access_token, body.user, Boolean(payload.remember));
   return body.user;
 }
+
+async function postAuth<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`/api/auth/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const result = (await response.json().catch(() => ({}))) as T & ApiError;
+  if (!response.ok) throw new Error(errorMessage(result, 'Request failed'));
+  return result;
+}
+
+export function requestPasswordReset(identifier: string) {
+  return postAuth<{ detail: string }>('password-reset/request', { identifier });
+}
+
+export function confirmPasswordReset(token: string, password: string) {
+  return postAuth<{ detail: string }>('password-reset/confirm', { token, password });
+}
+
+export async function fetchCurrentUser(token: string): Promise<AuthUser> {
+  const response = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+  const body = (await response.json().catch(() => ({}))) as AuthUser & ApiError;
+  if (!response.ok) throw new Error(errorMessage(body, 'Invalid or expired session'));
+  return body;
+}

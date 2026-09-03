@@ -27,3 +27,12 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: UserOut
+
+
+class PasswordResetRequest(BaseModel):
+    identifier: str = Field(min_length=1, max_length=255)
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=20, max_length=256)
+    password: str = Field(min_length=12, max_length=128)

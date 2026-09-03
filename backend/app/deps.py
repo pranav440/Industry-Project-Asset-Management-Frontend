@@ -23,6 +23,6 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
     user = db.get(User, user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or payload.get("role") != user.role.value:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
     return user
