@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
+from app.email_service import EmailDeliveryError, send_password_reset_email
 from app.models import PasswordResetToken, User, UserRole
 from app.schemas import LoginRequest, LoginResponse, PasswordResetConfirm, PasswordResetRequest, UserOut
 from app.security import create_access_token, hash_password, verify_password
@@ -30,6 +31,12 @@ def _find_user(db: Session, identifier: str) -> User | None:
 
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -63,14 +70,19 @@ def me(current: User = Depends(get_current_user)) -> User:
 def request_password_reset(body: PasswordResetRequest, db: Session = Depends(get_db)) -> dict[str, str]:
     user = _find_user(db, body.identifier)
     if user is not None and user.is_active:
-        db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id))
         raw_token = secrets.token_urlsafe(32)
-        db.add(PasswordResetToken(
-            user_id=user.id,
-            token_hash=_token_hash(raw_token),
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.password_reset_expire_minutes),
-        ))
-        db.commit()
+        try:
+            db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id))
+            db.add(PasswordResetToken(
+                user_id=user.id,
+                token_hash=_token_hash(raw_token),
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.password_reset_expire_minutes),
+            ))
+            db.flush()
+            send_password_reset_email(recipient=user.email, raw_token=raw_token)
+            db.commit()
+        except EmailDeliveryError:
+            db.rollback()
     return {"detail": RESET_REQUEST_MESSAGE}
 
 
@@ -82,7 +94,7 @@ def confirm_password_reset(body: PasswordResetConfirm, db: Session = Depends(get
         .with_for_update()
     )
     now = datetime.now(timezone.utc)
-    if reset is None or reset.used_at is not None or reset.expires_at <= now:
+    if reset is None or reset.used_at is not None or _as_utc(reset.expires_at) <= now:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
     user = db.get(User, reset.user_id)
     if user is None or not user.is_active:

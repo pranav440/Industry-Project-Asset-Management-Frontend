@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     password_reset_expire_minutes: int = 30
 
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    smtp_host: str = "smtp-relay.brevo.com"
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = "AssetMX"
+    frontend_url: str = "http://localhost:5173"
 
     @property
     def database_url(self) -> str:
