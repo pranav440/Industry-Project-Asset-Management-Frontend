@@ -1,5 +1,6 @@
 export type UserRole = 'employee' | 'host' | 'admin' | 'guard' | 'superadmin';
 
+
 export type AuthUser = {
   id: number;
   full_name: string;
@@ -36,6 +37,26 @@ export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
 }
 
+export function getTokenExpiry(token = getToken()): number | null {
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) {
+      return null;
+    }
+    const decoded = JSON.parse(
+      atob(payload.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (payload.length % 4)) % 4)),
+    ) as { exp?: unknown };
+    return typeof decoded.exp === 'number' ? decoded.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+
 export function getUser(): AuthUser | null {
   const raw = localStorage.getItem(USER_KEY) ?? sessionStorage.getItem(USER_KEY);
   if (!raw) {
@@ -50,4 +71,9 @@ export function getUser(): AuthUser | null {
 
 export function hasSession(): boolean {
   return Boolean(getToken());
+}
+
+export function replaceUser(user: AuthUser) {
+  const storage = localStorage.getItem(TOKEN_KEY) ? localStorage : sessionStorage;
+  storage.setItem(USER_KEY, JSON.stringify(user));
 }

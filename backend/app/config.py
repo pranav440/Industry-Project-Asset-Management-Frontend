@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
     jwt_remember_expire_minutes: int = 10080
+    password_reset_expire_minutes: int = 30
 
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 

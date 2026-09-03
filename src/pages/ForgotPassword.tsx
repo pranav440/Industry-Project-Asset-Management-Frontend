@@ -9,26 +9,27 @@ import {
 } from 'antd';
 import { SafetyOutlined } from '@ant-design/icons';
 import viz from '../assets/assetmx-visualization.jpg';
+import { confirmPasswordReset, requestPasswordReset } from '../api/auth';
 import './Login.css';
 
 const { Link } = Typography;
 
 type ForgotFormValues = {
   identifier: string;
+  password: string;
+  confirmPassword: string;
 };
 
-function ForgotInner({ onBack }: { onBack: () => void }) {
+function ForgotInner({ onBack, token }: { onBack: () => void; token?: string }) {
   const { message } = AntdApp.useApp();
   const [loading, setLoading] = useState(false);
 
   const onFinish = (values: ForgotFormValues) => {
     setLoading(true);
-    // TODO: wire to the backend password-recovery endpoint once specified.
-    // No fake success/backend response is invented here.
-    setTimeout(() => {
-      setLoading(false);
-      message.info(`TODO: recovery requested for ${values.identifier}`);
-    }, 400);
+    const action = token ? confirmPasswordReset(token, values.password) : requestPasswordReset(values.identifier);
+    action.then((result) => message.success(result.detail)).then(() => token && onBack())
+      .catch((err) => message.error(err instanceof Error ? err.message : 'Request failed'))
+      .finally(() => setLoading(false));
   };
 
   return (
@@ -70,8 +71,8 @@ function ForgotInner({ onBack }: { onBack: () => void }) {
         <section className="amx-right">
           <div className="amx-form-card">
             <div className="amx-header">
-              <h2 className="amx-welcome">Forgot password?</h2>
-              <p className="amx-subtext">Enter your email or employee ID to continue.</p>
+              <h2 className="amx-welcome">{token ? 'Set a new password' : 'Forgot password?'}</h2>
+              <p className="amx-subtext">{token ? 'Choose a new password for your AssetMX account.' : 'Enter your email or employee ID to continue.'}</p>
             </div>
 
             <Form<ForgotFormValues>
@@ -80,12 +81,14 @@ function ForgotInner({ onBack }: { onBack: () => void }) {
               onFinish={onFinish}
             >
               <Form.Item
-                label="Email or Employee ID"
-                name="identifier"
-                rules={[{ required: true, message: 'Please enter your email or employee ID' }]}
+                label={token ? 'New password' : 'Email or Employee ID'}
+                name={token ? 'password' : 'identifier'}
+                rules={[{ required: true, min: token ? 12 : undefined, message: token ? 'Use at least 12 characters' : 'Please enter your email or employee ID' }]}
               >
-                <Input size="large" placeholder="Enter your email or employee ID" />
+                {token ? <Input.Password size="large" placeholder="Enter a new password" /> : <Input size="large" placeholder="Enter your email or employee ID" />}
               </Form.Item>
+
+              {token && <Form.Item label="Confirm new password" name="confirmPassword" dependencies={['password']} rules={[{ required: true, message: 'Please confirm your new password' }, ({ getFieldValue }) => ({ validator(_, value) { return !value || getFieldValue('password') === value ? Promise.resolve() : Promise.reject(new Error('Passwords do not match')); } })]}><Input.Password size="large" placeholder="Confirm your new password" /></Form.Item>}
 
               <Form.Item>
                 <Button type="primary" size="large" htmlType="submit" block loading={loading}>
@@ -137,6 +140,7 @@ export default function ForgotPasswordPage({
   onBack: () => void;
   onNavigate?: (to: string) => void;
 }) {
+  const token = new URLSearchParams(window.location.search).get('token') ?? undefined;
   const handleBack = () => {
     onNavigate?.('/login');
     onBack();
@@ -167,7 +171,7 @@ export default function ForgotPasswordPage({
       }}
     >
       <AntdApp>
-        <ForgotInner onBack={handleBack} />
+        <ForgotInner onBack={handleBack} token={token} />
       </AntdApp>
     </ConfigProvider>
   );
