@@ -3,6 +3,7 @@ import LoginPage from './pages/Login';
 import ForgotPasswordPage from './pages/ForgotPassword';
 import DashboardPage from './pages/Dashboard';
 import AssetsPage from './pages/Assets';
+import { clearSession, hasSession } from './auth/session';
 
 type Route = 'login' | 'forgot-password' | 'dashboard' | 'assets';
 
@@ -34,9 +35,21 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
+  useEffect(() => {
+    if ((route === 'dashboard' || route === 'assets') && !hasSession()) {
+      window.history.replaceState({}, '', '/login');
+      setRoute('login');
+    }
+  }, [route]);
+
   const navigate = (to: string) => {
     window.history.pushState({}, '', to);
     setRoute(currentRoute());
+  };
+
+  const signOut = () => {
+    clearSession();
+    navigate('/login');
   };
 
   if (route === 'forgot-password') {
@@ -48,7 +61,7 @@ export default function App() {
     );
   }
 
-  if (route === 'assets') {
+  if (route === 'assets' && hasSession()) {
     return (
       <AssetsPage
         onNavigate={(subRoute) => {
@@ -57,17 +70,17 @@ export default function App() {
           } else if (subRoute === 'assets') {
             navigate('/assets');
           } else if (subRoute === 'signout' || subRoute === 'login') {
-            navigate('/login');
+            signOut();
           } else {
             navigate(`/assets#${subRoute}`);
           }
         }}
-        onSignOut={() => navigate('/login')}
+        onSignOut={signOut}
       />
     );
   }
 
-  if (route === 'dashboard') {
+  if (route === 'dashboard' && hasSession()) {
     return (
       <DashboardPage
         onNavigate={(subRoute) => {
@@ -76,12 +89,12 @@ export default function App() {
           } else if (subRoute === 'assets') {
             navigate('/assets');
           } else if (subRoute === 'signout' || subRoute === 'login') {
-            navigate('/login');
+            signOut();
           } else {
             navigate(`/dashboard#${subRoute}`);
           }
         }}
-        onSignOut={() => navigate('/login')}
+        onSignOut={signOut}
       />
     );
   }
