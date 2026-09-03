@@ -1,0 +1,368 @@
+/* =====================================================================
+   AssetMX Dashboard Layout Styles — Fluid Enterprise Scaling & Density
+   ===================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+:root {
+  --amx-dash-navy: #131b2e;
+  --amx-dash-navy-active: #3f465c;
+  --amx-dash-navy-muted: #8b95ad;
+  --amx-dash-cyan-bright: #57dffe;
+  --amx-dash-cyan-fixed: #acedff;
+  --amx-dash-cyan-text: #001f26;
+  --amx-dash-secondary: #00687a;
+  --amx-dash-secondary-dim: #4cd7f6;
+  
+  --amx-dash-bg: #f7f9fb;
+  --amx-dash-surface: #ffffff;
+  --amx-dash-surface-low: #f2f4f6;
+  --amx-dash-surface-high: #e6e8ea;
+  --amx-dash-surface-highest: #e0e3e5;
+  
+  --amx-dash-text: #191c1e;
+  --amx-dash-text-muted: #45464d;
+  --amx-dash-border: #c6c6cd;
+  --amx-dash-border-light: #e2e8f0;
+  
+  --amx-dash-error: #ba1a1a;
+  --amx-dash-error-container: #ffdad6;
+  --amx-dash-on-error: #93000a;
+}
+
+/* Material Symbols Outlined Configuration */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.amx-dashboard-shell {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--amx-dash-bg);
+  color: var(--amx-dash-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+}
+
+/* Sidebar — Confident 280px width */
+.amx-sidebar {
+  width: 280px;
+  height: 100vh;
+  flex-shrink: 0;
+  background-color: var(--amx-dash-navy);
+  color: var(--amx-dash-cyan-fixed);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  user-select: none;
+}
+
+.amx-sidebar-brand {
+  padding: 24px 24px 18px 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.amx-brand-logo-icon {
+  font-size: 34px !important;
+  color: #ffffff;
+}
+
+.amx-brand-title {
+  font-size: 21px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.amx-brand-subtitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amx-dash-navy-muted);
+  letter-spacing: 0.04em;
+  margin: 3px 0 0 0;
+}
+
+.amx-sidebar-cta {
+  padding: 0 20px 18px 20px;
+}
+
+.amx-add-asset-btn {
+  width: 100%;
+  height: 44px;
+  background-color: var(--amx-dash-cyan-fixed);
+  color: var(--amx-dash-cyan-text);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0 18px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.amx-add-asset-btn:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(172, 237, 255, 0.35);
+}
+
+.amx-add-asset-btn:active {
+  transform: scale(0.98);
+}
+
+.amx-sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0 16px 0;
+}
+
+.amx-sidebar-nav::-webkit-scrollbar {
+  display: none;
+}
+.amx-sidebar-nav {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.amx-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.amx-nav-item {
+  width: 100%;
+}
+
+.amx-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 24px;
+  width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--amx-dash-navy-muted);
+  text-decoration: none;
+  border-left: 4px solid transparent;
+  background: transparent;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.amx-nav-link:hover {
+  background-color: rgba(63, 70, 92, 0.5);
+  color: #ffffff;
+}
+
+.amx-nav-link.active {
+  border-left-color: var(--amx-dash-cyan-bright);
+  background-color: var(--amx-dash-navy-active);
+  color: var(--amx-dash-cyan-bright);
+}
+
+.amx-nav-link .material-symbols-outlined {
+  font-size: 22px;
+}
+
+.amx-sidebar-footer {
+  margin-top: auto;
+  padding: 10px 0 18px 0;
+  border-top: 1px solid rgba(63, 70, 92, 0.4);
+  flex-shrink: 0;
+  background-color: var(--amx-dash-navy);
+}
+
+/* Main Area */
+.amx-main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100vh;
+  background-color: var(--amx-dash-bg);
+}
+
+/* Header */
+.amx-app-header {
+  background-color: var(--amx-dash-bg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 28px;
+  width: 100%;
+  height: 68px;
+  border-bottom: 1px solid var(--amx-dash-border);
+  flex-shrink: 0;
+  z-index: 40;
+}
+
+.amx-header-search-wrap {
+  display: flex;
+  align-items: center;
+  background-color: var(--amx-dash-surface-low);
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  width: 100%;
+  max-width: 480px;
+  height: 44px;
+  transition: all 0.15s ease;
+}
+
+.amx-header-search-wrap:focus-within {
+  border-color: var(--amx-dash-secondary);
+  box-shadow: 0 0 0 1.5px var(--amx-dash-secondary);
+  background-color: var(--amx-dash-surface);
+}
+
+.amx-search-icon {
+  color: var(--amx-dash-text-muted);
+  font-size: 22px !important;
+  margin-right: 10px;
+}
+
+.amx-search-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  width: 100%;
+  font-size: 14.5px;
+  font-family: 'Inter', sans-serif;
+  color: var(--amx-dash-text);
+}
+
+.amx-search-input::placeholder {
+  color: var(--amx-dash-text-muted);
+}
+
+.amx-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.amx-header-btn {
+  background: transparent;
+  border: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 9999px;
+  color: var(--amx-dash-text-muted);
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.amx-header-btn:hover {
+  background-color: var(--amx-dash-surface-high);
+  color: var(--amx-dash-text);
+}
+
+.amx-header-btn .material-symbols-outlined {
+  font-size: 23px;
+}
+
+.amx-badge-dot {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--amx-dash-error);
+  border-radius: 9999px;
+  border: 1.5px solid var(--amx-dash-bg);
+}
+
+.amx-user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background-color: var(--amx-dash-surface-high);
+  border: 1px solid var(--amx-dash-border);
+  overflow: hidden;
+  margin-left: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: opacity 0.15s ease;
+}
+
+.amx-user-avatar:hover {
+  opacity: 0.88;
+}
+
+.amx-user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Scrollable Content Container — Fluid width without large white gutters */
+.amx-scrollable-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  width: 100%;
+  padding-bottom: 36px;
+}
+
+.amx-scrollable-content::-webkit-scrollbar {
+  width: 8px;
+}
+.amx-scrollable-content::-webkit-scrollbar-track {
+  background: var(--amx-dash-bg);
+}
+.amx-scrollable-content::-webkit-scrollbar-thumb {
+  background: var(--amx-dash-surface-highest);
+  border-radius: 4px;
+}
+.amx-scrollable-content::-webkit-scrollbar-thumb:hover {
+  background: var(--amx-dash-border);
+}
+
+.amx-content-container {
+  padding: 24px 28px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}

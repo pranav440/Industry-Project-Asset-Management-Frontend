@@ -1,0 +1,387 @@
+/* =====================================================================
+   AssetMX Login — token system from DESIGN.md ("Intelligent Enterprise
+   Control"). Layout matches the Stitch production screen (code.html).
+   ===================================================================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* Brand (from the screen) */
+  --amx-navy: #0b1b35;
+  --amx-teal: #00e5c0;
+  --amx-blue: #2563eb;
+  --amx-blue-hover: #1d4ed8;
+
+  /* Surfaces (DESIGN.md) */
+  --amx-page: #f6f8fc;
+  --amx-surface: #ffffff;
+  --amx-surface-low: #f1f3ff;
+
+  /* Text */
+  --amx-on-surface: #141b2b;
+  --amx-on-surface-variant: #434655;
+  --amx-text-secondary: #667085;
+  --amx-gray-300: #cbd5e1;
+  --amx-gray-400: #94a3b8;
+  --amx-gray-500: #64748b;
+  --amx-gray-600: #475569;
+  --amx-gray-700: #334155;
+
+  /* Borders / outlines */
+  --amx-border: #e4e7ec;
+  --amx-border-soft: #e5e7eb;
+  --amx-outline: #737686;
+
+  /* Radii (8px components, 12px cards) */
+  --amx-r-sm: 8px;
+  --amx-r-card: 12px;
+  --amx-r-lg: 16px;
+
+  /* Elevation — soft, tonal, low-contrast */
+  --amx-shadow-card: 0 4px 20px -2px rgba(11, 18, 32, 0.05);
+  --amx-shadow-2: 0 18px 40px -24px rgba(11, 18, 32, 0.22);
+
+  /* Spacing scale (4px base) */
+  --amx-s-1: 4px;
+  --amx-s-2: 8px;
+  --amx-s-3: 12px;
+  --amx-s-4: 16px;
+  --amx-s-6: 24px;
+  --amx-s-8: 32px;
+  --amx-s-10: 40px;
+  --amx-s-12: 48px;
+}
+
+body {
+  margin: 0;
+  background: var(--amx-page);
+  font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Page & card ---------- */
+.amx-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.amx-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  background: var(--amx-surface);
+  overflow: hidden;
+  border-radius: 0;
+  box-shadow: var(--amx-shadow-2);
+}
+
+/* ---------- Left panel (navy branding) ---------- */
+.amx-left {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--amx-s-10) var(--amx-s-8);
+  background-color: var(--amx-navy);
+  background-image: radial-gradient(circle at center, rgba(37, 99, 235, 0.15) 0%, rgba(11, 27, 53, 1) 70%);
+  color: #fff;
+  overflow: hidden;
+}
+
+.amx-left-top,
+.amx-left-center,
+.amx-left-bottom {
+  position: relative;
+  z-index: 10;
+}
+
+.amx-left-center {
+  margin-top: -36px;
+}
+
+.amx-brand {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--amx-s-2);
+}
+
+.amx-tagline {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--amx-gray-300);
+  margin: 0;
+}
+
+.amx-headline {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--amx-s-4);
+}
+
+.amx-accent {
+  color: var(--amx-teal);
+}
+
+.amx-desc {
+  font-size: 18px;
+  line-height: 28px;
+  font-weight: 400;
+  color: var(--amx-gray-300);
+  max-width: 28rem;
+  margin: 0;
+}
+
+.amx-hero-img-wrap {
+  margin-top: var(--amx-s-12);
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.amx-hero-img {
+  width: 80%;
+  max-width: 500px;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--amx-r-sm);
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+
+.amx-status-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--amx-gray-400);
+  margin: 0 0 var(--amx-s-1);
+}
+
+.amx-status-sub {
+  font-size: 15px;
+  font-weight: 500;
+  color: #fff;
+  margin: 0 0 var(--amx-s-3);
+}
+
+.amx-status-ready {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--amx-s-2);
+}
+
+.amx-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--amx-teal);
+  box-shadow: 0 0 0 4px rgba(0, 229, 192, 0.18);
+}
+
+.amx-status-ready span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--amx-gray-300);
+}
+
+/* ---------- Right panel (form) ---------- */
+.amx-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--amx-s-8) var(--amx-s-10);
+  background: var(--amx-surface);
+  overflow-y: auto;
+}
+
+.amx-form-card {
+  width: 100%;
+  max-width: 440px;
+  margin: -16px auto 0;
+}
+
+.amx-header {
+  margin-bottom: 20px;
+}
+
+.amx-welcome {
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 40px;
+  color: #111827;
+  margin: 0 0 var(--amx-s-2);
+}
+
+.amx-subtext {
+  font-size: 16px;
+  color: var(--amx-gray-600);
+  margin: 0;
+}
+
+/* Field labels -> DESIGN.md label-md */
+.amx-form-card .ant-form-item-label > label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--amx-on-surface-variant);
+}
+
+.amx-form-card .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.amx-form-card .ant-form-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Focus glow (DESIGN.md: 2px outer glow @10% primary) */
+.amx-form-card .ant-input,
+.amx-form-card .ant-input-password,
+.amx-form-card .ant-select-selector {
+  border-radius: var(--amx-r-sm) !important;
+}
+
+.amx-form-card .ant-input:focus,
+.amx-form-card .ant-input-focused,
+.amx-form-card .ant-input-password-focused .ant-input,
+.amx-form-card .ant-select-focused .ant-select-selector {
+  border-color: var(--amx-blue) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1) !important;
+}
+
+.amx-row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-link {
+  color: var(--amx-blue);
+  transition: color 0.2s ease;
+}
+
+.amx-link:hover {
+  color: var(--amx-blue-hover);
+}
+
+/* Divider */
+.amx-divider {
+  margin: 20px 0 16px;
+  color: var(--amx-gray-400);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* SSO button */
+.amx-sso {
+  border-color: var(--amx-border);
+  color: var(--amx-gray-700);
+  font-weight: 600;
+  box-shadow: var(--amx-shadow-card);
+}
+
+.amx-sso:hover {
+  background: #f9fafb !important;
+  border-color: var(--amx-border) !important;
+  color: var(--amx-gray-700) !important;
+}
+
+/* Footer */
+.amx-footer {
+  margin-top: 28px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--amx-gray-500);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.amx-footer-secure {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--amx-s-2);
+  color: var(--amx-gray-600);
+  font-weight: 500;
+}
+
+.amx-footer-access {
+  margin: 0;
+}
+
+.amx-footer-access a {
+  color: var(--amx-blue);
+  font-weight: 500;
+}
+
+.amx-footer-access a:hover {
+  color: var(--amx-blue-hover);
+  text-decoration: underline;
+}
+
+.amx-footer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--amx-s-2);
+  color: var(--amx-gray-400);
+}
+
+.amx-footer-copy {
+  margin: var(--amx-s-1) 0 0;
+  color: var(--amx-gray-400);
+}
+
+/* ---------- Responsive: >= 1024px (desktop layout) ---------- */
+@media (min-width: 1024px) {
+  .amx-page {
+    padding: 24px;
+  }
+
+  .amx-card {
+    flex-direction: row;
+    width: min(92vw, 1400px);
+    aspect-ratio: 1400 / 900;
+    max-height: 92vh;
+    border-radius: var(--amx-r-lg);
+    box-shadow: var(--amx-shadow-2);
+  }
+
+  .amx-left {
+    width: 52%;
+    padding: var(--amx-s-12);
+  }
+
+  .amx-right {
+    width: 48%;
+    padding: 40px 48px;
+  }
+
+  .amx-headline {
+    font-size: 42px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .amx-hero-img {
+    max-width: 360px;
+  }
+
+  .amx-left {
+    min-height: 420px;
+  }
+}

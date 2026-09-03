@@ -1,0 +1,296 @@
+﻿<!DOCTYPE html><html class="h-full" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>AssetMX - Login</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-background": "#141b2b",
+                    "surface": "#f9f9ff",
+                    "on-surface-variant": "#434655",
+                    "inverse-on-surface": "#edf0ff",
+                    "primary-container": "#2563eb",
+                    "on-secondary": "#ffffff",
+                    "on-error-container": "#93000a",
+                    "on-secondary-container": "#5c6274",
+                    "on-surface": "#141b2b",
+                    "surface-container-low": "#f1f3ff",
+                    "error": "#ba1a1a",
+                    "on-tertiary": "#ffffff",
+                    "outline-variant": "#c3c6d7",
+                    "on-tertiary-fixed-variant": "#003cad",
+                    "secondary-fixed": "#dce2f6",
+                    "on-primary-fixed": "#00174b",
+                    "primary-fixed-dim": "#b4c5ff",
+                    "on-primary-container": "#eeefff",
+                    "tertiary-fixed": "#dce1ff",
+                    "tertiary-container": "#3263e6",
+                    "secondary-container": "#d9dff4",
+                    "surface-bright": "#f9f9ff",
+                    "secondary": "#585e6f",
+                    "on-primary": "#ffffff",
+                    "surface-container": "#e9edff",
+                    "tertiary-fixed-dim": "#b5c4ff",
+                    "on-tertiary-container": "#eeefff",
+                    "outline": "#737686",
+                    "background": "#f9f9ff",
+                    "secondary-fixed-dim": "#c0c6da",
+                    "primary": "#004ac6",
+                    "inverse-surface": "#293040",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-tint": "#0053db",
+                    "surface-dim": "#d3daef",
+                    "on-error": "#ffffff",
+                    "tertiary": "#0048cc",
+                    "surface-variant": "#dce2f7",
+                    "on-secondary-fixed-variant": "#404757",
+                    "error-container": "#ffdad6",
+                    "inverse-primary": "#b4c5ff",
+                    "on-tertiary-fixed": "#00164d",
+                    "on-primary-fixed-variant": "#003ea8",
+                    "primary-fixed": "#dbe1ff",
+                    "surface-container-highest": "#dce2f7",
+                    "surface-container-high": "#e1e8fd",
+                    "on-secondary-fixed": "#151b2a",
+                    "deep-navy": "#0B1B35",
+                    "accent-teal": "#2DD4BF",
+                    "soft-background": "#F7F9FC"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "sm": "8px",
+                    "md": "16px",
+                    "xl": "32px",
+                    "xxl": "48px",
+                    "gutter": "24px",
+                    "xs": "4px",
+                    "margin-mobile": "16px",
+                    "container-max": "1440px",
+                    "margin-desktop": "32px",
+                    "base": "4px",
+                    "lg": "24px"
+            },
+            "fontFamily": {
+                    "body-lg": [
+                            "Geist"
+                    ],
+                    "label-sm": [
+                            "Geist"
+                    ],
+                    "display-lg": [
+                            "Geist"
+                    ],
+                    "body-sm": [
+                            "Geist"
+                    ],
+                    "body-md": [
+                            "Geist"
+                    ],
+                    "headline-md": [
+                            "Geist"
+                    ],
+                    "headline-lg": [
+                            "Geist"
+                    ],
+                    "label-md": [
+                            "Geist"
+                    ],
+                    "headline-sm": [
+                            "Geist"
+                    ],
+                    "headline-lg-mobile": [
+                            "Geist"
+                    ]
+            },
+            "fontSize": {
+                    "body-lg": [
+                            "18px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "label-sm": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "letterSpacing": "0.02em",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "display-lg": [
+                            "48px",
+                            {
+                                    "lineHeight": "56px",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-sm": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-md": [
+                            "24px",
+                            {
+                                    "lineHeight": "32px",
+                                    "letterSpacing": "-0.01em",
+                                    "fontWeight": "500"
+                            }
+                    ],
+                    "headline-lg": [
+                            "32px",
+                            {
+                                    "lineHeight": "40px",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "label-md": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "letterSpacing": "0.01em",
+                                    "fontWeight": "500"
+                            }
+                    ],
+                    "headline-sm": [
+                            "20px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "500"
+                            }
+                    ],
+                    "headline-lg-mobile": [
+                            "24px",
+                            {
+                                    "lineHeight": "32px",
+                                    "letterSpacing": "-0.01em",
+                                    "fontWeight": "600"
+                            }
+                    ]
+            }
+    },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+        @layer utilities {
+            .nav-hide-desktop {
+                @apply md:hidden;
+            }
+            .nav-hide-mobile {
+                @apply hidden md:flex;
+            }
+        }
+        body {
+            font-family: 'Geist', sans-serif;
+        }
+    </style>
+</head>
+<body class="h-full bg-soft-background text-on-background antialiased flex">
+<!-- Split Layout Container -->
+<div class="flex flex-col md:flex-row h-screen w-full">
+<!-- Left Side: Brand & Visuals (55%) -->
+<div class="hidden md:flex flex-col relative w-[55%] bg-deep-navy overflow-hidden p-xl" style="background-color: #0B1B35; box-shadow: none; border: none;">
+<!-- Background Image / Texture -->
+<div class="absolute inset-0 flex items-center justify-center p-xl"><div class="w-full h-full flex flex-col items-center justify-start pt-[320px]"><div class="w-[140%] h-auto flex items-center justify-center"><img alt="Asset Management Visualization" class="max-w-full h-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfxbTKQHd9m1oFOhGaIozE61-8ie0wVhacoDS-3jK1ZV0fMKolnuACiCVhQv2oRbuM4MLILH8Q5D2DqnagSMDqIAapTKDJbkmmnLQnMjMCfdBr3hmedhi1NtFSMMJmu3l1AOKJFlq1f9Dv7HvGZBQeLM863qCZF4FgPiZZsbAFfr3wBLYKB--HoLSeuyGqSXg2qPorwU1Ior2ZrmeIdjRWLTP8noZ43Nq4VdREcsd0ZAKD304G5Bd2"></div></div></div>
+<!-- Brand Content -->
+<div class="relative z-10 flex flex-col h-full justify-between pt-xl"><div class="space-y-xl">
+<div class="space-y-sm">
+<h1 class="font-headline-lg text-headline-lg text-white font-bold tracking-tight">AssetMX</h1>
+<p class="font-headline-sm text-headline-sm text-white/80 max-w-md">Asset Management &amp; Movement Platform</p>
+</div>
+<div class="space-y-md pt-lg">
+<h2 class="font-display-lg text-display-lg text-white font-semibold max-w-xl">Visibility. Control. <span class="text-accent-teal">Accountability.</span></h2>
+<p class="font-body-lg text-body-lg text-white/80 max-w-lg">Real-time visibility and accountability across organizational assets, movement, and compliance.</p>
+</div>
+</div>
+<div class="flex flex-col gap-xs mt-auto">
+<span class="font-label-sm text-label-sm text-white/70 uppercase tracking-wider">ASSETMX PLATFORM</span>
+<span class="font-body-md text-body-md text-white/90">Enterprise Asset Control</span>
+<div class="flex items-center gap-sm mt-xs">
+<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+<span class="font-label-sm text-label-sm text-white/60">Platform ready</span>
+</div>
+</div></div>
+</div>
+<!-- Right Side: Authentication Form (45%) -->
+<div class="w-full md:w-[45%] bg-white flex flex-col justify-center items-center p-gutter lg:p-xxl relative">
+<!-- Mobile Brand Header (Visible only on mobile) -->
+<div class="md:hidden absolute top-0 left-0 w-full p-gutter flex items-center gap-sm">
+<h1 class="font-headline-sm text-headline-sm text-on-background font-bold tracking-tight">AssetMX</h1>
+</div>
+<div class="w-full max-w-md space-y-xxl">
+<!-- Headers -->
+<div class="space-y-xs text-center md:text-left">
+<h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background font-semibold tracking-tight">Welcome back</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Sign in to continue to AssetMX</p>
+</div>
+<!-- Form -->
+<form class="space-y-lg" onsubmit="event.preventDefault();">
+<div class="space-y-sm">
+<label class="block font-label-sm text-label-sm text-on-background" for="email">Work email or username</label>
+<div class="relative">
+<input class="block w-full rounded-lg border-outline-variant bg-surface-container-lowest px-md py-[10px] text-on-background shadow-sm focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 sm:text-sm sm:leading-6 font-body-md transition-all" id="email" name="email" placeholder="Enter your work email or username" required="" type="text">
+</div>
+</div>
+<div class="space-y-sm">
+<label class="block font-label-sm text-label-sm text-on-background" for="password">Password</label>
+<div class="relative">
+<input class="block w-full rounded-lg border-outline-variant bg-surface-container-lowest px-md py-[10px] pr-10 text-on-background shadow-sm focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 sm:text-sm sm:leading-6 font-body-md transition-all" id="password" name="password" placeholder="ΓÇóΓÇóΓÇóΓÇóΓÇóΓÇóΓÇóΓÇó" required="" type="password">
+<button class="absolute inset-y-0 right-0 flex items-center pr-3 text-on-surface-variant hover:text-on-background" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center">
+<input class="h-4 w-4 rounded border-outline-variant text-primary-container focus:ring-primary-container/20 cursor-pointer" id="remember-me" name="remember-me" type="checkbox">
+<label class="ml-2 block font-body-sm text-body-sm text-on-surface-variant cursor-pointer" for="remember-me">Remember me</label>
+</div>
+<div class="text-sm leading-6">
+<a class="font-label-sm text-label-sm text-primary-container hover:text-primary transition-colors" href="#">Forgot password?</a>
+</div>
+</div>
+<div>
+<button class="flex w-full justify-center rounded-lg bg-[#2563EB] px-md py-[10px] font-label-md text-label-md text-white shadow-sm hover:bg-primary hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container transition-all" type="submit">Sign in</button>
+</div>
+</form>
+<!-- SSO Buttons -->
+<div class="pt-4">
+<button class="flex w-full items-center justify-center gap-sm rounded-lg bg-surface-container-lowest px-md py-[10px] font-label-md text-label-md text-on-background shadow-sm ring-1 ring-inset ring-outline-variant/60 hover:bg-surface-container-low transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]">lock</span>
+<span class="">Continue with SSO</span>
+</button>
+</div>
+<!-- Footer -->
+<div class="pt-lg text-center md:text-left space-y-md"><p class="font-body-sm text-body-sm text-on-surface-variant text-center">Need access? <a class="text-primary-container hover:underline" href="#">Contact your administrator.</a></p><p class="font-label-sm text-label-sm text-on-surface-variant/70 text-center">Secure enterprise access ┬╖ Role-based permissions ┬╖ Audit-ready</p><p class="font-label-sm text-label-sm text-on-surface-variant/50 text-center">┬⌐ 2026 AssetMX. All rights reserved.</p></div>
+</div>
+</div>
+</div>
+</body></html>
