@@ -60,7 +60,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
       onSignOut={onSignOut}
       onSearch={(q) => showToast(`Search query: ${q}`)}
       searchPlaceholder="Search assets..."
-      onAddAsset={() => showToast('New Asset Registration workflow — Future module dependency.')}
+      onAddAsset={() => onNavigate?.('assets/new')}
       onNotificationsClick={() =>
         showToast('1 Alert: Printer Ink (Cyan) expires today; Stationery low stock.')
       }

@@ -103,7 +103,7 @@ export const AssetsPage: React.FC<AssetsPageProps> = ({
       }}
       searchValue={searchQuery}
       searchPlaceholder="Search assets..."
-      onAddAsset={() => showToast('New Asset Registration workflow — Future module dependency.')}
+      onAddAsset={() => onNavigate?.('assets/new')}
       onNotificationsClick={() =>
         showToast('1 Alert: Printer Ink (Cyan) expires today; Stationery low stock.')
       }

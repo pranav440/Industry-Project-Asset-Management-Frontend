@@ -4,16 +4,20 @@ import ForgotPasswordPage from './pages/ForgotPassword';
 import DashboardPage from './pages/Dashboard';
 import AssetsPage from './pages/Assets';
 import AssetDetailsPage from './pages/AssetDetails';
+import AddNewAssetPage from './pages/AddNewAsset';
 import { clearSession, getToken, getTokenExpiry, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
-type Route = 'login' | 'forgot-password' | 'dashboard' | 'assets' | 'asset-details';
+type Route = 'login' | 'forgot-password' | 'dashboard' | 'assets' | 'asset-details' | 'add-asset';
 
 function currentRoute(): { name: Route; assetId?: string } {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.startsWith('/forgot-password')) {
       return { name: 'forgot-password' };
+    }
+    if (path === '/assets/new' || path === '/assets/new/') {
+      return { name: 'add-asset' };
     }
     if (path.startsWith('/assets/')) {
       const id = path.slice('/assets/'.length);
@@ -45,7 +49,7 @@ export default function App() {
   const route = routeInfo.name;
 
   useEffect(() => {
-    if (route !== 'dashboard' && route !== 'assets' && route !== 'asset-details') {
+    if (route !== 'dashboard' && route !== 'assets' && route !== 'asset-details' && route !== 'add-asset') {
       setSessionChecked(true);
       return;
     }
@@ -107,6 +111,27 @@ export default function App() {
 
   if (!sessionChecked) {
     return null;
+  }
+
+  if (route === 'add-asset' && getToken()) {
+    return (
+      <AddNewAssetPage
+        onNavigate={(subRoute) => {
+          if (subRoute === 'dashboard') {
+            navigate('/dashboard');
+          } else if (subRoute === 'assets') {
+            navigate('/assets');
+          } else if (subRoute === 'signout' || subRoute === 'login') {
+            signOut();
+          } else if (subRoute.startsWith('assets/')) {
+            navigate(`/${subRoute}`);
+          } else {
+            navigate(`/assets#${subRoute}`);
+          }
+        }}
+        onSignOut={signOut}
+      />
+    );
   }
 
   if (route === 'asset-details' && getToken()) {
