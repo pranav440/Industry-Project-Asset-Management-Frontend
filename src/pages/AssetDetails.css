@@ -1,0 +1,736 @@
+/* =====================================================================
+   AssetMX Asset Details Page Styles — Matching Approved Stitch Design
+   ===================================================================== */
+
+.amx-asset-details-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Breadcrumbs and Top Header */
+.amx-details-top-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .amx-details-top-bar {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.amx-breadcrumb-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--amx-dash-text-muted);
+  margin-bottom: 2px;
+}
+
+.amx-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--amx-dash-text-muted);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 14px;
+  transition: color 0.15s ease;
+}
+
+.amx-back-link:hover {
+  color: var(--amx-dash-text);
+}
+
+.amx-breadcrumb-separator {
+  color: var(--amx-dash-border);
+  user-select: none;
+}
+
+.amx-breadcrumb-current {
+  color: var(--amx-dash-text);
+  font-weight: 600;
+}
+
+.amx-breadcrumb-id {
+  color: var(--amx-dash-text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.amx-details-subtitle {
+  font-size: 13px;
+  color: var(--amx-dash-text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Top Action Buttons */
+.amx-details-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-action-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 36px;
+  background-color: var(--amx-dash-surface);
+  border: 1px solid var(--amx-dash-border);
+  color: var(--amx-dash-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.amx-action-btn-secondary:hover {
+  background-color: var(--amx-dash-surface-low);
+  border-color: var(--amx-dash-text-muted);
+}
+
+.amx-action-btn-secondary:active {
+  transform: scale(0.98);
+}
+
+.amx-action-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  height: 36px;
+  background-color: #06B6D4;
+  border: 1px solid transparent;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(6, 182, 212, 0.3);
+}
+
+.amx-action-btn-primary:hover {
+  background-color: #0891B2;
+}
+
+.amx-action-btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* 3-Column Summary & QR Grid */
+.amx-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .amx-summary-grid {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+/* Card General */
+.amx-details-card {
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 8px;
+  padding: 22px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* Asset Main Card Top */
+.amx-summary-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+}
+
+.amx-summary-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.amx-summary-asset-name {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--amx-dash-text);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.amx-summary-id-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--amx-dash-text-muted);
+}
+
+.amx-copy-btn {
+  background: transparent;
+  border: none;
+  color: var(--amx-dash-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.amx-copy-btn:hover {
+  color: var(--amx-dash-text);
+}
+
+.amx-summary-lifecycle-badge {
+  text-align: right;
+}
+
+.amx-lifecycle-badge-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--amx-dash-text-muted);
+  display: block;
+}
+
+.amx-lifecycle-badge-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0891B2;
+}
+
+/* Summary Spec Boxes */
+.amx-summary-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .amx-summary-specs-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 860px) {
+  .amx-summary-specs-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.amx-spec-box {
+  padding: 12px 14px;
+  background-color: #F8FAFC;
+  border: 1px solid var(--amx-dash-border-light);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-spec-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--amx-dash-text-muted);
+  margin-bottom: 2px;
+}
+
+.amx-spec-val {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--amx-dash-text);
+}
+
+.amx-spec-val.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.amx-spec-val.success {
+  color: #059669;
+}
+
+.amx-spec-sub {
+  font-size: 12px;
+  color: var(--amx-dash-text-muted);
+  margin-top: 1px;
+}
+
+/* QR Code Card */
+.amx-qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  justify-content: space-between;
+}
+
+.amx-qr-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.amx-qr-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.amx-qr-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #059669;
+  background-color: #D1FAE5;
+  padding: 3px 8px;
+  border-radius: 9999px;
+}
+
+.amx-qr-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: #059669;
+}
+
+.amx-qr-svg-wrap {
+  padding: 12px;
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  margin-bottom: 12px;
+}
+
+.amx-qr-id-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  margin: 0 0 4px 0;
+}
+
+.amx-qr-desc {
+  font-size: 12px;
+  color: var(--amx-dash-text-muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* Lifecycle Stepper */
+.amx-lifecycle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.amx-card-heading {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--amx-dash-text);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-card-meta-text {
+  font-size: 12.5px;
+  color: var(--amx-dash-text-muted);
+  font-weight: 500;
+}
+
+.amx-lifecycle-stepper-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (min-width: 640px) {
+  .amx-lifecycle-stepper-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .amx-lifecycle-stepper-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.amx-step-card {
+  padding: 16px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--amx-dash-border);
+  background-color: var(--amx-dash-bg);
+}
+
+.amx-step-card.completed {
+  background-color: #F8FAFC;
+  border-color: var(--amx-dash-border);
+}
+
+.amx-step-card.current {
+  background-color: rgba(207, 250, 254, 0.25);
+  border: 2px solid #06B6D4;
+  box-shadow: 0 2px 6px rgba(6, 182, 212, 0.1);
+}
+
+.amx-step-card.scheduled,
+.amx-step-card.pending {
+  background-color: var(--amx-dash-surface-low);
+  border-color: var(--amx-dash-border);
+  opacity: 0.9;
+}
+
+.amx-step-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.amx-step-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.amx-step-circle.completed {
+  background-color: #D1FAE5;
+  color: #059669;
+}
+
+.amx-step-circle.current {
+  background-color: #06B6D4;
+  color: #ffffff;
+}
+
+.amx-step-circle.scheduled,
+.amx-step-circle.pending {
+  background-color: var(--amx-dash-surface-highest);
+  color: var(--amx-dash-text-muted);
+}
+
+.amx-step-status-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.amx-step-status-tag.completed {
+  color: #059669;
+}
+
+.amx-step-status-tag.current {
+  background-color: #06B6D4;
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.amx-step-status-tag.scheduled {
+  color: var(--amx-dash-text-muted);
+}
+
+.amx-step-status-tag.pending {
+  color: var(--amx-dash-text-muted);
+  opacity: 0.7;
+}
+
+.amx-step-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  margin: 0;
+}
+
+.amx-step-desc {
+  font-size: 12px;
+  color: var(--amx-dash-text-muted);
+  margin: 3px 0 0 0;
+  line-height: 1.4;
+}
+
+.amx-step-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  margin: 12px 0 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--amx-dash-border-light);
+  color: var(--amx-dash-text-muted);
+}
+
+.amx-step-card.current .amx-step-date {
+  border-top-color: rgba(6, 182, 212, 0.3);
+  color: #0891B2;
+  font-weight: 600;
+}
+
+/* 2-Column Row for Financials and Custody */
+.amx-details-row-2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .amx-details-row-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.amx-card-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.amx-2col-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+}
+
+.amx-field-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--amx-dash-text-muted);
+  margin-bottom: 2px;
+}
+
+.amx-field-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--amx-dash-text);
+  word-break: break-word;
+}
+
+.amx-field-value.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.amx-accountability-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #059669;
+}
+
+/* Table Panels */
+.amx-details-table-card {
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.amx-table-top-bar {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  background-color: var(--amx-dash-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (min-width: 640px) {
+  .amx-table-top-bar {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.amx-table-top-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.amx-table-top-desc {
+  font-size: 12px;
+  color: var(--amx-dash-text-muted);
+  margin: 0;
+}
+
+.amx-table-action-sm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-table-action-sm-btn.secondary {
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  color: var(--amx-dash-text);
+}
+
+.amx-table-action-sm-btn.secondary:hover {
+  background-color: var(--amx-dash-surface-low);
+}
+
+.amx-table-action-sm-btn.primary {
+  background-color: #06B6D4;
+  border: 1px solid transparent;
+  color: #ffffff;
+}
+
+.amx-table-action-sm-btn.primary:hover {
+  background-color: #0891B2;
+}
+
+.amx-details-table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.amx-details-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.amx-details-table thead tr {
+  background-color: #F1F5F9;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+}
+
+.amx-details-table th {
+  padding: 12px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--amx-dash-text-muted);
+  white-space: nowrap;
+}
+
+.amx-details-table tbody tr {
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  background-color: #ffffff;
+  transition: background-color 0.15s ease;
+}
+
+.amx-details-table tbody tr:hover {
+  background-color: #F8FAFC;
+}
+
+.amx-details-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.amx-details-table td {
+  padding: 13px 20px;
+  font-size: 13.5px;
+  color: var(--amx-dash-text);
+  vertical-align: middle;
+}
+
+.amx-td-mono {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--amx-dash-text-muted);
+  white-space: nowrap;
+}
+
+.amx-td-semibold {
+  font-weight: 600;
+  color: var(--amx-dash-text);
+}
+
+.amx-td-muted {
+  color: var(--amx-dash-text-muted);
+}
+
+.amx-qr-verified-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #059669;
+}
+
+.amx-audit-table-card {
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.amx-audit-event-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--amx-dash-text);
+}

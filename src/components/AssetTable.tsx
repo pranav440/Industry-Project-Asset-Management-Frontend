@@ -49,9 +49,16 @@ export const AssetTable: React.FC<AssetTableProps> = ({
               </tr>
             ) : (
               assets.map((asset) => (
-                <tr key={asset.id} className="amx-asset-row">
+                <tr
+                  key={asset.id}
+                  className="amx-asset-row"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => onActionClick?.(asset)}
+                >
                   <td className="amx-asset-id-cell" title={asset.id}>
-                    {asset.id}
+                    <span style={{ color: 'var(--amx-dash-secondary)', fontWeight: 600, textDecoration: 'none' }}>
+                      {asset.id}
+                    </span>
                   </td>
                   <td className="amx-asset-name-cell" title={asset.name}>
                     {asset.name}
@@ -68,7 +75,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({
                   <td className="amx-asset-status-cell">
                     <AssetStatusBadge status={asset.status} />
                   </td>
-                  <td className="amx-asset-action-cell">
+                  <td className="amx-asset-action-cell" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       className="amx-row-action-btn"

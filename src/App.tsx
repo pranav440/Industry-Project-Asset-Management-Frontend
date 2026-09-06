@@ -3,42 +3,49 @@ import LoginPage from './pages/Login';
 import ForgotPasswordPage from './pages/ForgotPassword';
 import DashboardPage from './pages/Dashboard';
 import AssetsPage from './pages/Assets';
+import AssetDetailsPage from './pages/AssetDetails';
 import { clearSession, getToken, getTokenExpiry, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
-type Route = 'login' | 'forgot-password' | 'dashboard' | 'assets';
+type Route = 'login' | 'forgot-password' | 'dashboard' | 'assets' | 'asset-details';
 
-function currentRoute(): Route {
+function currentRoute(): { name: Route; assetId?: string } {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.startsWith('/forgot-password')) {
-      return 'forgot-password';
+      return { name: 'forgot-password' };
+    }
+    if (path.startsWith('/assets/')) {
+      const id = path.slice('/assets/'.length);
+      return { name: 'asset-details', assetId: decodeURIComponent(id) };
     }
     if (path.startsWith('/assets')) {
-      return 'assets';
+      return { name: 'assets' };
     }
     if (path.startsWith('/dashboard')) {
-      return 'dashboard';
+      return { name: 'dashboard' };
     }
     if (path === '/' || path.startsWith('/login')) {
-      return 'login';
+      return { name: 'login' };
     }
   }
-  return 'dashboard';
+  return { name: 'dashboard' };
 }
 
 export default function App() {
-  const [route, setRoute] = useState<Route>(currentRoute());
+  const [routeInfo, setRouteInfo] = useState<{ name: Route; assetId?: string }>(currentRoute());
   const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
-    const onPop = () => setRoute(currentRoute());
+    const onPop = () => setRouteInfo(currentRoute());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
+  const route = routeInfo.name;
+
   useEffect(() => {
-    if (route !== 'dashboard' && route !== 'assets') {
+    if (route !== 'dashboard' && route !== 'assets' && route !== 'asset-details') {
       setSessionChecked(true);
       return;
     }
@@ -46,7 +53,7 @@ export default function App() {
     const token = getToken();
     if (!token) {
       window.history.replaceState({}, '', '/login');
-      setRoute('login');
+      setRouteInfo({ name: 'login' });
       setSessionChecked(true);
       return;
     }
@@ -57,7 +64,7 @@ export default function App() {
       .catch(() => {
         clearSession();
         window.history.replaceState({}, '', '/login');
-        setRoute('login');
+        setRouteInfo({ name: 'login' });
       })
       .finally(() => setSessionChecked(true));
   }, [route]);
@@ -73,7 +80,7 @@ export default function App() {
     const timer = window.setTimeout(() => {
       clearSession();
       window.history.replaceState({}, '', '/login?session=expired');
-      setRoute('login');
+      setRouteInfo({ name: 'login' });
     }, delay);
 
     return () => window.clearTimeout(timer);
@@ -81,7 +88,7 @@ export default function App() {
 
   const navigate = (to: string) => {
     window.history.pushState({}, '', to);
-    setRoute(currentRoute());
+    setRouteInfo(currentRoute());
   };
 
   const signOut = () => {
@@ -102,6 +109,28 @@ export default function App() {
     return null;
   }
 
+  if (route === 'asset-details' && getToken()) {
+    return (
+      <AssetDetailsPage
+        assetId={routeInfo.assetId || 'AST-NC-2026-0012'}
+        onNavigate={(subRoute) => {
+          if (subRoute === 'dashboard') {
+            navigate('/dashboard');
+          } else if (subRoute === 'assets') {
+            navigate('/assets');
+          } else if (subRoute === 'signout' || subRoute === 'login') {
+            signOut();
+          } else if (subRoute.startsWith('assets/')) {
+            navigate(`/${subRoute}`);
+          } else {
+            navigate(`/assets#${subRoute}`);
+          }
+        }}
+        onSignOut={signOut}
+      />
+    );
+  }
+
   if (route === 'assets' && getToken()) {
     return (
       <AssetsPage
@@ -112,6 +141,8 @@ export default function App() {
             navigate('/assets');
           } else if (subRoute === 'signout' || subRoute === 'login') {
             signOut();
+          } else if (subRoute.startsWith('assets/')) {
+            navigate(`/${subRoute}`);
           } else {
             navigate(`/assets#${subRoute}`);
           }
@@ -131,6 +162,8 @@ export default function App() {
             navigate('/assets');
           } else if (subRoute === 'signout' || subRoute === 'login') {
             signOut();
+          } else if (subRoute.startsWith('assets/')) {
+            navigate(`/${subRoute}`);
           } else {
             navigate(`/dashboard#${subRoute}`);
           }

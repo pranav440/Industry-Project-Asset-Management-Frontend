@@ -40,7 +40,7 @@ export const AssetsPage: React.FC<AssetsPageProps> = ({
   };
 
   const handleRowAction = (asset: AssetItem) => {
-    showToast(`Asset details options for ${asset.id} (${asset.name})`);
+    onNavigate?.(`assets/${asset.id}`);
   };
 
   const handleNav = (subRoute: string) => {
