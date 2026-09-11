@@ -30,6 +30,3 @@ __pycache__/
 *.njsproj
 *.sln
 *.sw?
-
-# description file for communication
-descriptions.txt

@@ -1,0 +1,113 @@
+AssetMX Backend Description
+
+How to run the application after closing VS Code:
+
+1. Start Docker Desktop and wait until it is fully running.
+
+2. Open the project folder in VS Code:
+
+E:\Industry-Project-Asset-Management-Frontend
+
+3. Open a backend terminal and run:
+
+cd backend
+docker compose up -d --wait mysql
+docker compose ps
+
+The MySQL container should show Up (healthy).
+
+4. Open a second terminal and start the backend:
+
+cd backend
+.\\.venv\\Scripts\\Activate.ps1
+python -m uvicorn app.main:app --reload --port 8000
+
+Backend URL:
+http://127.0.0.1:8000
+
+5. Open a third terminal from the project root and start the frontend:
+
+cd E:\Industry-Project-Asset-Management-Frontend
+npm run dev
+
+Open the frontend URL shown by Vite, usually:
+http://localhost:5173
+
+Keep the backend and frontend terminals running while using the application.
+Docker Desktop may be minimized, but it must remain running because MySQL runs inside Docker.
+
+To stop MySQL when finished:
+
+cd backend
+docker compose down
+
+Currently, the backend includes authentication only. Asset management, inventory CRUD, dashboard metrics, purchase orders, stock levels, alerts, and password reset APIs are still pending.
+
+============================
+
+Backend authentication has been implemented and pushed to the feat/backend/auth-login branch.
+
+Completed features:
+- FastAPI backend setup
+- MySQL database connection using Docker
+- Automatic users table creation
+- Bcrypt password hashing
+- JWT authentication
+- Role-based login validation
+- Login using email or employee ID
+- Current-user endpoint
+- Health-check endpoint
+- CORS configuration
+- Seeded demo users
+
+Seeded login details:
+
+Password for all users: AssetMX@123
+
+Employee:
+Email: employee@assetmx.local
+Employee ID: EMP001
+
+Host:
+Email: host@assetmx.local
+Employee ID: HST001
+
+Admin:
+Email: admin@assetmx.local
+Employee ID: ADM001
+
+Guard:
+Email: guard@assetmx.local
+Employee ID: GRD001
+
+SuperAdmin:
+Email: superadmin@assetmx.local
+Employee ID: SAD001
+
+Postman API URLs:
+
+Health check:
+GET http://127.0.0.1:8000/api/health
+
+Login:
+POST http://127.0.0.1:8000/api/auth/login
+
+Current user:
+GET http://127.0.0.1:8000/api/auth/me
+
+Login request body:
+
+{
+  "role": "admin",
+  "identifier": "admin@assetmx.local",
+  "password": "AssetMX@123",
+  "remember": false
+}
+
+The login API returns a JWT access token. Use this token as a Bearer token when calling the current-user API.
+
+Backend startup commands:
+
+cd backend
+docker compose up -d --wait mysql
+.\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --reload
