@@ -1,11 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { AssetStatusBadge } from '../components/AssetStatusBadge';
-import {
-  ASSET_DETAILS_MOCK_DATA,
-  DEFAULT_ASSET_DETAILS_DATA,
-  type AssetDetailsData,
-} from '../data/assetDetailsData';
+import { getAsset, type AssetApiError } from '../api/assetApi';
+import type { AssetDetailsData } from '../data/assetDetailsData';
 import './AssetDetails.css';
 
 interface AssetDetailsPageProps {
@@ -21,12 +18,66 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
 }) => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Retrieve asset data from structured mock data or fallback to default
-  const asset: AssetDetailsData =
-    ASSET_DETAILS_MOCK_DATA[assetId] || {
-      ...DEFAULT_ASSET_DETAILS_DATA,
-      id: assetId,
+  const [asset, setAsset] = useState<AssetDetailsData | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setAsset(null);
+    setApiError(null);
+    getAsset(assetId)
+      .then((record) => {
+        if (!active) return;
+        setAsset({
+          id: record.asset_id,
+          name: record.name,
+          status: record.status,
+          category: record.category,
+          specification: record.specification || 'Not available',
+          serialNumber: record.serial_number || 'Not available',
+          assignedCustodianDepartment: record.custodian,
+          assignedCustodianName: 'Not available',
+          assignedLocation: record.location,
+          assignedSubLocation: 'Not available',
+          warrantyStatus: record.warranty_period,
+          warrantyCover: 'Not available',
+          lifecycleStageText: 'Not available',
+          estimatedEndOfLife: 'Not available',
+          qrVerifiedText: 'Backend generated',
+          qrExplanation: `Backend QR association: ${record.qr_code_value}`,
+          lifecycleStages: [],
+          acquisition: {
+            purchaseDate: record.purchase_date,
+            vendorName: record.vendor_name,
+            invoiceReference: record.invoice_reference || 'Not available',
+            poNumber: 'Not available',
+            totalCost: record.total_cost,
+            warrantyPeriod: record.warranty_period,
+            configuredDepreciation: record.depreciation || 'Not available',
+          },
+          custody: {
+            assignedCustodian: record.custodian,
+            department: 'Not available',
+            assignedLocation: record.location,
+            allocationDate: record.allocation_date || 'Not available',
+            designatedUser: 'Not available',
+            accountabilityStatus: 'Not available',
+          },
+          movementHistory: [],
+          maintenanceHistory: [],
+          auditHistory: [],
+          qrCodeDataUrl: record.qr_code_data_url,
+        });
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const status = (error as AssetApiError).status;
+        setApiError(status === 401 ? 'Your session has expired. Please sign in again.' : status === 403 ? 'Admin access is required to view assets.' : status === 404 ? 'Asset not found.' : error instanceof Error ? error.message : 'Unable to load asset.');
+      });
+    return () => {
+      active = false;
     };
+  }, [assetId]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -34,11 +85,16 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
   };
 
   const handleCopyId = () => {
+    if (!asset) return;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(asset.id);
     }
     showToast(`Asset ID ${asset.id} copied to clipboard.`);
   };
+
+  if (!asset) {
+    return <div role={apiError ? 'alert' : 'status'}>{apiError || 'Loading asset...'}</div>;
+  }
 
   const handleNav = (subRoute: string) => {
     if (subRoute === 'dashboard') {
@@ -241,34 +297,11 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
             </div>
 
             <div className="amx-qr-svg-wrap">
-              <svg className="w-36 h-36" style={{ width: '130px', height: '130px' }} fill="none" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label={`QR Code for ${asset.id}`}>
-                <rect fill="white" height="100" width="100" />
-                <rect fill="none" height="26" stroke="#191C1E" strokeWidth="4" width="26" x="10" y="10" />
-                <rect fill="#191C1E" height="12" width="12" x="17" y="17" />
-                <rect fill="none" height="26" stroke="#191C1E" strokeWidth="4" width="26" x="64" y="10" />
-                <rect fill="#191C1E" height="12" width="12" x="71" y="17" />
-                <rect fill="none" height="26" stroke="#191C1E" strokeWidth="4" width="26" x="10" y="64" />
-                <rect fill="#191C1E" height="12" width="12" x="17" y="71" />
-                <rect fill="#191C1E" height="6" width="6" x="42" y="12" />
-                <rect fill="#191C1E" height="6" width="6" x="52" y="12" />
-                <rect fill="#191C1E" height="6" width="6" x="42" y="24" />
-                <rect fill="#191C1E" height="6" width="6" x="52" y="32" />
-                <rect fill="#191C1E" height="6" width="6" x="12" y="42" />
-                <rect fill="#191C1E" height="6" width="6" x="24" y="48" />
-                <rect fill="#191C1E" height="6" width="6" x="36" y="42" />
-                <rect fill="#06B6D4" height="8" width="8" x="48" y="46" />
-                <rect fill="#191C1E" height="6" width="6" x="60" y="42" />
-                <rect fill="#191C1E" height="6" width="6" x="72" y="48" />
-                <rect fill="#191C1E" height="6" width="6" x="82" y="42" />
-                <rect fill="#191C1E" height="6" width="6" x="42" y="60" />
-                <rect fill="#191C1E" height="6" width="6" x="52" y="68" />
-                <rect fill="#191C1E" height="6" width="6" x="64" y="62" />
-                <rect fill="#191C1E" height="6" width="6" x="74" y="62" />
-                <rect fill="#191C1E" height="6" width="6" x="84" y="72" />
-                <rect fill="#191C1E" height="6" width="6" x="42" y="80" />
-                <rect fill="#191C1E" height="6" width="6" x="62" y="82" />
-                <rect fill="#191C1E" height="6" width="6" x="74" y="82" />
-              </svg>
+              <img
+                src={asset.qrCodeDataUrl}
+                style={{ width: '130px', height: '130px' }}
+                alt={`QR Code for ${asset.id}`}
+              />
             </div>
 
             <p className="amx-qr-id-text">{asset.id}</p>

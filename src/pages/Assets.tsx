@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { AssetFilters } from '../components/AssetFilters';
 import { AssetTable } from '../components/AssetTable';
-import { ASSETS_MOCK_DATA, type AssetItem } from '../data/assetsData';
+import { listAssets, type AssetApiError, type AssetRecord } from '../api/assetApi';
+import type { AssetItem } from '../data/assetsData';
 import './Assets.css';
 
 interface AssetsPageProps {
@@ -19,6 +20,11 @@ export const AssetsPage: React.FC<AssetsPageProps> = ({
   const [custodianFilter, setCustodianFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [assets, setAssets] = useState<AssetRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -39,6 +45,35 @@ export const AssetsPage: React.FC<AssetsPageProps> = ({
     showToast('Filters reset to default.');
   };
 
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    setApiError(null);
+    listAssets({
+      search: searchQuery,
+      location: locationFilter,
+      custodian: custodianFilter,
+      category: categoryFilter,
+      page: currentPage,
+      pageSize: 10,
+    })
+      .then((result) => {
+        if (!active) return;
+        setAssets(result.items);
+        setTotal(result.total);
+        setTotalPages(Math.max(result.total_pages, 1));
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const status = (error as AssetApiError).status;
+        setApiError(status === 401 ? 'Your session has expired. Please sign in again.' : status === 403 ? 'Admin access is required to view assets.' : error instanceof Error ? error.message : 'Unable to load assets.');
+      })
+      .finally(() => active && setIsLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [searchQuery, locationFilter, custodianFilter, categoryFilter, currentPage]);
+
   const handleRowAction = (asset: AssetItem) => {
     onNavigate?.(`assets/${asset.id}`);
   };
@@ -56,41 +91,14 @@ export const AssetsPage: React.FC<AssetsPageProps> = ({
     }
   };
 
-  // Filter assets based on Search + Location + Custodian + Category
-  const filteredAssets = useMemo(() => {
-    return ASSETS_MOCK_DATA.filter((item) => {
-      // Global Search match
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesSearch =
-          item.id.toLowerCase().includes(q) ||
-          item.name.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q) ||
-          item.location.toLowerCase().includes(q) ||
-          item.custodian.toLowerCase().includes(q) ||
-          item.status.toLowerCase().includes(q);
-
-        if (!matchesSearch) return false;
-      }
-
-      // Location match
-      if (locationFilter && item.location !== locationFilter) {
-        return false;
-      }
-
-      // Custodian match
-      if (custodianFilter && item.custodian !== custodianFilter) {
-        return false;
-      }
-
-      // Category match
-      if (categoryFilter && item.category !== categoryFilter) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [searchQuery, locationFilter, custodianFilter, categoryFilter]);
+  const tableAssets: AssetItem[] = assets.map((asset) => ({
+    id: asset.asset_id,
+    name: asset.name,
+    category: asset.category,
+    location: asset.location,
+    custodian: asset.custodian,
+    status: asset.status,
+  }));
 
   return (
     <DashboardLayout
@@ -142,6 +150,8 @@ export const AssetsPage: React.FC<AssetsPageProps> = ({
       )}
 
       <div className="amx-assets-page-container">
+        {apiError && <div role="alert" style={{ marginBottom: '16px' }}>{apiError}</div>}
+        {isLoading && <div role="status" style={{ marginBottom: '16px' }}>Loading assets...</div>}
         {/* Page Header */}
         <div className="amx-assets-header">
           <div className="amx-assets-title-area">
@@ -187,7 +197,10 @@ export const AssetsPage: React.FC<AssetsPageProps> = ({
           />
 
           <AssetTable
-            assets={filteredAssets}
+            assets={tableAssets}
+            total={total}
+            pageSize={10}
+            totalPages={totalPages}
             currentPage={currentPage}
             onPageChange={(page) => setCurrentPage(page)}
             onActionClick={handleRowAction}

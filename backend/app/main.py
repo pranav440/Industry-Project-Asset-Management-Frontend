@@ -7,7 +7,8 @@ from sqlalchemy.exc import OperationalError
 from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.routers import auth
-from app.seed import seed_users
+from app.routers import assets
+from app.seed import seed_demo_assets, seed_users
 
 
 @asynccontextmanager
@@ -16,6 +17,7 @@ async def lifespan(_app: FastAPI):
     db = SessionLocal()
     try:
         seed_users(db)
+        seed_demo_assets(db)
     finally:
         db.close()
     yield
@@ -32,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(assets.router)
 
 
 @app.get("/api/health")
