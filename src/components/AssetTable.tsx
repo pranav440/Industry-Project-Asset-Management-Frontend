@@ -4,6 +4,9 @@ import { AssetStatusBadge } from './AssetStatusBadge';
 
 interface AssetTableProps {
   assets: AssetItem[];
+  total?: number;
+  pageSize?: number;
+  totalPages?: number;
   currentPage?: number;
   onPageChange?: (page: number) => void;
   onActionClick?: (asset: AssetItem) => void;
@@ -11,6 +14,9 @@ interface AssetTableProps {
 
 export const AssetTable: React.FC<AssetTableProps> = ({
   assets = [],
+  total = assets.length,
+  pageSize = assets.length || 1,
+  totalPages = 1,
   currentPage = 1,
   onPageChange,
   onActionClick,
@@ -99,8 +105,8 @@ export const AssetTable: React.FC<AssetTableProps> = ({
       <div className="amx-asset-pagination">
         <span className="amx-pagination-info">
           {visibleCount === 0
-            ? 'Showing 0 of 124 assets'
-            : `Showing 1 to ${visibleCount} of 124 assets`}
+            ? `Showing 0 of ${total} assets`
+            : `Showing ${(currentPage - 1) * pageSize + 1} to ${(currentPage - 1) * pageSize + visibleCount} of ${total} assets`}
         </span>
         <div className="amx-pagination-controls" role="navigation" aria-label="Asset inventory pagination">
           <button
@@ -114,35 +120,23 @@ export const AssetTable: React.FC<AssetTableProps> = ({
               chevron_left
             </span>
           </button>
-          <button
-            type="button"
-            className={`amx-page-btn ${currentPage === 1 ? 'active' : ''}`}
-            aria-current={currentPage === 1 ? 'page' : undefined}
-            onClick={() => onPageChange?.(1)}
-          >
-            1
-          </button>
-          <button
-            type="button"
-            className={`amx-page-btn ${currentPage === 2 ? 'active' : ''}`}
-            aria-current={currentPage === 2 ? 'page' : undefined}
-            onClick={() => onPageChange?.(2)}
-          >
-            2
-          </button>
-          <button
-            type="button"
-            className={`amx-page-btn ${currentPage === 3 ? 'active' : ''}`}
-            aria-current={currentPage === 3 ? 'page' : undefined}
-            onClick={() => onPageChange?.(3)}
-          >
-            3
-          </button>
-          <span className="amx-page-ellipsis" aria-hidden="true">...</span>
+          {Array.from({ length: Math.min(totalPages, 3) }, (_, index) => index + 1).map((page) => (
+            <button
+              key={page}
+              type="button"
+              className={`amx-page-btn ${currentPage === page ? 'active' : ''}`}
+              aria-current={currentPage === page ? 'page' : undefined}
+              onClick={() => onPageChange?.(page)}
+            >
+              {page}
+            </button>
+          ))}
+          {totalPages > 3 && <span className="amx-page-ellipsis" aria-hidden="true">...</span>}
           <button
             type="button"
             className="amx-page-btn arrow"
             aria-label="Next Page"
+            disabled={currentPage >= totalPages}
             onClick={() => onPageChange?.(currentPage + 1)}
           >
             <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">

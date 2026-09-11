@@ -153,15 +153,13 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
 
     try {
       const result = await registerNewAsset(payload);
-      if (result.success) {
-        setSuccessInfo({
-          assetId: result.assetId,
-          message: result.message,
-        });
-        showToast('Asset registered successfully');
-      }
-    } catch {
-      showToast('Registration failed. Please try again.');
+      setSuccessInfo({
+        assetId: result.asset_id,
+        message: 'Asset has been added to the asset registry and a unique QR identification has been generated.',
+      });
+      showToast('Asset registered successfully');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Registration failed. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

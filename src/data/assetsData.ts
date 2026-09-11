@@ -14,57 +14,6 @@ export interface AssetItem {
   status: AssetStatus;
 }
 
-export const ASSETS_MOCK_DATA: AssetItem[] = [
-  {
-    id: 'AST-NC-2026-0012',
-    name: 'Dell Latitude 5430',
-    category: 'Hardware',
-    location: 'HQ - Floor 4',
-    custodian: 'IT Department',
-    status: 'Active',
-  },
-  {
-    id: 'AST-NC-2026-0013',
-    name: 'Ergonomic Chair',
-    category: 'Furniture',
-    location: 'HQ - Floor 2',
-    custodian: 'Operations',
-    status: 'Active',
-  },
-  {
-    id: 'AST-NC-2026-0014',
-    name: 'MacBook Pro 16',
-    category: 'Hardware',
-    location: 'HQ - Floor 4',
-    custodian: 'IT Department',
-    status: 'In Maintenance',
-  },
-  {
-    id: 'AST-NC-2026-0015',
-    name: 'Lab Analyzer',
-    category: 'Lab Equipment',
-    location: 'Lab - Building A',
-    custodian: 'Lab Department',
-    status: 'Active',
-  },
-  {
-    id: 'AST-NC-2026-0016',
-    name: 'Office Desk (L-Shape)',
-    category: 'Furniture',
-    location: 'Warehouse',
-    custodian: 'Admin',
-    status: 'Disposed',
-  },
-  {
-    id: 'AST-NC-2026-0017',
-    name: 'Cisco Router 9300',
-    category: 'IT Equipment',
-    location: 'Server Room',
-    custodian: 'IT Department',
-    status: 'In Transit',
-  },
-];
-
 export const ASSET_FILTER_OPTIONS = {
   locations: [
     { value: '', label: 'All Locations' },

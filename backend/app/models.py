@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum, ForeignKey, JSON, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -46,4 +46,51 @@ class PasswordResetToken(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
+    )
+
+
+class AssetStatus(str, enum.Enum):
+    active = "Active"
+    in_maintenance = "In Maintenance"
+    disposed = "Disposed"
+    in_transit = "In Transit"
+
+
+class Asset(Base):
+    __tablename__ = "assets"
+    __table_args__ = (
+        UniqueConstraint("asset_id", name="uq_assets_asset_id"),
+        UniqueConstraint("qr_code_value", name="uq_assets_qr_code_value"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    asset_id: Mapped[str] = mapped_column(String(64), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    status: Mapped[AssetStatus] = mapped_column(
+        Enum(AssetStatus, native_enum=False, length=32),
+        default=AssetStatus.active,
+    )
+    category: Mapped[str] = mapped_column(String(120))
+    specification: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    serial_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    location: Mapped[str] = mapped_column(String(255))
+    custodian: Mapped[str] = mapped_column(String(255))
+    purchase_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    vendor_name: Mapped[str] = mapped_column(String(255))
+    total_cost: Mapped[str] = mapped_column(String(64))
+    warranty_period: Mapped[str] = mapped_column(String(120))
+    invoice_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    depreciation: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    allocation_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    documents: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    qr_code_value: Mapped[str] = mapped_column(String(128))
+    qr_code_data_url: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
     )

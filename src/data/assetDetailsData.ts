@@ -86,6 +86,7 @@ export interface AssetDetailsData {
   movementHistory: MovementHistoryRecord[];
   maintenanceHistory: MaintenanceHistoryRecord[];
   auditHistory: AuditHistoryRecord[];
+  qrCodeDataUrl?: string;
 }
 
 export const ASSET_DETAILS_MOCK_DATA: Record<string, AssetDetailsData> = {
