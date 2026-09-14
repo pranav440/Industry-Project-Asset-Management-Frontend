@@ -185,7 +185,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
             <button
               type="button"
               className="amx-action-btn-secondary"
-              onClick={() => showToast(`Initiate Transfer for ${asset.id} — Future module workflow.`)}
+              onClick={() => onNavigate?.(`assets/${asset.id}/transfer`)}
               aria-label="Initiate Transfer"
             >
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">

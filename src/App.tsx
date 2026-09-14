@@ -5,10 +5,11 @@ import DashboardPage from './pages/Dashboard';
 import AssetsPage from './pages/Assets';
 import AssetDetailsPage from './pages/AssetDetails';
 import AddNewAssetPage from './pages/AddNewAsset';
+import AssetTransferPage from './pages/AssetTransfer';
 import { clearSession, getToken, getTokenExpiry, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
-type Route = 'login' | 'forgot-password' | 'dashboard' | 'assets' | 'asset-details' | 'add-asset';
+type Route = 'login' | 'forgot-password' | 'dashboard' | 'assets' | 'asset-details' | 'asset-transfer' | 'add-asset';
 
 function currentRoute(): { name: Route; assetId?: string } {
   if (typeof window !== 'undefined') {
@@ -20,8 +21,12 @@ function currentRoute(): { name: Route; assetId?: string } {
       return { name: 'add-asset' };
     }
     if (path.startsWith('/assets/')) {
-      const id = path.slice('/assets/'.length);
-      return { name: 'asset-details', assetId: decodeURIComponent(id) };
+      const rest = path.slice('/assets/'.length);
+      if (rest.endsWith('/transfer') || rest.endsWith('/transfer/')) {
+        const id = rest.replace(/\/transfer\/?$/, '');
+        return { name: 'asset-transfer', assetId: decodeURIComponent(id) };
+      }
+      return { name: 'asset-details', assetId: decodeURIComponent(rest) };
     }
     if (path.startsWith('/assets')) {
       return { name: 'assets' };
@@ -49,7 +54,13 @@ export default function App() {
   const route = routeInfo.name;
 
   useEffect(() => {
-    if (route !== 'dashboard' && route !== 'assets' && route !== 'asset-details' && route !== 'add-asset') {
+    if (
+      route !== 'dashboard' &&
+      route !== 'assets' &&
+      route !== 'asset-details' &&
+      route !== 'asset-transfer' &&
+      route !== 'add-asset'
+    ) {
       setSessionChecked(true);
       return;
     }
@@ -116,6 +127,28 @@ export default function App() {
   if (route === 'add-asset' && getToken()) {
     return (
       <AddNewAssetPage
+        onNavigate={(subRoute) => {
+          if (subRoute === 'dashboard') {
+            navigate('/dashboard');
+          } else if (subRoute === 'assets') {
+            navigate('/assets');
+          } else if (subRoute === 'signout' || subRoute === 'login') {
+            signOut();
+          } else if (subRoute.startsWith('assets/')) {
+            navigate(`/${subRoute}`);
+          } else {
+            navigate(`/assets#${subRoute}`);
+          }
+        }}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  if (route === 'asset-transfer' && getToken()) {
+    return (
+      <AssetTransferPage
+        assetId={routeInfo.assetId || 'AST-NC-2026-0012'}
         onNavigate={(subRoute) => {
           if (subRoute === 'dashboard') {
             navigate('/dashboard');
