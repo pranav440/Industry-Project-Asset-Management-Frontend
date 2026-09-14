@@ -507,7 +507,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
             <button
               type="button"
               className="amx-table-action-sm-btn primary"
-              onClick={() => showToast('Log Service Event workflow — Future maintenance module.')}
+              onClick={() => onNavigate?.(`assets/${asset.id}/maintenance`)}
             >
               <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">
                 add

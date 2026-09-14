@@ -6,10 +6,19 @@ import AssetsPage from './pages/Assets';
 import AssetDetailsPage from './pages/AssetDetails';
 import AddNewAssetPage from './pages/AddNewAsset';
 import AssetTransferPage from './pages/AssetTransfer';
+import AssetMaintenancePage from './pages/AssetMaintenance';
 import { clearSession, getToken, getTokenExpiry, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
-type Route = 'login' | 'forgot-password' | 'dashboard' | 'assets' | 'asset-details' | 'asset-transfer' | 'add-asset';
+type Route =
+  | 'login'
+  | 'forgot-password'
+  | 'dashboard'
+  | 'assets'
+  | 'asset-details'
+  | 'asset-transfer'
+  | 'asset-maintenance'
+  | 'add-asset';
 
 function currentRoute(): { name: Route; assetId?: string } {
   if (typeof window !== 'undefined') {
@@ -25,6 +34,10 @@ function currentRoute(): { name: Route; assetId?: string } {
       if (rest.endsWith('/transfer') || rest.endsWith('/transfer/')) {
         const id = rest.replace(/\/transfer\/?$/, '');
         return { name: 'asset-transfer', assetId: decodeURIComponent(id) };
+      }
+      if (rest.endsWith('/maintenance') || rest.endsWith('/maintenance/')) {
+        const id = rest.replace(/\/maintenance\/?$/, '');
+        return { name: 'asset-maintenance', assetId: decodeURIComponent(id) };
       }
       return { name: 'asset-details', assetId: decodeURIComponent(rest) };
     }
@@ -59,6 +72,7 @@ export default function App() {
       route !== 'assets' &&
       route !== 'asset-details' &&
       route !== 'asset-transfer' &&
+      route !== 'asset-maintenance' &&
       route !== 'add-asset'
     ) {
       setSessionChecked(true);
@@ -148,6 +162,28 @@ export default function App() {
   if (route === 'asset-transfer' && getToken()) {
     return (
       <AssetTransferPage
+        assetId={routeInfo.assetId || 'AST-NC-2026-0012'}
+        onNavigate={(subRoute) => {
+          if (subRoute === 'dashboard') {
+            navigate('/dashboard');
+          } else if (subRoute === 'assets') {
+            navigate('/assets');
+          } else if (subRoute === 'signout' || subRoute === 'login') {
+            signOut();
+          } else if (subRoute.startsWith('assets/')) {
+            navigate(`/${subRoute}`);
+          } else {
+            navigate(`/assets#${subRoute}`);
+          }
+        }}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  if (route === 'asset-maintenance' && getToken()) {
+    return (
+      <AssetMaintenancePage
         assetId={routeInfo.assetId || 'AST-NC-2026-0012'}
         onNavigate={(subRoute) => {
           if (subRoute === 'dashboard') {
