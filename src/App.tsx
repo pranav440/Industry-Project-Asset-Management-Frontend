@@ -10,6 +10,8 @@ import AssetMaintenancePage from './pages/AssetMaintenance';
 import ConsumablesPage from './pages/Consumables';
 import ConsumableDetailsPage from './pages/ConsumableDetails';
 import AddConsumablePage from './pages/AddConsumable';
+import RequestsPage from './pages/Requests';
+import RequestDetailsPage from './pages/RequestDetails';
 import { clearSession, getToken, getTokenExpiry, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -24,13 +26,22 @@ type Route =
   | 'add-asset'
   | 'consumables'
   | 'consumable-details'
-  | 'add-consumable';
+  | 'add-consumable'
+  | 'requests'
+  | 'request-details';
 
-function currentRoute(): { name: Route; assetId?: string; consumableId?: string } {
+function currentRoute(): { name: Route; assetId?: string; consumableId?: string; requestId?: string } {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.startsWith('/forgot-password')) {
       return { name: 'forgot-password' };
+    }
+    if (path.startsWith('/requests/')) {
+      const rest = path.slice('/requests/'.length);
+      return { name: 'request-details', requestId: decodeURIComponent(rest) };
+    }
+    if (path === '/requests' || path === '/requests/') {
+      return { name: 'requests' };
     }
     if (path === '/consumables/new' || path === '/consumables/new/') {
       return { name: 'add-consumable' };
@@ -71,7 +82,7 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string 
 }
 
 export default function App() {
-  const [routeInfo, setRouteInfo] = useState<{ name: Route; assetId?: string; consumableId?: string }>(currentRoute());
+  const [routeInfo, setRouteInfo] = useState<{ name: Route; assetId?: string; consumableId?: string; requestId?: string }>(currentRoute());
   const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
@@ -92,7 +103,9 @@ export default function App() {
       route !== 'add-asset' &&
       route !== 'consumables' &&
       route !== 'consumable-details' &&
-      route !== 'add-consumable'
+      route !== 'add-consumable' &&
+      route !== 'requests' &&
+      route !== 'request-details'
     ) {
       setSessionChecked(true);
       return;
@@ -155,6 +168,10 @@ export default function App() {
       navigate('/consumables/new');
     } else if (subRoute.startsWith('consumables/')) {
       navigate(`/${subRoute}`);
+    } else if (subRoute === 'requests') {
+      navigate('/requests');
+    } else if (subRoute.startsWith('requests/')) {
+      navigate(`/${subRoute}`);
     } else if (subRoute === 'signout' || subRoute === 'login') {
       signOut();
     } else if (subRoute.startsWith('assets/')) {
@@ -175,6 +192,25 @@ export default function App() {
 
   if (!sessionChecked) {
     return null;
+  }
+
+  if (route === 'request-details' && getToken()) {
+    return (
+      <RequestDetailsPage
+        requestId={routeInfo.requestId || 'REQ-2026-0041'}
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  if (route === 'requests' && getToken()) {
+    return (
+      <RequestsPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
   }
 
   if (route === 'add-consumable' && getToken()) {

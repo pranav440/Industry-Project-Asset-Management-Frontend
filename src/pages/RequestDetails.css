@@ -1,0 +1,198 @@
+/* =====================================================================
+   AssetMX Request Details Page & Processing Modal Styles
+   Matching exact AssetMX typography, shell, tables, badges, cards, modals
+   ===================================================================== */
+
+.amx-req-details-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.amx-req-details-header-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 900px) {
+  .amx-req-details-header-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.amx-req-details-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.amx-btn-reject {
+  background-color: var(--amx-dash-surface);
+  border: 1px solid #FECACA;
+  color: #DC2626;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 16px;
+  height: 40px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-btn-reject:hover {
+  background-color: #FEF2F2;
+  border-color: #DC2626;
+}
+
+.amx-btn-in-review {
+  background-color: var(--amx-dash-surface);
+  border: 1px solid #BAE6FD;
+  color: #0284C7;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 16px;
+  height: 40px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-btn-in-review:hover {
+  background-color: #F0F9FF;
+  border-color: #0284C7;
+}
+
+.amx-btn-fulfil {
+  background-color: #059669;
+  color: #ffffff;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 18px;
+  height: 40px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.amx-btn-fulfil:hover {
+  background-color: #047857;
+}
+
+/* 2-Column Grid Layout */
+.amx-req-details-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .amx-req-details-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* History Events Timeline */
+.amx-history-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.amx-timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  position: relative;
+}
+
+.amx-timeline-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 30px;
+  bottom: -16px;
+  width: 2px;
+  background-color: var(--amx-dash-border-light);
+}
+
+.amx-timeline-dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  background-color: var(--amx-dash-surface-low);
+  border: 2px solid var(--amx-dash-secondary);
+  color: var(--amx-dash-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.amx-timeline-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.amx-timeline-action {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  margin: 0;
+}
+
+.amx-timeline-meta {
+  font-size: 12.5px;
+  color: var(--amx-dash-text-muted);
+}
+
+.amx-timeline-note {
+  font-size: 13px;
+  color: var(--amx-dash-text);
+  background-color: var(--amx-dash-bg);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border-left: 3px solid var(--amx-dash-secondary);
+  margin-top: 4px;
+}
+
+/* Processing Modal Verification Card */
+.amx-modal-verify-box {
+  background-color: var(--amx-dash-bg);
+  border: 1px solid var(--amx-dash-border-light);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.amx-state-transition-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13.5px;
+}
