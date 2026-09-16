@@ -1,0 +1,441 @@
+/* =====================================================================
+   AssetMX Consumable Details Page Styles
+   Matching exact AssetMX typography, shell, tables, badges, cards, modals
+   ===================================================================== */
+
+.amx-details-page-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Breadcrumb & Navigation */
+.amx-breadcrumb-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--amx-dash-text-muted);
+  margin-bottom: 2px;
+}
+
+.amx-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--amx-dash-text-muted);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 13.5px;
+  transition: color 0.15s ease;
+}
+
+.amx-back-btn:hover {
+  color: var(--amx-dash-secondary);
+}
+
+.amx-breadcrumb-sep {
+  color: var(--amx-dash-border);
+  user-select: none;
+}
+
+.amx-breadcrumb-curr {
+  color: var(--amx-dash-text);
+  font-weight: 600;
+}
+
+/* Page Header Row */
+.amx-details-header-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 900px) {
+  .amx-details-header-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.amx-details-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-details-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.amx-details-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--amx-dash-text);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.amx-details-id-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 3px 10px;
+  background-color: var(--amx-dash-surface-low);
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 6px;
+  color: var(--amx-dash-text-muted);
+}
+
+.amx-details-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Grid Layout for Details Sections */
+.amx-details-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .amx-details-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Card Panels */
+.amx-panel-card {
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  background-color: var(--amx-dash-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-panel-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Key Value Pairs */
+.amx-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (min-width: 640px) {
+  .amx-kv-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.amx-kv-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amx-kv-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--amx-dash-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.amx-kv-value {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--amx-dash-text);
+}
+
+.amx-kv-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13.5px;
+}
+
+/* Stock Sufficiency Indicator */
+.amx-stock-sufficiency-bar {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-sufficiency-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.amx-progress-track {
+  height: 8px;
+  background-color: var(--amx-dash-surface-highest);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.amx-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.amx-progress-fill.in-stock {
+  background-color: #059669;
+}
+
+.amx-progress-fill.low-stock {
+  background-color: #D97706;
+}
+
+.amx-progress-fill.out-of-stock {
+  background-color: #DC2626;
+}
+
+/* History / Ledger Tables */
+.amx-ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.amx-ledger-table thead tr {
+  background-color: #F8FAFC;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+}
+
+.amx-ledger-table th {
+  padding: 12px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--amx-dash-text-muted);
+  white-space: nowrap;
+}
+
+.amx-ledger-table tbody tr {
+  border-bottom: 1px solid var(--amx-dash-border-light);
+}
+
+.amx-ledger-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.amx-ledger-table td {
+  padding: 13px 18px;
+  font-size: 13.5px;
+  vertical-align: middle;
+}
+
+/* Operation Tag */
+.amx-op-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.amx-op-tag.issue {
+  background-color: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+}
+
+.amx-op-tag.adjustment {
+  background-color: #FEF3C7;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+}
+
+.amx-op-tag.inward {
+  background-color: #ECFDF5;
+  color: #047857;
+  border: 1px solid #A7F3D0;
+}
+
+.amx-delta-pos {
+  color: #047857;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.amx-delta-neg {
+  color: #B91C1C;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Modal Overlay & Dialog */
+.amx-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(19, 27, 46, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.amx-modal-dialog {
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalIn 0.18s ease-out;
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.amx-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--amx-dash-bg);
+}
+
+.amx-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  margin: 0;
+}
+
+.amx-modal-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--amx-dash-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.amx-modal-close-btn:hover {
+  background-color: var(--amx-dash-surface-highest);
+  color: var(--amx-dash-text);
+}
+
+.amx-modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.amx-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--amx-dash-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  background-color: var(--amx-dash-bg);
+}
+
+.amx-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--amx-dash-text);
+}
+
+.amx-form-input,
+.amx-form-select {
+  height: 40px;
+  padding: 0 12px;
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
+  color: var(--amx-dash-text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.amx-form-input:focus,
+.amx-form-select:focus {
+  border-color: var(--amx-dash-secondary);
+  box-shadow: 0 0 0 2px rgba(0, 104, 122, 0.15);
+}
+
+.amx-form-input.error,
+.amx-form-select.error {
+  border-color: var(--amx-dash-error);
+}
+
+.amx-form-error {
+  font-size: 12px;
+  color: var(--amx-dash-error);
+  font-weight: 500;
+}

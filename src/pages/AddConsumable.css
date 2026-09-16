@@ -1,0 +1,202 @@
+/* =====================================================================
+   AssetMX Add Consumable Page Styles
+   Matching exact AssetMX typography, shell, two-step layout, and summary panel
+   ===================================================================== */
+
+.amx-add-consumable-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.amx-add-consumable-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .amx-add-consumable-grid {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+/* Steps Form Container */
+.amx-form-steps-card {
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.amx-step-section {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.amx-step-divider {
+  border-top: 1px solid var(--amx-dash-border-light);
+}
+
+.amx-step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.amx-step-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background-color: var(--amx-dash-secondary);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.amx-step-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  margin: 0;
+}
+
+.amx-form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 640px) {
+  .amx-form-row-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.amx-form-actions-bar {
+  padding: 18px 24px;
+  border-top: 1px solid var(--amx-dash-border-light);
+  background-color: var(--amx-dash-bg);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Consumable Summary Panel */
+.amx-summary-panel {
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  height: fit-content;
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-summary-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  background-color: var(--amx-dash-bg);
+}
+
+.amx-summary-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-summary-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.amx-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.amx-summary-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amx-dash-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.amx-summary-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--amx-dash-text);
+}
+
+/* Success Banner Card */
+.amx-success-banner {
+  background-color: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  border-radius: 8px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.amx-success-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background-color: #D1FAE5;
+  color: #059669;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.amx-success-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.amx-success-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #065F46;
+  margin: 0;
+}
+
+.amx-success-desc {
+  font-size: 13.5px;
+  color: #047857;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.amx-success-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}

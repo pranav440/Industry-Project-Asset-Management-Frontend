@@ -7,6 +7,9 @@ import AssetDetailsPage from './pages/AssetDetails';
 import AddNewAssetPage from './pages/AddNewAsset';
 import AssetTransferPage from './pages/AssetTransfer';
 import AssetMaintenancePage from './pages/AssetMaintenance';
+import ConsumablesPage from './pages/Consumables';
+import ConsumableDetailsPage from './pages/ConsumableDetails';
+import AddConsumablePage from './pages/AddConsumable';
 import { clearSession, getToken, getTokenExpiry, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -18,13 +21,26 @@ type Route =
   | 'asset-details'
   | 'asset-transfer'
   | 'asset-maintenance'
-  | 'add-asset';
+  | 'add-asset'
+  | 'consumables'
+  | 'consumable-details'
+  | 'add-consumable';
 
-function currentRoute(): { name: Route; assetId?: string } {
+function currentRoute(): { name: Route; assetId?: string; consumableId?: string } {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.startsWith('/forgot-password')) {
       return { name: 'forgot-password' };
+    }
+    if (path === '/consumables/new' || path === '/consumables/new/') {
+      return { name: 'add-consumable' };
+    }
+    if (path.startsWith('/consumables/')) {
+      const rest = path.slice('/consumables/'.length);
+      return { name: 'consumable-details', consumableId: decodeURIComponent(rest) };
+    }
+    if (path === '/consumables' || path === '/consumables/') {
+      return { name: 'consumables' };
     }
     if (path === '/assets/new' || path === '/assets/new/') {
       return { name: 'add-asset' };
@@ -55,7 +71,7 @@ function currentRoute(): { name: Route; assetId?: string } {
 }
 
 export default function App() {
-  const [routeInfo, setRouteInfo] = useState<{ name: Route; assetId?: string }>(currentRoute());
+  const [routeInfo, setRouteInfo] = useState<{ name: Route; assetId?: string; consumableId?: string }>(currentRoute());
   const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
@@ -73,7 +89,10 @@ export default function App() {
       route !== 'asset-details' &&
       route !== 'asset-transfer' &&
       route !== 'asset-maintenance' &&
-      route !== 'add-asset'
+      route !== 'add-asset' &&
+      route !== 'consumables' &&
+      route !== 'consumable-details' &&
+      route !== 'add-consumable'
     ) {
       setSessionChecked(true);
       return;
@@ -125,6 +144,26 @@ export default function App() {
     navigate('/login');
   };
 
+  const handleSubRouteNav = (subRoute: string) => {
+    if (subRoute === 'dashboard') {
+      navigate('/dashboard');
+    } else if (subRoute === 'assets') {
+      navigate('/assets');
+    } else if (subRoute === 'consumables') {
+      navigate('/consumables');
+    } else if (subRoute === 'consumables/new') {
+      navigate('/consumables/new');
+    } else if (subRoute.startsWith('consumables/')) {
+      navigate(`/${subRoute}`);
+    } else if (subRoute === 'signout' || subRoute === 'login') {
+      signOut();
+    } else if (subRoute.startsWith('assets/')) {
+      navigate(`/${subRoute}`);
+    } else {
+      navigate(`/${subRoute}`);
+    }
+  };
+
   if (route === 'forgot-password') {
     return (
       <ForgotPasswordPage
@@ -138,22 +177,38 @@ export default function App() {
     return null;
   }
 
+  if (route === 'add-consumable' && getToken()) {
+    return (
+      <AddConsumablePage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  if (route === 'consumable-details' && getToken()) {
+    return (
+      <ConsumableDetailsPage
+        consumableId={routeInfo.consumableId || 'CON-2026-0101'}
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  if (route === 'consumables' && getToken()) {
+    return (
+      <ConsumablesPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
   if (route === 'add-asset' && getToken()) {
     return (
       <AddNewAssetPage
-        onNavigate={(subRoute) => {
-          if (subRoute === 'dashboard') {
-            navigate('/dashboard');
-          } else if (subRoute === 'assets') {
-            navigate('/assets');
-          } else if (subRoute === 'signout' || subRoute === 'login') {
-            signOut();
-          } else if (subRoute.startsWith('assets/')) {
-            navigate(`/${subRoute}`);
-          } else {
-            navigate(`/assets#${subRoute}`);
-          }
-        }}
+        onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />
     );
@@ -163,19 +218,7 @@ export default function App() {
     return (
       <AssetTransferPage
         assetId={routeInfo.assetId || 'AST-NC-2026-0012'}
-        onNavigate={(subRoute) => {
-          if (subRoute === 'dashboard') {
-            navigate('/dashboard');
-          } else if (subRoute === 'assets') {
-            navigate('/assets');
-          } else if (subRoute === 'signout' || subRoute === 'login') {
-            signOut();
-          } else if (subRoute.startsWith('assets/')) {
-            navigate(`/${subRoute}`);
-          } else {
-            navigate(`/assets#${subRoute}`);
-          }
-        }}
+        onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />
     );
@@ -185,19 +228,7 @@ export default function App() {
     return (
       <AssetMaintenancePage
         assetId={routeInfo.assetId || 'AST-NC-2026-0012'}
-        onNavigate={(subRoute) => {
-          if (subRoute === 'dashboard') {
-            navigate('/dashboard');
-          } else if (subRoute === 'assets') {
-            navigate('/assets');
-          } else if (subRoute === 'signout' || subRoute === 'login') {
-            signOut();
-          } else if (subRoute.startsWith('assets/')) {
-            navigate(`/${subRoute}`);
-          } else {
-            navigate(`/assets#${subRoute}`);
-          }
-        }}
+        onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />
     );
@@ -207,19 +238,7 @@ export default function App() {
     return (
       <AssetDetailsPage
         assetId={routeInfo.assetId || 'AST-NC-2026-0012'}
-        onNavigate={(subRoute) => {
-          if (subRoute === 'dashboard') {
-            navigate('/dashboard');
-          } else if (subRoute === 'assets') {
-            navigate('/assets');
-          } else if (subRoute === 'signout' || subRoute === 'login') {
-            signOut();
-          } else if (subRoute.startsWith('assets/')) {
-            navigate(`/${subRoute}`);
-          } else {
-            navigate(`/assets#${subRoute}`);
-          }
-        }}
+        onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />
     );
@@ -228,19 +247,7 @@ export default function App() {
   if (route === 'assets' && getToken()) {
     return (
       <AssetsPage
-        onNavigate={(subRoute) => {
-          if (subRoute === 'dashboard') {
-            navigate('/dashboard');
-          } else if (subRoute === 'assets') {
-            navigate('/assets');
-          } else if (subRoute === 'signout' || subRoute === 'login') {
-            signOut();
-          } else if (subRoute.startsWith('assets/')) {
-            navigate(`/${subRoute}`);
-          } else {
-            navigate(`/assets#${subRoute}`);
-          }
-        }}
+        onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />
     );
@@ -249,19 +256,7 @@ export default function App() {
   if (route === 'dashboard' && getToken()) {
     return (
       <DashboardPage
-        onNavigate={(subRoute) => {
-          if (subRoute === 'dashboard') {
-            navigate('/dashboard');
-          } else if (subRoute === 'assets') {
-            navigate('/assets');
-          } else if (subRoute === 'signout' || subRoute === 'login') {
-            signOut();
-          } else if (subRoute.startsWith('assets/')) {
-            navigate(`/${subRoute}`);
-          } else {
-            navigate(`/dashboard#${subRoute}`);
-          }
-        }}
+        onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />
     );
