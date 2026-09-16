@@ -1,0 +1,193 @@
+/* =====================================================================
+   AssetMX Gate Pass Details Page Styles
+   Matching exact AssetMX typography, shell, tables, badges, cards, buttons
+   ===================================================================== */
+
+.amx-gp-details-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.amx-gp-details-header-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 900px) {
+  .amx-gp-details-header-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.amx-gp-details-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 2-Column Grid Layout — Matches RequestDetails and AssetDetails */
+.amx-gp-details-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .amx-gp-details-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.amx-escalation-banner {
+  background-color: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 8px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.amx-escalation-banner-icon {
+  font-size: 24px !important;
+  color: #dc2626;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.amx-gate-activity-box {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 640px) {
+  .amx-gate-activity-box {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.amx-activity-card {
+  background-color: var(--amx-dash-bg);
+  border: 1px solid var(--amx-dash-border-light);
+  border-radius: 6px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.amx-activity-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  padding-bottom: 8px;
+  margin-bottom: 2px;
+}
+
+.amx-activity-card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Action Buttons */
+.amx-btn-approve {
+  background-color: #059669;
+  color: #ffffff;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 18px;
+  height: 40px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.amx-btn-approve:hover {
+  background-color: #047857;
+}
+
+.amx-btn-override {
+  background-color: var(--amx-dash-surface);
+  border: 1px solid #C7D2FE;
+  color: #4F46E5;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 16px;
+  height: 40px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-btn-override:hover {
+  background-color: #EEF2FF;
+  border-color: #4F46E5;
+}
+
+.amx-btn-verify-gate {
+  background-color: var(--amx-dash-secondary);
+  color: #ffffff;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 18px;
+  height: 40px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.amx-btn-verify-gate:hover {
+  background-color: #005463;
+}
+
+.amx-btn-escalate {
+  background-color: #DC2626;
+  color: #ffffff;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 18px;
+  height: 40px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.2);
+}
+
+.amx-btn-escalate:hover {
+  background-color: #B91C1C;
+}

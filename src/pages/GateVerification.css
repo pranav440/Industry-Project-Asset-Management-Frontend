@@ -1,0 +1,65 @@
+/* =====================================================================
+   AssetMX Gate Verification Page Styles
+   Matching exact AssetMX typography, shell, tables, badges, cards, buttons
+   ===================================================================== */
+
+.amx-verification-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.amx-verification-header-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 900px) {
+  .amx-verification-header-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.amx-verification-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .amx-verification-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.amx-action-card {
+  background-color: var(--amx-dash-bg);
+  border: 1px solid var(--amx-dash-border-light);
+  border-radius: 6px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.amx-action-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.amx-action-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+

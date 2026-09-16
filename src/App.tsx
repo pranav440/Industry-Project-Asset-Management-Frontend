@@ -12,6 +12,9 @@ import ConsumableDetailsPage from './pages/ConsumableDetails';
 import AddConsumablePage from './pages/AddConsumable';
 import RequestsPage from './pages/Requests';
 import RequestDetailsPage from './pages/RequestDetails';
+import GatePassPage from './pages/GatePass';
+import GatePassDetailsPage from './pages/GatePassDetails';
+import GateVerificationPage from './pages/GateVerification';
 import { clearSession, getToken, getTokenExpiry, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -28,14 +31,30 @@ type Route =
   | 'consumable-details'
   | 'add-consumable'
   | 'requests'
-  | 'request-details';
+  | 'request-details'
+  | 'gate-pass'
+  | 'gate-pass-details'
+  | 'gate-verification';
 
-function currentRoute(): { name: Route; assetId?: string; consumableId?: string; requestId?: string } {
+function currentRoute(): { name: Route; assetId?: string; consumableId?: string; requestId?: string; passId?: string } {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.startsWith('/forgot-password')) {
       return { name: 'forgot-password' };
     }
+    // Gate Pass Routes
+    if (path.startsWith('/gate-pass/')) {
+      const rest = path.slice('/gate-pass/'.length);
+      if (rest.endsWith('/verification') || rest.endsWith('/verification/')) {
+        const id = rest.replace(/\/verification\/?$/, '');
+        return { name: 'gate-verification', passId: decodeURIComponent(id) };
+      }
+      return { name: 'gate-pass-details', passId: decodeURIComponent(rest) };
+    }
+    if (path === '/gate-pass' || path === '/gate-pass/') {
+      return { name: 'gate-pass' };
+    }
+    // Requests Routes
     if (path.startsWith('/requests/')) {
       const rest = path.slice('/requests/'.length);
       return { name: 'request-details', requestId: decodeURIComponent(rest) };
@@ -43,6 +62,7 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
     if (path === '/requests' || path === '/requests/') {
       return { name: 'requests' };
     }
+    // Consumables Routes
     if (path === '/consumables/new' || path === '/consumables/new/') {
       return { name: 'add-consumable' };
     }
@@ -53,6 +73,7 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
     if (path === '/consumables' || path === '/consumables/') {
       return { name: 'consumables' };
     }
+    // Assets Routes
     if (path === '/assets/new' || path === '/assets/new/') {
       return { name: 'add-asset' };
     }
@@ -82,7 +103,7 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
 }
 
 export default function App() {
-  const [routeInfo, setRouteInfo] = useState<{ name: Route; assetId?: string; consumableId?: string; requestId?: string }>(currentRoute());
+  const [routeInfo, setRouteInfo] = useState<{ name: Route; assetId?: string; consumableId?: string; requestId?: string; passId?: string }>(currentRoute());
   const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
@@ -105,7 +126,10 @@ export default function App() {
       route !== 'consumable-details' &&
       route !== 'add-consumable' &&
       route !== 'requests' &&
-      route !== 'request-details'
+      route !== 'request-details' &&
+      route !== 'gate-pass' &&
+      route !== 'gate-pass-details' &&
+      route !== 'gate-verification'
     ) {
       setSessionChecked(true);
       return;
@@ -172,6 +196,10 @@ export default function App() {
       navigate('/requests');
     } else if (subRoute.startsWith('requests/')) {
       navigate(`/${subRoute}`);
+    } else if (subRoute === 'gate-pass' || subRoute === 'gate pass') {
+      navigate('/gate-pass');
+    } else if (subRoute.startsWith('gate-pass/')) {
+      navigate(`/${subRoute}`);
     } else if (subRoute === 'signout' || subRoute === 'login') {
       signOut();
     } else if (subRoute.startsWith('assets/')) {
@@ -194,6 +222,39 @@ export default function App() {
     return null;
   }
 
+  // Gate Verification Route
+  if (route === 'gate-verification' && getToken()) {
+    return (
+      <GateVerificationPage
+        passId={routeInfo.passId || 'GP-2026-0012'}
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // Gate Pass Details Route
+  if (route === 'gate-pass-details' && getToken()) {
+    return (
+      <GatePassDetailsPage
+        passId={routeInfo.passId || 'GP-2026-0012'}
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // Gate Pass List Route
+  if (route === 'gate-pass' && getToken()) {
+    return (
+      <GatePassPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // Request Details Route
   if (route === 'request-details' && getToken()) {
     return (
       <RequestDetailsPage
@@ -204,6 +265,7 @@ export default function App() {
     );
   }
 
+  // Requests List Route
   if (route === 'requests' && getToken()) {
     return (
       <RequestsPage
@@ -213,6 +275,7 @@ export default function App() {
     );
   }
 
+  // Add Consumable Route
   if (route === 'add-consumable' && getToken()) {
     return (
       <AddConsumablePage
@@ -222,6 +285,7 @@ export default function App() {
     );
   }
 
+  // Consumable Details Route
   if (route === 'consumable-details' && getToken()) {
     return (
       <ConsumableDetailsPage
@@ -232,6 +296,7 @@ export default function App() {
     );
   }
 
+  // Consumables List Route
   if (route === 'consumables' && getToken()) {
     return (
       <ConsumablesPage
@@ -241,6 +306,7 @@ export default function App() {
     );
   }
 
+  // Add Asset Route
   if (route === 'add-asset' && getToken()) {
     return (
       <AddNewAssetPage
@@ -250,6 +316,7 @@ export default function App() {
     );
   }
 
+  // Asset Transfer Route
   if (route === 'asset-transfer' && getToken()) {
     return (
       <AssetTransferPage
@@ -260,6 +327,7 @@ export default function App() {
     );
   }
 
+  // Asset Maintenance Route
   if (route === 'asset-maintenance' && getToken()) {
     return (
       <AssetMaintenancePage
@@ -270,6 +338,7 @@ export default function App() {
     );
   }
 
+  // Asset Details Route
   if (route === 'asset-details' && getToken()) {
     return (
       <AssetDetailsPage
@@ -280,6 +349,7 @@ export default function App() {
     );
   }
 
+  // Assets List Route
   if (route === 'assets' && getToken()) {
     return (
       <AssetsPage
@@ -289,6 +359,7 @@ export default function App() {
     );
   }
 
+  // Dashboard Route
   if (route === 'dashboard' && getToken()) {
     return (
       <DashboardPage
