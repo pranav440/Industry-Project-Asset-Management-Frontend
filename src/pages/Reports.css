@@ -1,0 +1,476 @@
+/* =====================================================================
+   AssetMX Reports & Analytics Management Styles
+   Enterprise layout, compact density, cohesive tabs, charts & data tables
+   ===================================================================== */
+
+.amx-reports-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Page Header */
+.amx-reports-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .amx-reports-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.amx-reports-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amx-reports-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--amx-dash-text);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.amx-reports-subtitle {
+  font-size: 14.5px;
+  color: var(--amx-dash-text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.amx-reports-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Report Navigation Tabs */
+.amx-report-tabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--amx-dash-surface-low);
+  padding: 5px;
+  border-radius: 8px;
+  border: 1px solid var(--amx-dash-border-light);
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+
+.amx-report-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  color: var(--amx-dash-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  text-decoration: none;
+}
+
+.amx-report-tab-btn:hover {
+  color: var(--amx-dash-text);
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.amx-report-tab-btn.active {
+  background-color: #ffffff;
+  color: var(--amx-dash-secondary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.amx-report-tab-btn .amx-tab-icon {
+  font-size: 18px;
+}
+
+/* 3 & 4 Summary Cards Grid */
+.amx-reports-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 18px;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .amx-reports-summary-grid.cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .amx-reports-summary-grid.cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .amx-reports-summary-grid.cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .amx-reports-summary-grid.cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Card Container */
+.amx-reports-main-card {
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border-light);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Filter Bar */
+.amx-reports-filters-bar {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  background-color: var(--amx-dash-bg);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.amx-reports-filter-select {
+  height: 38px;
+  padding: 0 12px;
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-family: 'Inter', sans-serif;
+  color: var(--amx-dash-text);
+  outline: none;
+  cursor: pointer;
+  min-width: 140px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.amx-reports-filter-select:focus {
+  border-color: var(--amx-dash-secondary);
+  box-shadow: 0 0 0 2px rgba(0, 104, 122, 0.15);
+}
+
+.amx-reports-date-input {
+  height: 38px;
+  padding: 0 12px;
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-family: 'Inter', sans-serif;
+  color: var(--amx-dash-text);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.amx-reports-date-input:focus {
+  border-color: var(--amx-dash-secondary);
+  box-shadow: 0 0 0 2px rgba(0, 104, 122, 0.15);
+}
+
+/* Charts Grid Layouts */
+.amx-charts-2col-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  width: 100%;
+}
+
+@media (min-width: 992px) {
+  .amx-charts-2col-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.amx-chart-card {
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border-light);
+  border-radius: 8px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.amx-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-chart-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--amx-dash-text);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-chart-subtitle {
+  font-size: 12.5px;
+  color: var(--amx-dash-text-muted);
+  margin: 2px 0 0 0;
+}
+
+/* Progress & Bar Chart Rows */
+.amx-bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.amx-bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.amx-bar-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--amx-dash-text);
+}
+
+.amx-bar-count {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--amx-dash-text-muted);
+}
+
+.amx-bar-bg {
+  width: 100%;
+  height: 9px;
+  background-color: var(--amx-dash-surface-low);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.amx-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+/* Stacked Multi-Bar Chart */
+.amx-stacked-bar-bg {
+  width: 100%;
+  height: 14px;
+  background-color: var(--amx-dash-surface-low);
+  border-radius: 9999px;
+  overflow: hidden;
+  display: flex;
+}
+
+.amx-stacked-segment {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* Chart Legends */
+.amx-chart-legends {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px solid var(--amx-dash-border-light);
+}
+
+.amx-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--amx-dash-text-muted);
+  font-weight: 500;
+}
+
+.amx-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Table Area */
+.amx-reports-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  min-width: 980px;
+}
+
+.amx-reports-table thead tr {
+  background-color: #F1F5F9;
+  border-bottom: 1px solid var(--amx-dash-border-light);
+}
+
+.amx-reports-table th {
+  padding: 13px 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--amx-dash-text-muted);
+  white-space: nowrap;
+}
+
+.amx-reports-table tbody tr {
+  border-bottom: 1px solid var(--amx-dash-border-light);
+  background-color: #ffffff;
+  transition: background-color 0.15s ease;
+}
+
+.amx-reports-table tbody tr:hover {
+  background-color: #F8FAFC;
+}
+
+.amx-reports-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.amx-reports-table td {
+  padding: 14px 18px;
+  font-size: 13.5px;
+  vertical-align: middle;
+}
+
+.amx-table-empty {
+  padding: 40px !important;
+  text-align: center;
+  color: var(--amx-dash-text-muted);
+  font-size: 14px;
+}
+
+/* Pagination Bar */
+.amx-reports-pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-top: 1px solid var(--amx-dash-border-light);
+  background-color: #ffffff;
+  font-size: 13px;
+  color: var(--amx-dash-text-muted);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.amx-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  background-color: #ffffff;
+  border: 1px solid var(--amx-dash-border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--amx-dash-text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-pagination-btn:hover:not(:disabled) {
+  border-color: var(--amx-dash-secondary);
+  color: var(--amx-dash-secondary);
+}
+
+.amx-pagination-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Status & Action Badges */
+.amx-report-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.amx-report-badge.in-use,
+.amx-report-badge.fulfilled {
+  background-color: #D1FAE5;
+  color: #059669;
+  border: 1px solid rgba(5, 150, 105, 0.2);
+}
+
+.amx-report-badge.available {
+  background-color: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+}
+
+.amx-report-badge.maintenance,
+.amx-report-badge.pending {
+  background-color: #FEF3C7;
+  color: #D97706;
+  border: 1px solid rgba(217, 119, 6, 0.2);
+}
+
+.amx-report-badge.backlog,
+.amx-report-badge.disposal {
+  background-color: #FEE2E2;
+  color: #DC2626;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+}
+
+.amx-report-badge.replacement {
+  background-color: #F3E8FF;
+  color: #7E22CE;
+  border: 1px solid #E9D5FF;
+}
+
+/* Cost & Value Highlight */
+.amx-value-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--amx-dash-text);
+}
+
+.amx-cost-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: #b45309;
+}

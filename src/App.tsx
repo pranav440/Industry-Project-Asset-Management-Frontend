@@ -15,6 +15,12 @@ import RequestDetailsPage from './pages/RequestDetails';
 import GatePassPage from './pages/GatePass';
 import GatePassDetailsPage from './pages/GatePassDetails';
 import GateVerificationPage from './pages/GateVerification';
+import ReportsOverviewPage from './pages/ReportsOverview';
+import AssetUtilizationPage from './pages/AssetUtilization';
+import RequestsReportPage from './pages/RequestsReport';
+import ReassignmentReportPage from './pages/ReassignmentReport';
+import MaintenanceReportPage from './pages/MaintenanceReport';
+import DisposalReportPage from './pages/DisposalReport';
 import { clearSession, getToken, getTokenExpiry, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -34,13 +40,38 @@ type Route =
   | 'request-details'
   | 'gate-pass'
   | 'gate-pass-details'
-  | 'gate-verification';
+  | 'gate-verification'
+  | 'reports'
+  | 'reports-utilization'
+  | 'reports-requests'
+  | 'reports-reassignment'
+  | 'reports-maintenance'
+  | 'reports-disposal';
 
 function currentRoute(): { name: Route; assetId?: string; consumableId?: string; requestId?: string; passId?: string } {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path.startsWith('/forgot-password')) {
       return { name: 'forgot-password' };
+    }
+    // Reports Routes
+    if (path === '/reports/utilization' || path === '/reports/utilization/') {
+      return { name: 'reports-utilization' };
+    }
+    if (path === '/reports/requests' || path === '/reports/requests/') {
+      return { name: 'reports-requests' };
+    }
+    if (path === '/reports/reassignment' || path === '/reports/reassignment/') {
+      return { name: 'reports-reassignment' };
+    }
+    if (path === '/reports/maintenance' || path === '/reports/maintenance/') {
+      return { name: 'reports-maintenance' };
+    }
+    if (path === '/reports/disposal' || path === '/reports/disposal/') {
+      return { name: 'reports-disposal' };
+    }
+    if (path === '/reports' || path === '/reports/') {
+      return { name: 'reports' };
     }
     // Gate Pass Routes
     if (path.startsWith('/gate-pass/')) {
@@ -129,7 +160,13 @@ export default function App() {
       route !== 'request-details' &&
       route !== 'gate-pass' &&
       route !== 'gate-pass-details' &&
-      route !== 'gate-verification'
+      route !== 'gate-verification' &&
+      route !== 'reports' &&
+      route !== 'reports-utilization' &&
+      route !== 'reports-requests' &&
+      route !== 'reports-reassignment' &&
+      route !== 'reports-maintenance' &&
+      route !== 'reports-disposal'
     ) {
       setSessionChecked(true);
       return;
@@ -200,6 +237,10 @@ export default function App() {
       navigate('/gate-pass');
     } else if (subRoute.startsWith('gate-pass/')) {
       navigate(`/${subRoute}`);
+    } else if (subRoute === 'reports') {
+      navigate('/reports');
+    } else if (subRoute.startsWith('reports/')) {
+      navigate(`/${subRoute}`);
     } else if (subRoute === 'signout' || subRoute === 'login') {
       signOut();
     } else if (subRoute.startsWith('assets/')) {
@@ -220,6 +261,61 @@ export default function App() {
 
   if (!sessionChecked) {
     return null;
+  }
+
+  // Reports Routes
+  if (route === 'reports-disposal' && getToken()) {
+    return (
+      <DisposalReportPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  if (route === 'reports-maintenance' && getToken()) {
+    return (
+      <MaintenanceReportPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  if (route === 'reports-reassignment' && getToken()) {
+    return (
+      <ReassignmentReportPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  if (route === 'reports-requests' && getToken()) {
+    return (
+      <RequestsReportPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  if (route === 'reports-utilization' && getToken()) {
+    return (
+      <AssetUtilizationPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  if (route === 'reports' && getToken()) {
+    return (
+      <ReportsOverviewPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
   }
 
   // Gate Verification Route
