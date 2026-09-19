@@ -10,8 +10,30 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_admin
-from app.models import Asset, AssetStatus, User
-from app.schemas import AssetCreate, AssetListResponse, AssetOut, AssetUpdate
+from app.models import (
+    Asset,
+    AssetMovement,
+    AssetMovementStatus,
+    AssetStatus,
+    AuditLog,
+    Maintenance,
+    MaintenanceStatus,
+    MaintenanceType,
+    User,
+)
+from app.schemas import (
+    AssetCreate,
+    AssetListResponse,
+    AssetMovementOut,
+    AssetOut,
+    AssetTransferOut,
+    AssetTransferRequest,
+    AssetUpdate,
+    AuditLogOut,
+    MaintenanceHistoryOut,
+    MaintenanceOut,
+    MaintenanceCreate,
+)
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
 
@@ -36,6 +58,58 @@ def _to_datetime(value):
 
 
 def _to_response(asset: Asset) -> AssetOut:
+    return _to_response_with_history(asset, [], [], [])
+
+
+def _movement_response(movement: AssetMovement) -> AssetMovementOut:
+    return AssetMovementOut(
+        movement_id=movement.movement_id,
+        from_location=movement.from_location,
+        to_location=movement.to_location,
+        from_custodian=movement.from_custodian,
+        to_custodian=movement.to_custodian,
+        reason=movement.reason,
+        status=movement.status.value,
+        initiated_by_user_id=movement.initiated_by_user_id,
+        initiated_at=movement.initiated_at,
+        completed_at=movement.completed_at,
+    )
+
+
+def _maintenance_response(record: Maintenance, asset: Asset, user: User | None) -> MaintenanceOut:
+    return MaintenanceOut(
+        maintenance_id=record.maintenance_id,
+        asset_id=asset.asset_id,
+        service_date=record.service_date.date(),
+        maintenance_type=record.maintenance_type.value,
+        service_vendor=record.service_vendor,
+        technician=record.technician,
+        maintenance_cost=record.maintenance_cost,
+        status=record.status.value,
+        service_notes=record.service_notes,
+        created_at=record.created_at,
+        created_by=user.full_name if user is not None else str(record.created_by_user_id),
+    )
+
+
+def _maintenance_history_response(record: Maintenance) -> MaintenanceHistoryOut:
+    amount = f"{record.maintenance_cost:,.2f}".rstrip("0").rstrip(".")
+    return MaintenanceHistoryOut(
+        id=record.maintenance_id,
+        date=record.service_date.strftime("%d %b %Y"),
+        serviceEvent=record.maintenance_type.value,
+        vendor=record.service_vendor,
+        cost=f"₹{amount}",
+        status=record.status.value,
+    )
+
+
+def _to_response_with_history(
+    asset: Asset,
+    movements: list[AssetMovement],
+    audits: list[AuditLog],
+    maintenance: list[Maintenance],
+) -> AssetOut:
     return AssetOut(
         asset_id=asset.asset_id,
         name=asset.name,
@@ -55,10 +129,39 @@ def _to_response(asset: Asset) -> AssetOut:
         documents=asset.documents,
         qr_code_value=asset.qr_code_value,
         qr_code_data_url=asset.qr_code_data_url,
-        movement_history=[],
-        maintenance_history=[],
-        audit_history=[],
+        movement_history=[_movement_response(movement) for movement in movements],
+        maintenance_history=[_maintenance_history_response(record) for record in maintenance],
+        audit_history=[AuditLogOut(
+            id=audit.id,
+            action=audit.action,
+            asset_identifier=audit.asset_identifier,
+            actor_user_id=audit.actor_user_id,
+            occurred_at=audit.occurred_at,
+            before_state=audit.before_state,
+            after_state=audit.after_state,
+            movement_id=audit.movement_id,
+            metadata=audit.metadata_json,
+        ) for audit in audits],
     )
+
+
+def _asset_history(db: Session, asset: Asset) -> tuple[list[AssetMovement], list[AuditLog], list[Maintenance]]:
+    movements = db.scalars(
+        select(AssetMovement)
+        .where(AssetMovement.asset_id == asset.id)
+        .order_by(AssetMovement.initiated_at.asc(), AssetMovement.id.asc())
+    ).all()
+    audits = db.scalars(
+        select(AuditLog)
+        .where(AuditLog.asset_id == asset.id)
+        .order_by(AuditLog.occurred_at.asc(), AuditLog.id.asc())
+    ).all()
+    maintenance = db.scalars(
+        select(Maintenance)
+        .where(Maintenance.asset_id == asset.id)
+        .order_by(Maintenance.service_date.desc(), Maintenance.id.desc())
+    ).all()
+    return movements, audits, maintenance
 
 
 @router.get("", response_model=AssetListResponse)
@@ -112,7 +215,8 @@ def get_asset(asset_id: str, _admin: User = Depends(require_admin), db: Session 
     asset = db.scalar(select(Asset).where(Asset.asset_id == asset_id))
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
-    return _to_response(asset)
+    movements, audits, maintenance = _asset_history(db, asset)
+    return _to_response_with_history(asset, movements, audits, maintenance)
 
 
 @router.post("", response_model=AssetOut, status_code=status.HTTP_201_CREATED)
@@ -164,4 +268,136 @@ def update_asset(
         setattr(asset, field, value)
     db.commit()
     db.refresh(asset)
-    return _to_response(asset)
+    movements, audits, maintenance = _asset_history(db, asset)
+    return _to_response_with_history(asset, movements, audits, maintenance)
+
+
+@router.post("/{asset_id}/transfer", response_model=AssetTransferOut, status_code=status.HTTP_201_CREATED)
+def initiate_transfer(
+    asset_id: str,
+    body: AssetTransferRequest,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> AssetTransferOut:
+    destination = body.destination_location.strip()
+    new_custodian = body.new_custodian.strip()
+    if not destination:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Destination location is required")
+    if not new_custodian:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="New custodian is required")
+
+    asset = db.scalar(select(Asset).where(Asset.asset_id == asset_id).with_for_update())
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    if asset.status == AssetStatus.disposed:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Disposed assets cannot be transferred")
+
+    active_transfer = db.scalar(
+        select(AssetMovement.id).where(
+            AssetMovement.asset_id == asset.id,
+            AssetMovement.status.in_((AssetMovementStatus.initiated, AssetMovementStatus.in_transit)),
+        ).limit(1)
+    )
+    if active_transfer is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Asset already has an active transfer")
+
+    before_state = {
+        "status": asset.status.value,
+        "location": asset.location,
+        "custodian": asset.custodian,
+    }
+    movement_id = f"TRF-{uuid.uuid4().hex[:12].upper()}"
+    movement = AssetMovement(
+        asset_id=asset.id,
+        movement_id=movement_id,
+        from_location=asset.location,
+        to_location=destination,
+        from_custodian=asset.custodian,
+        to_custodian=new_custodian,
+        reason=body.transfer_reason.strip() if body.transfer_reason else None,
+        status=AssetMovementStatus.in_transit,
+        initiated_by_user_id=admin.id,
+    )
+    asset.status = AssetStatus.in_transit
+    audit = AuditLog(
+        action="Asset transfer initiated",
+        asset_id=asset.id,
+        asset_identifier=asset.asset_id,
+        actor_user_id=admin.id,
+        before_state=before_state,
+        after_state={"status": asset.status.value},
+        movement_id=movement_id,
+        metadata_json={"destination_location": destination, "new_custodian": new_custodian},
+    )
+    db.add_all((movement, audit))
+    db.commit()
+    db.refresh(asset)
+    db.refresh(movement)
+    movements, audits, maintenance = _asset_history(db, asset)
+    return AssetTransferOut(
+        movement=_movement_response(movement),
+        asset=_to_response_with_history(asset, movements, audits, maintenance),
+    )
+
+
+@router.get("/{asset_id}/maintenance", response_model=list[MaintenanceOut])
+def list_maintenance(
+    asset_id: str,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> list[MaintenanceOut]:
+    asset = db.scalar(select(Asset).where(Asset.asset_id == asset_id))
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    records = db.scalars(
+        select(Maintenance)
+        .where(Maintenance.asset_id == asset.id)
+        .order_by(Maintenance.service_date.desc(), Maintenance.id.desc())
+    ).all()
+    return [
+        _maintenance_response(record, asset, db.get(User, record.created_by_user_id))
+        for record in records
+    ]
+
+
+@router.post("/{asset_id}/maintenance", response_model=MaintenanceOut, status_code=status.HTTP_201_CREATED)
+def create_maintenance(
+    asset_id: str,
+    body: MaintenanceCreate,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> MaintenanceOut:
+    service_vendor = body.service_vendor.strip()
+    if not service_vendor:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Service vendor is required")
+
+    asset = db.scalar(select(Asset).where(Asset.asset_id == asset_id).with_for_update())
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+
+    maintenance_id = f"MNT-{uuid.uuid4().hex[:12].upper()}"
+    record = Maintenance(
+        maintenance_id=maintenance_id,
+        asset_id=asset.id,
+        service_date=_to_datetime(body.service_date),
+        maintenance_type=MaintenanceType(body.maintenance_type),
+        service_vendor=service_vendor,
+        technician=body.technician.strip() if body.technician and body.technician.strip() else None,
+        maintenance_cost=body.maintenance_cost,
+        status=MaintenanceStatus.completed,
+        service_notes=body.service_notes.strip() if body.service_notes and body.service_notes.strip() else None,
+        created_by_user_id=admin.id,
+    )
+    audit = AuditLog(
+        action="Maintenance record created",
+        asset_id=asset.id,
+        asset_identifier=asset.asset_id,
+        actor_user_id=admin.id,
+        before_state={"asset_status": asset.status.value},
+        after_state={"asset_status": asset.status.value, "maintenance_id": maintenance_id},
+        metadata_json={"maintenance_type": body.maintenance_type, "maintenance_status": "Completed"},
+    )
+    db.add_all((record, audit))
+    db.commit()
+    db.refresh(record)
+    return _maintenance_response(record, asset, admin)

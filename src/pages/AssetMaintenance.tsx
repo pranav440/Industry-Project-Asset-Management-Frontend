@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { AssetStatusBadge } from '../components/AssetStatusBadge';
-import { getAsset, type AssetApiError } from '../api/assetApi';
-import { ASSET_DETAILS_MOCK_DATA, DEFAULT_ASSET_DETAILS_DATA, type AssetDetailsData } from '../data/assetDetailsData';
+import { createMaintenance, getAsset, listMaintenance, type AssetApiError, type MaintenanceApiRecord } from '../api/assetApi';
+import type { AssetDetailsData } from '../data/assetDetailsData';
 import './AssetMaintenance.css';
 
 export interface MaintenanceRecordItem {
@@ -16,6 +16,7 @@ export interface MaintenanceRecordItem {
   status: 'Completed' | 'Scheduled';
   notes?: string;
   timestamp?: string;
+  loggedBy?: string;
 }
 
 interface AssetMaintenancePageProps {
@@ -48,6 +49,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
   const [asset, setAsset] = useState<AssetDetailsData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<boolean>(false);
 
   // Success Notification State
@@ -60,35 +62,8 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
     date: string;
   } | null>(null);
 
-  // Records List (in-memory mock initial state)
-  const [records, setRecords] = useState<MaintenanceRecordItem[]>([
-    {
-      id: 'REC-001',
-      date: '18 Jun 2024',
-      isoDate: '2024-06-18',
-      type: 'Preventive',
-      vendor: 'Dell Care Services',
-      technician: 'Ramesh Sharma',
-      cost: 2400,
-      status: 'Completed',
-      notes:
-        'Comprehensive hardware diagnostics completed. Replaced heatsink thermal compound, cleaned dual cooling fans, updated BIOS to release v1.14.2, and verified battery charge cycle efficiency at 96.4%.',
-      timestamp: '18 Jun 2024, 16:42 IST',
-    },
-    {
-      id: 'REC-002',
-      date: '15 Jan 2024',
-      isoDate: '2024-01-15',
-      type: 'Preventive',
-      vendor: 'TechSupply Co. Ltd.',
-      technician: 'In-house IT',
-      cost: 1800,
-      status: 'Completed',
-      notes:
-        'Initial enterprise intake deployment service. Asset tagging, OS baseline staging, RAM integrity tests, and display calibration.',
-      timestamp: '15 Jan 2024, 11:20 IST',
-    },
-  ]);
+  const [records, setRecords] = useState<MaintenanceRecordItem[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -110,14 +85,49 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
 
   const [formErrors, setFormErrors] = useState<MaintenanceFormErrors>({});
 
-  // Fetch / Fallback Asset info
+  const showToast = (message: string) => {
+    setSaveError(message);
+  };
+
+  const formatDateDisplay = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  };
+
+  const mapMaintenanceRecord = (record: MaintenanceApiRecord): MaintenanceRecordItem => ({
+    id: record.maintenance_id,
+    date: formatDateDisplay(record.service_date),
+    isoDate: record.service_date,
+    type: record.maintenance_type,
+    vendor: record.service_vendor,
+    technician: record.technician || undefined,
+    cost: record.maintenance_cost,
+    status: record.status,
+    notes: record.service_notes || undefined,
+    timestamp: record.created_at ? new Date(record.created_at).toLocaleString('en-IN') : undefined,
+    loggedBy: record.created_by,
+  });
+
+  const apiErrorMessage = (error: unknown, fallback: string) => {
+    const status = (error as AssetApiError)?.status;
+    if (status === 401) return 'Your session has expired. Please sign in again.';
+    if (status === 403) return 'Admin access is required.';
+    if (status === 404) return 'Asset not found.';
+    if (status === 422) return error instanceof Error ? error.message : 'Please check the maintenance details.';
+    if (status >= 500) return 'The server could not process the request.';
+    return error instanceof Error ? error.message : fallback;
+  };
+
+  // Fetch asset context and persisted maintenance history.
   useEffect(() => {
     let active = true;
     setLoading(true);
     setApiError(null);
 
-    getAsset(assetId)
-      .then((record) => {
+    Promise.all([getAsset(assetId), listMaintenance(assetId)])
+      .then(([record, maintenance]) => {
         if (!active) return;
         setAsset({
           id: record.asset_id,
@@ -159,30 +169,13 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
           auditHistory: [],
           qrCodeDataUrl: record.qr_code_data_url,
         });
+        setRecords(maintenance.map(mapMaintenanceRecord));
         setLoading(false);
       })
       .catch((error: unknown) => {
         if (!active) return;
-        const mockFallback = ASSET_DETAILS_MOCK_DATA[assetId] || {
-          ...DEFAULT_ASSET_DETAILS_DATA,
-          id: assetId,
-        };
-        if (mockFallback) {
-          setAsset(mockFallback);
-          setLoading(false);
-        } else {
-          const status = (error as AssetApiError)?.status;
-          setApiError(
-            status === 401
-              ? 'Your session has expired. Please sign in again.'
-              : status === 403
-              ? 'Admin access is required.'
-              : status === 404
-              ? 'Asset not found.'
-              : 'Unable to load asset information.'
-          );
-          setLoading(false);
-        }
+        setApiError(apiErrorMessage(error, 'Unable to load asset maintenance information.'));
+        setLoading(false);
       });
 
     return () => {
@@ -218,14 +211,6 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
     return records.reduce((acc, curr) => acc + curr.cost, 0);
   }, [records]);
 
-  // Format Helper: "2024-06-18" -> "18 Jun 2024"
-  const formatDateDisplay = (iso: string) => {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
-  };
-
   // Open / Close Add Modal
   const handleOpenAddModal = () => {
     setFormData({
@@ -237,6 +222,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
       serviceNotes: '',
     });
     setFormErrors({});
+    setSaveError(null);
     setIsAddModalOpen(true);
   };
 
@@ -274,40 +260,39 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
   };
 
   // Submit Add Maintenance Record
-  const handleSaveRecord = (e: React.FormEvent) => {
+  const handleSaveRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) {
       return;
     }
 
-    const costNum = Math.round(Number(formData.maintenanceCost));
-    const formattedDate = formatDateDisplay(formData.serviceDate);
-    const newId = `REC-00${records.length + 1}`;
-
-    const newRecord: MaintenanceRecordItem = {
-      id: newId,
-      date: formattedDate,
-      isoDate: formData.serviceDate,
-      type: formData.maintenanceType as 'Preventive' | 'Corrective',
-      vendor: formData.serviceVendor.trim(),
-      technician: formData.technician.trim() || 'In-house IT',
-      cost: costNum,
-      status: 'Completed',
-      notes: formData.serviceNotes.trim() || undefined,
-      timestamp: `${formattedDate}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} IST`,
-    };
-
-    setRecords((prev) => [newRecord, ...prev]);
-    setIsAddModalOpen(false);
-
-    setSuccessInfo({
-      id: newId,
-      assetName: asset?.name || 'Asset',
-      assetId: asset?.id || assetId,
-      type: newRecord.type,
-      vendor: newRecord.vendor,
-      date: formattedDate,
-    });
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const created = await createMaintenance(assetId, {
+        service_date: formData.serviceDate,
+        maintenance_type: formData.maintenanceType as 'Preventive' | 'Corrective',
+        service_vendor: formData.serviceVendor.trim(),
+        ...(formData.technician.trim() ? { technician: formData.technician.trim() } : {}),
+        maintenance_cost: Number(formData.maintenanceCost),
+        ...(formData.serviceNotes.trim() ? { service_notes: formData.serviceNotes.trim() } : {}),
+      });
+      const newRecord = mapMaintenanceRecord(created);
+      setRecords((prev) => [newRecord, ...prev]);
+      setIsAddModalOpen(false);
+      setSuccessInfo({
+        id: newRecord.id,
+        assetName: asset?.name || 'Asset',
+        assetId: asset?.id || assetId,
+        type: newRecord.type,
+        vendor: newRecord.vendor,
+        date: newRecord.date,
+      });
+    } catch (error: unknown) {
+      showToast(apiErrorMessage(error, 'Unable to save the maintenance record.'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Navigation Helper
@@ -799,6 +784,11 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
 
             <form onSubmit={handleSaveRecord} noValidate>
               <div className="amx-modal-form-body">
+                {saveError && (
+                  <div role="alert" className="amx-field-error-msg" style={{ marginBottom: '12px' }}>
+                    {saveError}
+                  </div>
+                )}
                 {/* Target Asset Chip (Read-Only) */}
                 <div className="amx-modal-asset-chip">
                   <div className="amx-modal-asset-info">
@@ -938,8 +928,9 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
                 <button
                   type="submit"
                   className="amx-btn-modal-submit"
+                  disabled={isSaving}
                 >
-                  Save Record
+                  {isSaving ? 'Saving...' : 'Save Record'}
                 </button>
               </div>
             </form>
@@ -1022,7 +1013,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
 
               {selectedRecordForView.timestamp && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#76777d' }}>
-                  <span>Logged by: admin.ops@assetmx.internal</span>
+                  <span>Logged by: {selectedRecordForView.loggedBy || 'Unavailable'}</span>
                   <span>{selectedRecordForView.timestamp}</span>
                 </div>
               )}
