@@ -94,3 +94,101 @@ class Asset(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+
+class AssetMovementStatus(str, enum.Enum):
+    initiated = "Initiated"
+    in_transit = "In Transit"
+    completed = "Completed"
+    cancelled = "Cancelled"
+
+
+class AssetMovement(Base):
+    __tablename__ = "asset_movements"
+    __table_args__ = (
+        UniqueConstraint("movement_id", name="uq_asset_movements_movement_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    movement_id: Mapped[str] = mapped_column(String(64), index=True)
+    from_location: Mapped[str] = mapped_column(String(255))
+    to_location: Mapped[str] = mapped_column(String(255))
+    from_custodian: Mapped[str] = mapped_column(String(255))
+    to_custodian: Mapped[str] = mapped_column(String(255))
+    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[AssetMovementStatus] = mapped_column(
+        Enum(AssetMovementStatus, native_enum=False, length=32),
+        default=AssetMovementStatus.in_transit,
+    )
+    initiated_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    initiated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    action: Mapped[str] = mapped_column(String(120), index=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    asset_identifier: Mapped[str] = mapped_column(String(64), index=True)
+    actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    before_state: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    after_state: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    movement_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class MaintenanceType(str, enum.Enum):
+    preventive = "Preventive"
+    corrective = "Corrective"
+
+
+class MaintenanceStatus(str, enum.Enum):
+    completed = "Completed"
+
+
+class Maintenance(Base):
+    __tablename__ = "maintenance_records"
+    __table_args__ = (
+        UniqueConstraint("maintenance_id", name="uq_maintenance_records_maintenance_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    maintenance_id: Mapped[str] = mapped_column(String(64), index=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    service_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    maintenance_type: Mapped[MaintenanceType] = mapped_column(
+        Enum(MaintenanceType, native_enum=False, length=32),
+    )
+    service_vendor: Mapped[str] = mapped_column(String(255))
+    technician: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    maintenance_cost: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    status: Mapped[MaintenanceStatus] = mapped_column(
+        Enum(MaintenanceStatus, native_enum=False, length=32),
+        default=MaintenanceStatus.completed,
+    )
+    service_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)

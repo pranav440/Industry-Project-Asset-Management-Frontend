@@ -53,6 +53,20 @@ export interface AssetListResponse {
   total_pages: number;
 }
 
+export interface MaintenanceApiRecord {
+  maintenance_id: string;
+  asset_id: string;
+  service_date: string;
+  maintenance_type: 'Preventive' | 'Corrective';
+  service_vendor: string;
+  technician: string | null;
+  maintenance_cost: number;
+  status: 'Completed';
+  service_notes: string | null;
+  created_at: string;
+  created_by: string;
+}
+
 export class AssetApiError extends Error {
   status: number;
 
@@ -98,6 +112,27 @@ export function listAssets(params: {
 
 export function getAsset(assetId: string): Promise<AssetRecord> {
   return request<AssetRecord>(`/api/assets/${encodeURIComponent(assetId)}`);
+}
+
+export function listMaintenance(assetId: string): Promise<MaintenanceApiRecord[]> {
+  return request<MaintenanceApiRecord[]>(`/api/assets/${encodeURIComponent(assetId)}/maintenance`);
+}
+
+export function createMaintenance(
+  assetId: string,
+  payload: {
+    service_date: string;
+    maintenance_type: 'Preventive' | 'Corrective';
+    service_vendor: string;
+    technician?: string;
+    maintenance_cost: number;
+    service_notes?: string;
+  },
+): Promise<MaintenanceApiRecord> {
+  return request<MaintenanceApiRecord>(`/api/assets/${encodeURIComponent(assetId)}/maintenance`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function registerNewAsset(payload: NewAssetPayload): Promise<AssetRecord> {
