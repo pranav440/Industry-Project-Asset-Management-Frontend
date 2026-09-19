@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { AssetStatusBadge } from '../components/AssetStatusBadge';
-import { getAsset, type AssetApiError } from '../api/assetApi';
+import { getAsset, type AssetApiError, type AssetMovementRecord } from '../api/assetApi';
 import type { AssetDetailsData } from '../data/assetDetailsData';
 import './AssetDetails.css';
 
@@ -63,7 +63,15 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
             designatedUser: 'Not available',
             accountabilityStatus: 'Not available',
           },
-          movementHistory: [],
+          movementHistory: record.movement_history.map((movement: AssetMovementRecord) => ({
+            id: movement.movement_id,
+            date: new Date(movement.initiated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+            movementType: 'Transfer',
+            from: movement.from_location,
+            to: movement.to_location,
+            custodian: movement.to_custodian,
+            verification: movement.status,
+          })),
           maintenanceHistory: [],
           auditHistory: [],
           qrCodeDataUrl: record.qr_code_data_url,

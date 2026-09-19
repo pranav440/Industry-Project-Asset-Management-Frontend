@@ -1,12 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
-import {
-  getStoredRequests,
-  saveStoredRequests,
-  type RequestItemData,
-  type RequestStatus,
-} from '../data/requestsData';
+import { getRequest, transitionRequest, type RequestApiError, type RequestStatus } from '../api/requestApi';
 import './RequestDetails.css';
+
+interface RequestItemData {
+  id: string;
+  requesterName: string;
+  requesterEmail: string;
+  department: string;
+  requestType: 'Asset Request' | 'Consumable Request';
+  requestedItem: string;
+  category: string;
+  quantity: number;
+  priority: 'High' | 'Medium' | 'Low';
+  requestDate: string;
+  status: RequestStatus;
+  justification: string;
+  processingGuidelines?: string;
+  history: Array<{
+    id: string;
+    timestamp: string;
+    stage: string;
+    action: string;
+    performedBy: string;
+    note?: string;
+  }>;
+}
 
 interface RequestDetailsPageProps {
   requestId: string;
@@ -21,20 +40,58 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
 }) => {
   const [request, setRequest] = useState<RequestItemData | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Processing Modal State
   const [isProcessModalOpen, setIsProcessModalOpen] = useState(false);
   const [targetState, setTargetState] = useState<RequestStatus>('In Review');
   const [operationalNote, setOperationalNote] = useState('');
+  const [isSubmittingTransition, setIsSubmittingTransition] = useState(false);
 
   useEffect(() => {
-    const list = getStoredRequests();
-    const found = list.find((r) => r.id === requestId);
-    if (found) {
-      setRequest(found);
-    } else if (list.length > 0) {
-      setRequest(list[0]);
-    }
+    let active = true;
+    setIsLoading(true);
+    setApiError(null);
+
+    getRequest(requestId)
+      .then((response) => {
+        if (!active) return;
+        setRequest({
+          id: response.request_id,
+          requesterName: response.requester_name,
+          requesterEmail: response.requester_email,
+          department: response.department,
+          requestType: response.request_type,
+          requestedItem: response.requested_item,
+          category: response.category,
+          quantity: response.quantity,
+          priority: response.priority,
+          requestDate: response.request_date,
+          status: response.status,
+          justification: response.justification,
+          processingGuidelines: response.processing_guidelines,
+          history: response.history.map((entry) => ({
+            id: entry.history_id,
+            timestamp: entry.timestamp,
+            stage: entry.stage,
+            action: entry.action,
+            performedBy: entry.performed_by,
+            note: entry.note ?? undefined,
+          })),
+        });
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const status = (error as RequestApiError).status;
+        setApiError(status === 401 ? 'Your session has expired. Please sign in again.' : status === 403 ? 'Admin access is required to view this request.' : status === 404 ? 'The selected request could not be found.' : status === 409 ? 'This request status change is not allowed.' : status === 422 ? 'The request data is invalid.' : status && status >= 500 ? 'The request service is temporarily unavailable.' : error instanceof Error ? error.message : 'Unable to load request details.');
+        setRequest(null);
+      })
+      .finally(() => active && setIsLoading(false));
+
+    return () => {
+      active = false;
+    };
   }, [requestId]);
 
   const showToast = (msg: string) => {
@@ -59,10 +116,20 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
     }
   };
 
-  if (!request) {
+  if (isLoading) {
     return (
       <DashboardLayout currentNav="Requests" onNavigate={handleNav} onSignOut={onSignOut}>
         <div style={{ padding: '32px', textAlign: 'center' }}>Loading request details...</div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!request) {
+    return (
+      <DashboardLayout currentNav="Requests" onNavigate={handleNav} onSignOut={onSignOut}>
+        <div style={{ padding: '32px', textAlign: 'center' }}>
+          {apiError || 'Request not found.'}
+        </div>
       </DashboardLayout>
     );
   }
@@ -79,41 +146,49 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
   };
 
   // Execute Status Transition
-  const handleConfirmProcess = (e: React.FormEvent) => {
+  const handleConfirmProcess = async (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date();
-    const timestampStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    setIsSubmittingTransition(true);
 
-    let actionName = `Request moved to ${targetState}`;
-    if (targetState === 'Fulfilled') actionName = 'Request fulfilled';
-    if (targetState === 'Rejected') actionName = 'Request rejected';
+    try {
+      const updated = await transitionRequest(request.id, {
+        target_status: targetState,
+        operational_note: operationalNote.trim() || undefined,
+      });
 
-    const newHistoryEntry = {
-      id: `EVT-${Date.now().toString().slice(-4)}`,
-      timestamp: timestampStr,
-      stage: targetState,
-      action: actionName,
-      performedBy: 'Administrator',
-      note: operationalNote.trim() || undefined,
-    };
-
-    const updatedRequest: RequestItemData = {
-      ...request,
-      status: targetState,
-      history: [newHistoryEntry, ...request.history],
-    };
-
-    const all = getStoredRequests();
-    const idx = all.findIndex((r) => r.id === request.id);
-    if (idx >= 0) {
-      all[idx] = updatedRequest;
-    } else {
-      all.push(updatedRequest);
+      setRequest({
+        id: updated.request_id,
+        requesterName: updated.requester_name,
+        requesterEmail: updated.requester_email,
+        department: updated.department,
+        requestType: updated.request_type,
+        requestedItem: updated.requested_item,
+        category: updated.category,
+        quantity: updated.quantity,
+        priority: updated.priority,
+        requestDate: updated.request_date,
+        status: updated.status,
+        justification: updated.justification,
+        processingGuidelines: updated.processing_guidelines,
+        history: updated.history.map((entry) => ({
+          id: entry.history_id,
+          timestamp: entry.timestamp,
+          stage: entry.stage,
+          action: entry.action,
+          performedBy: entry.performed_by,
+          note: entry.note ?? undefined,
+        })),
+      });
+      setIsProcessModalOpen(false);
+      setOperationalNote('');
+      showToast(`Request ${request.id} successfully updated to "${targetState}".`);
+    } catch (error: unknown) {
+      const status = (error as RequestApiError).status;
+      const message = status === 401 ? 'Your session has expired. Please sign in again.' : status === 403 ? 'Admin access is required to update this request.' : status === 404 ? 'The selected request could not be found.' : status === 409 ? 'This request status change is not allowed.' : status === 422 ? 'The transition is invalid. Please review the input and try again.' : status && status >= 500 ? 'The request service is temporarily unavailable.' : error instanceof Error ? error.message : 'Unable to update the request status.';
+      showToast(message);
+    } finally {
+      setIsSubmittingTransition(false);
     }
-    saveStoredRequests(all);
-    setRequest(updatedRequest);
-    setIsProcessModalOpen(false);
-    showToast(`Request ${request.id} successfully updated to "${targetState}".`);
   };
 
   return (
@@ -475,8 +550,9 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
                 <button
                   type="submit"
                   className={targetState === 'Rejected' ? 'amx-btn-reject' : 'amx-btn-primary'}
+                  disabled={isSubmittingTransition}
                 >
-                  Confirm {targetState}
+                  {isSubmittingTransition ? 'Processing...' : `Confirm ${targetState}`}
                 </button>
               </div>
             </form>

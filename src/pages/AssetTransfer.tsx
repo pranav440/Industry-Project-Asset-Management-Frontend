@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { AssetStatusBadge } from '../components/AssetStatusBadge';
-import { getAsset, type AssetApiError } from '../api/assetApi';
-import { ASSET_DETAILS_MOCK_DATA, DEFAULT_ASSET_DETAILS_DATA, type AssetDetailsData } from '../data/assetDetailsData';
+import { getAsset, initiateTransfer, type AssetApiError, type AssetMovementRecord } from '../api/assetApi';
+import type { AssetDetailsData } from '../data/assetDetailsData';
 import { ASSET_FILTER_OPTIONS } from '../data/assetsData';
 import './AssetTransfer.css';
 
@@ -31,6 +31,8 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
   const [asset, setAsset] = useState<AssetDetailsData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Form State
@@ -103,7 +105,15 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
             designatedUser: record.custodian,
             accountabilityStatus: 'Active',
           },
-          movementHistory: [],
+          movementHistory: record.movement_history.map((movement: AssetMovementRecord) => ({
+            id: movement.movement_id,
+            date: new Date(movement.initiated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+            movementType: 'Transfer',
+            from: movement.from_location,
+            to: movement.to_location,
+            custodian: movement.to_custodian,
+            verification: movement.status,
+          })),
           maintenanceHistory: [],
           auditHistory: [],
           qrCodeDataUrl: record.qr_code_data_url,
@@ -112,27 +122,19 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
       })
       .catch((error: unknown) => {
         if (!active) return;
-        // Fallback to local mock data if exists or default
-        const mockFallback = ASSET_DETAILS_MOCK_DATA[assetId] || {
-          ...DEFAULT_ASSET_DETAILS_DATA,
-          id: assetId,
-        };
-        if (mockFallback) {
-          setAsset(mockFallback);
-          setLoading(false);
-        } else {
-          const status = (error as AssetApiError)?.status;
-          setApiError(
-            status === 401
-              ? 'Your session has expired. Please sign in again.'
-              : status === 403
-              ? 'Admin access is required.'
-              : status === 404
-              ? 'Asset not found.'
-              : 'Unable to load asset information.'
-          );
-          setLoading(false);
-        }
+        const status = (error as AssetApiError)?.status;
+        setApiError(
+          status === 401
+            ? 'Your session has expired. Please sign in again.'
+            : status === 403
+            ? 'Admin access is required.'
+            : status === 404
+            ? 'Asset not found.'
+            : error instanceof Error
+            ? error.message
+            : 'Unable to load asset information.'
+        );
+        setLoading(false);
       });
 
     return () => {
@@ -165,17 +167,67 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
       showToast('Please select all required transfer fields.');
       return;
     }
+    setTransferError(null);
     setShowConfirmModal(true);
   };
 
-  const handleConfirmSubmit = () => {
-    setShowConfirmModal(false);
-    setSuccessInfo({
-      assetId: asset?.id || assetId,
-      destination: formData.destinationLocation,
-      newCustodian: formData.newCustodian,
-    });
-    showToast('Asset transfer initiated successfully.');
+  const handleConfirmSubmit = async () => {
+    setIsSubmitting(true);
+    setTransferError(null);
+    try {
+      const response = await initiateTransfer(assetId, {
+        destination_location: formData.destinationLocation,
+        new_custodian: formData.newCustodian,
+        ...(formData.transferReason.trim() ? { transfer_reason: formData.transferReason.trim() } : {}),
+      });
+      setAsset((current) => current ? {
+        ...current,
+        status: response.asset.status,
+        assignedLocation: response.asset.location,
+        assignedCustodianDepartment: response.asset.custodian,
+        assignedCustodianName: response.asset.custodian,
+        custody: {
+          ...current.custody,
+          assignedCustodian: response.asset.custodian,
+          assignedLocation: response.asset.location,
+        },
+        movementHistory: response.asset.movement_history.map((movement: AssetMovementRecord) => ({
+          id: movement.movement_id,
+          date: new Date(movement.initiated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          movementType: 'Transfer',
+          from: movement.from_location,
+          to: movement.to_location,
+          custodian: movement.to_custodian,
+          verification: movement.status,
+        })),
+      } : current);
+      setShowConfirmModal(false);
+      setSuccessInfo({
+        assetId: response.asset.asset_id,
+        destination: response.movement.to_location,
+        newCustodian: response.movement.to_custodian,
+      });
+      showToast('Asset transfer initiated successfully.');
+    } catch (error: unknown) {
+      const status = (error as AssetApiError)?.status;
+      const message = status === 401
+        ? 'Your session has expired. Please sign in again.'
+        : status === 403
+        ? 'Admin access is required.'
+        : status === 404
+        ? 'Asset not found.'
+        : status === 409
+        ? (error instanceof Error ? error.message : 'This asset cannot be transferred right now.')
+        : status === 422
+        ? (error instanceof Error ? error.message : 'Please check the transfer details.')
+        : error instanceof Error
+        ? error.message
+        : 'Unable to initiate the transfer.';
+      setTransferError(message);
+      showToast(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const locationOptions = [
@@ -294,6 +346,11 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
             </div>
 
             <div className="amx-modal-body">
+              {transferError && (
+                <div role="alert" style={{ marginBottom: '12px', color: '#ba1a1a', fontSize: '13px' }}>
+                  {transferError}
+                </div>
+              )}
               <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
                 Please review the transfer details below before confirming movement authorization.
               </p>
@@ -346,11 +403,12 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                 type="button"
                 className="amx-transfer-btn-primary"
                 onClick={handleConfirmSubmit}
+                disabled={isSubmitting}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
                   check_circle
                 </span>
-                <span>Confirm Transfer</span>
+                <span>{isSubmitting ? 'Submitting...' : 'Confirm Transfer'}</span>
               </button>
             </div>
           </div>

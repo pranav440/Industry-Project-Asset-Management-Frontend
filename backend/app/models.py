@@ -1,7 +1,7 @@
 import enum
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, JSON, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -47,6 +47,166 @@ class PasswordResetToken(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
+
+
+class RequestType(str, enum.Enum):
+    asset_request = "Asset Request"
+    consumable_request = "Consumable Request"
+
+
+class RequestPriority(str, enum.Enum):
+    high = "High"
+    medium = "Medium"
+    low = "Low"
+
+
+class RequestStatus(str, enum.Enum):
+    pending = "Pending"
+    in_review = "In Review"
+    fulfilled = "Fulfilled"
+    rejected = "Rejected"
+
+
+class Request(Base):
+    __tablename__ = "requests"
+    __table_args__ = (
+        UniqueConstraint("request_id", name="uq_requests_request_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    request_id: Mapped[str] = mapped_column(String(64), index=True)
+    requester_name: Mapped[str] = mapped_column(String(160))
+    requester_email: Mapped[str] = mapped_column(String(255))
+    department: Mapped[str] = mapped_column(String(160))
+    request_type: Mapped[RequestType] = mapped_column(Enum(RequestType, native_enum=False, length=32))
+    requested_item: Mapped[str] = mapped_column(String(255))
+    category: Mapped[str] = mapped_column(String(120))
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    priority: Mapped[RequestPriority] = mapped_column(Enum(RequestPriority, native_enum=False, length=32))
+    request_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[RequestStatus] = mapped_column(
+        Enum(RequestStatus, native_enum=False, length=32),
+        default=RequestStatus.pending,
+    )
+    justification: Mapped[str] = mapped_column(Text)
+    processing_guidelines: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class RequestHistory(Base):
+    __tablename__ = "request_history"
+    __table_args__ = (
+        UniqueConstraint("history_id", name="uq_request_history_history_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    history_id: Mapped[str] = mapped_column(String(64), index=True)
+    request_id: Mapped[str] = mapped_column(ForeignKey("requests.request_id"), index=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    stage: Mapped[str] = mapped_column(String(32))
+    action: Mapped[str] = mapped_column(String(120))
+    performed_by: Mapped[str] = mapped_column(String(160))
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class GatePassType(str, enum.Enum):
+    asset_movement = "Asset Movement"
+    returnable = "Returnable"
+    non_returnable = "Non-Returnable"
+    maintenance = "Maintenance"
+
+
+class GatePassStatus(str, enum.Enum):
+    pending = "Pending"
+    approved = "Approved"
+    rejected = "Rejected"
+    active = "Active"
+    completed = "Completed"
+    escalated = "Escalated"
+
+
+class GatePass(Base):
+    __tablename__ = "gate_passes"
+    __table_args__ = (
+        UniqueConstraint("pass_id", name="uq_gate_passes_pass_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    pass_id: Mapped[str] = mapped_column(String(64), index=True)
+    pass_type: Mapped[GatePassType] = mapped_column(Enum(GatePassType, native_enum=False, length=32))
+    request_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[GatePassStatus] = mapped_column(
+        Enum(GatePassStatus, native_enum=False, length=32),
+        default=GatePassStatus.pending,
+    )
+    requester_name: Mapped[str] = mapped_column(String(160))
+    department: Mapped[str] = mapped_column(String(160), default="Administration")
+    asset_or_item: Mapped[str] = mapped_column(String(255))
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    current_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    destination: Mapped[str] = mapped_column(String(255))
+    movement_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    purpose: Mapped[str] = mapped_column(Text)
+    authorization_state: Mapped[str] = mapped_column(String(160), default="Pending Review")
+    decision_status: Mapped[str] = mapped_column(String(160), default="Awaiting Review")
+    decision_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_by: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    exit_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    exit_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    exit_gate: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    exit_officer: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    exit_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    entry_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    entry_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    entry_gate: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    entry_officer: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    entry_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    escalation_is_escalated: Mapped[bool] = mapped_column(default=False)
+    escalation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    escalation_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    escalation_action_required: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    escalation_escalated_by: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class GatePassHistory(Base):
+    __tablename__ = "gate_pass_history"
+    __table_args__ = (
+        UniqueConstraint("history_id", name="uq_gate_pass_history_history_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    history_id: Mapped[str] = mapped_column(String(64), index=True)
+    pass_id: Mapped[str] = mapped_column(ForeignKey("gate_passes.pass_id"), index=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(160))
+    performed_by: Mapped[str] = mapped_column(String(160))
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status_snapshot: Mapped[str] = mapped_column(String(64))
 
 
 class AssetStatus(str, enum.Enum):
@@ -143,8 +303,14 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     action: Mapped[str] = mapped_column(String(120), index=True)
-    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), index=True, nullable=True)
     asset_identifier: Mapped[str] = mapped_column(String(64), index=True)
+    consumable_id: Mapped[int | None] = mapped_column(ForeignKey("consumables.id"), index=True, nullable=True)
+    consumable_identifier: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    request_id: Mapped[int | None] = mapped_column(ForeignKey("requests.id"), index=True, nullable=True)
+    request_identifier: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    gate_pass_id: Mapped[int | None] = mapped_column(ForeignKey("gate_passes.id"), index=True, nullable=True)
+    gate_pass_identifier: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -192,3 +358,79 @@ class Maintenance(Base):
         server_default=func.now(),
     )
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+
+
+class ConsumableOperationType(str, enum.Enum):
+    initial_inward = "Initial Inward / Batch Receipt"
+    adjustment = "Stock Adjustment / Correction"
+    issue = "Disbursement / Issue"
+
+
+class Consumable(Base):
+    __tablename__ = "consumables"
+    __table_args__ = (
+        UniqueConstraint("consumable_id", name="uq_consumables_consumable_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    consumable_id: Mapped[str] = mapped_column(String(64), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    category: Mapped[str] = mapped_column(String(120))
+    batch_id: Mapped[str] = mapped_column(String(120))
+    location: Mapped[str] = mapped_column(String(255))
+    available_stock: Mapped[int] = mapped_column(Integer, nullable=False)
+    threshold: Mapped[int] = mapped_column(Integer, nullable=False)
+    batch_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class ConsumableStockMovement(Base):
+    __tablename__ = "consumable_stock_movements"
+    __table_args__ = (
+        UniqueConstraint("movement_id", name="uq_consumable_stock_movements_movement_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    movement_id: Mapped[str] = mapped_column(String(64), index=True)
+    consumable_id: Mapped[int] = mapped_column(ForeignKey("consumables.id"), index=True)
+    operation_type: Mapped[ConsumableOperationType] = mapped_column(
+        Enum(ConsumableOperationType, native_enum=False, length=48),
+    )
+    delta_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    post_balance: Mapped[int] = mapped_column(Integer, nullable=False)
+    reference: Mapped[str] = mapped_column(String(500))
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+
+
+class ConsumableIssue(Base):
+    __tablename__ = "consumable_issues"
+    __table_args__ = (
+        UniqueConstraint("issue_id", name="uq_consumable_issues_issue_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    issue_id: Mapped[str] = mapped_column(String(64), index=True)
+    consumable_id: Mapped[int] = mapped_column(ForeignKey("consumables.id"), index=True)
+    issue_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    issued_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    remaining_stock: Mapped[int] = mapped_column(Integer, nullable=False)

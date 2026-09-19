@@ -1,12 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import {
-  getStoredConsumables,
-  computeStockStatus,
   getExpiryClassification,
   CONSUMABLE_FILTER_OPTIONS,
   type ConsumableDetailsData,
 } from '../data/consumablesData';
+import { listConsumables, type AssetApiError, type ConsumableApiRecord } from '../api/assetApi';
 import './Consumables.css';
 
 interface ConsumablesPageProps {
@@ -26,11 +25,70 @@ export const ConsumablesPage: React.FC<ConsumablesPageProps> = ({
   const [locationFilter, setLocationFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const mapConsumable = (item: ConsumableApiRecord): ConsumableDetailsData => ({
+    id: item.consumable_id,
+    name: item.name,
+    category: item.category,
+    batchId: item.batch_id,
+    location: item.location,
+    availableStock: item.available_stock,
+    threshold: item.threshold,
+    expiryDate: item.expiry_date || '',
+    status: item.stock_status,
+    batchQuantity: item.batch_quantity,
+    issueHistory: item.issue_history.map((issue) => ({
+      id: issue.issue_id,
+      issueDate: issue.issue_date,
+      quantity: issue.quantity,
+      requestReference: issue.request_reference || '',
+      issuedBy: issue.issued_by,
+      remainingStock: issue.remaining_stock,
+    })),
+    movementLedger: item.movement_ledger.map((movement) => ({
+      id: movement.movement_id,
+      timestamp: movement.timestamp,
+      operationType: movement.operation_type,
+      deltaQuantity: movement.delta_quantity,
+      postBalance: movement.post_balance,
+      reference: movement.reference,
+    })),
+  });
+
   useEffect(() => {
-    setConsumables(getStoredConsumables());
-  }, []);
+    let active = true;
+    setLoading(true);
+    setApiError(null);
+    listConsumables({
+      search: searchQuery,
+      category: categoryFilter,
+      status: stockStatusFilter,
+      expiry: expiryFilter,
+      location: locationFilter,
+      page: currentPage,
+      pageSize,
+    })
+      .then((response) => {
+        if (!active) return;
+        setConsumables(response.items.map(mapConsumable));
+        setTotal(response.total);
+        setTotalPages(Math.max(response.total_pages, 1));
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const errorStatus = (error as AssetApiError).status;
+        setApiError(errorStatus === 401 ? 'Your session has expired. Please sign in again.' : errorStatus === 403 ? 'Admin access is required.' : error instanceof Error ? error.message : 'Unable to load consumables.');
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [searchQuery, categoryFilter, stockStatusFilter, expiryFilter, locationFilter, currentPage]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -53,15 +111,14 @@ export const ConsumablesPage: React.FC<ConsumablesPageProps> = ({
 
   // Compute 4 Summary Cards Metrics
   const summaryMetrics = useMemo(() => {
-    const totalItems = consumables.length;
+    const totalItems = total;
     let lowStockCount = 0;
     let expiringSoonCount = 0;
     let totalStockCount = 0;
 
     consumables.forEach((item) => {
       totalStockCount += item.availableStock;
-      const status = computeStockStatus(item.availableStock, item.threshold);
-      if (status === 'Low Stock' || status === 'Out of Stock') {
+      if (item.status === 'Low Stock' || item.status === 'Out of Stock') {
         lowStockCount += 1;
       }
       const expState = getExpiryClassification(item.expiryDate);
@@ -76,57 +133,15 @@ export const ConsumablesPage: React.FC<ConsumablesPageProps> = ({
       expiringSoonCount,
       totalStockCount,
     };
-  }, [consumables]);
+  }, [consumables, total]);
 
   // Filter consumables list
   const filteredConsumables = useMemo(() => {
-    return consumables.filter((item) => {
-      // Search filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesName = item.name.toLowerCase().includes(q);
-        const matchesId = item.id.toLowerCase().includes(q);
-        const matchesBatch = item.batchId.toLowerCase().includes(q);
-        const matchesCategory = item.category.toLowerCase().includes(q);
-        if (!matchesName && !matchesId && !matchesBatch && !matchesCategory) {
-          return false;
-        }
-      }
-
-      // Category filter
-      if (categoryFilter && item.category !== categoryFilter) {
-        return false;
-      }
-
-      // Stock status filter
-      const currentStatus = computeStockStatus(item.availableStock, item.threshold);
-      if (stockStatusFilter && currentStatus !== stockStatusFilter) {
-        return false;
-      }
-
-      // Expiry filter
-      if (expiryFilter) {
-        const expClass = getExpiryClassification(item.expiryDate);
-        if (expClass !== expiryFilter) {
-          return false;
-        }
-      }
-
-      // Location filter
-      if (locationFilter && item.location !== locationFilter) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [consumables, searchQuery, categoryFilter, stockStatusFilter, expiryFilter, locationFilter]);
+    return consumables;
+  }, [consumables]);
 
   // Pagination calculations
-  const totalPages = Math.max(1, Math.ceil(filteredConsumables.length / pageSize));
-  const paginatedItems = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredConsumables.slice(start, start + pageSize);
-  }, [filteredConsumables, currentPage, pageSize]);
+  const paginatedItems = filteredConsumables;
 
   const handleRowClick = (consumableId: string) => {
     onNavigate?.(`consumables/${encodeURIComponent(consumableId)}`);
@@ -197,6 +212,8 @@ export const ConsumablesPage: React.FC<ConsumablesPageProps> = ({
       )}
 
       <div className="amx-consumables-container">
+        {apiError && <div role="alert" style={{ marginBottom: '16px' }}>{apiError}</div>}
+        {loading && <div role="status" style={{ marginBottom: '16px' }}>Loading consumables...</div>}
         {/* Page Header */}
         <div className="amx-consumables-header">
           <div className="amx-consumables-title-area">
@@ -424,7 +441,6 @@ export const ConsumablesPage: React.FC<ConsumablesPageProps> = ({
                   </tr>
                 ) : (
                   paginatedItems.map((item) => {
-                    const status = computeStockStatus(item.availableStock, item.threshold);
                     const expiryClassification = getExpiryClassification(item.expiryDate);
 
                     return (
@@ -445,7 +461,7 @@ export const ConsumablesPage: React.FC<ConsumablesPageProps> = ({
                         <td className="amx-muted-cell">{item.category}</td>
                         <td className="amx-mono-cell">{item.batchId}</td>
                         <td className="amx-muted-cell">{item.location}</td>
-                        <td className={`amx-stock-cell ${status === 'Low Stock' ? 'low' : status === 'Out of Stock' ? 'out' : ''}`}>
+                        <td className={`amx-stock-cell ${item.status === 'Low Stock' ? 'low' : item.status === 'Out of Stock' ? 'out' : ''}`}>
                           {item.availableStock}
                         </td>
                         <td className="amx-muted-cell">{item.threshold}</td>
@@ -471,14 +487,14 @@ export const ConsumablesPage: React.FC<ConsumablesPageProps> = ({
                         <td>
                           <span
                             className={`amx-stock-badge ${
-                              status === 'In Stock'
+                              item.status === 'In Stock'
                                 ? 'in-stock'
-                                : status === 'Low Stock'
+                                : item.status === 'Low Stock'
                                 ? 'low-stock'
                                 : 'out-of-stock'
                             }`}
                           >
-                            {status}
+                            {item.status}
                           </span>
                         </td>
                         <td style={{ textAlign: 'right' }}>
@@ -508,9 +524,9 @@ export const ConsumablesPage: React.FC<ConsumablesPageProps> = ({
           {/* Pagination */}
           <div className="amx-consumables-pagination">
             <div className="amx-pagination-info">
-              Showing {filteredConsumables.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
-              {Math.min(currentPage * pageSize, filteredConsumables.length)} of{' '}
-              {filteredConsumables.length} consumables
+                Showing {total > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
+              {total > 0 ? Math.min(currentPage * pageSize, (currentPage - 1) * pageSize + paginatedItems.length) : 0} of{' '}
+              {total} consumables
             </div>
             <div className="amx-pagination-controls">
               <button

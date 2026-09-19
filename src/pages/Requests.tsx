@@ -1,11 +1,55 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
-import {
-  getStoredRequests,
-  REQUEST_FILTER_OPTIONS,
-  type RequestItemData,
-} from '../data/requestsData';
+import { listRequests, type RequestApiError } from '../api/requestApi';
 import './Requests.css';
+
+const REQUEST_FILTER_OPTIONS = {
+  requestTypes: [
+    { value: '', label: 'All Request Types' },
+    { value: 'Asset Request', label: 'Asset Request' },
+    { value: 'Consumable Request', label: 'Consumable Request' },
+  ],
+  statuses: [
+    { value: '', label: 'All Statuses' },
+    { value: 'Pending', label: 'Pending' },
+    { value: 'In Review', label: 'In Review' },
+    { value: 'Fulfilled', label: 'Fulfilled' },
+    { value: 'Rejected', label: 'Rejected' },
+  ],
+  priorities: [
+    { value: '', label: 'All Priorities' },
+    { value: 'High', label: 'High Priority' },
+    { value: 'Medium', label: 'Medium Priority' },
+    { value: 'Low', label: 'Low Priority' },
+  ],
+  departments: [
+    { value: '', label: 'All Departments' },
+  ],
+};
+
+interface RequestRowData {
+  id: string;
+  requesterName: string;
+  requesterEmail: string;
+  department: string;
+  requestType: 'Asset Request' | 'Consumable Request';
+  requestedItem: string;
+  category: string;
+  quantity: number;
+  priority: 'High' | 'Medium' | 'Low';
+  requestDate: string;
+  status: 'Pending' | 'In Review' | 'Fulfilled' | 'Rejected';
+  justification: string;
+  processingGuidelines?: string;
+  history: Array<{
+    id: string;
+    timestamp: string;
+    stage: string;
+    action: string;
+    performedBy: string;
+    note?: string;
+  }>;
+}
 
 interface RequestsPageProps {
   onNavigate?: (route: string) => void;
@@ -16,7 +60,7 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
-  const [requests, setRequests] = useState<RequestItemData[]>([]);
+  const [requests, setRequests] = useState<RequestRowData[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [requestTypeFilter, setRequestTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -24,12 +68,67 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const pageSize = 10;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    setRequests(getStoredRequests());
-  }, []);
+    let active = true;
+    setIsLoading(true);
+    setApiError(null);
+
+    listRequests({
+      search: searchQuery,
+      requestType: requestTypeFilter,
+      status: statusFilter,
+      priority: priorityFilter,
+      department: departmentFilter,
+      requestDate: dateFilter,
+      page: currentPage,
+      pageSize,
+    })
+      .then((result) => {
+        if (!active) return;
+        const rows = result.items.map((item) => ({
+          id: item.request_id,
+          requesterName: item.requester_name,
+          requesterEmail: item.requester_email,
+          department: item.department,
+          requestType: item.request_type,
+          requestedItem: item.requested_item,
+          category: item.category,
+          quantity: item.quantity,
+          priority: item.priority,
+          requestDate: item.request_date,
+          status: item.status,
+          justification: item.justification,
+          processingGuidelines: item.processing_guidelines,
+          history: item.history.map((entry) => ({
+            id: entry.history_id,
+            timestamp: entry.timestamp,
+            stage: entry.stage,
+            action: entry.action,
+            performedBy: entry.performed_by,
+            note: entry.note ?? undefined,
+          })),
+        }));
+        setRequests(rows);
+        setTotal(result.total);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const status = (error as RequestApiError).status;
+        setApiError(status === 401 ? 'Your session has expired. Please sign in again.' : status === 403 ? 'Admin access is required to view requests.' : status === 404 ? 'The selected request could not be found.' : status === 409 ? 'This request status change is not allowed.' : status === 422 ? 'The request filters or transition payload are invalid.' : status && status >= 500 ? 'The request service is temporarily unavailable.' : error instanceof Error ? error.message : 'Unable to load requests.');
+        setRequests([]);
+      })
+      .finally(() => active && setIsLoading(false));
+
+    return () => {
+      active = false;
+    };
+  }, [searchQuery, requestTypeFilter, statusFilter, priorityFilter, departmentFilter, dateFilter, currentPage]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -84,50 +183,8 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
     };
   }, [requests]);
 
-  // Filter requests
-  const filteredRequests = useMemo(() => {
-    return requests.filter((req) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesId = req.id.toLowerCase().includes(q);
-        const matchesRequester = req.requesterName.toLowerCase().includes(q);
-        const matchesItem = req.requestedItem.toLowerCase().includes(q);
-        const matchesDept = req.department.toLowerCase().includes(q);
-        if (!matchesId && !matchesRequester && !matchesItem && !matchesDept) {
-          return false;
-        }
-      }
-
-      if (requestTypeFilter && req.requestType !== requestTypeFilter) {
-        return false;
-      }
-
-      if (statusFilter && req.status !== statusFilter) {
-        return false;
-      }
-
-      if (priorityFilter && req.priority !== priorityFilter) {
-        return false;
-      }
-
-      if (departmentFilter && req.department !== departmentFilter) {
-        return false;
-      }
-
-      if (dateFilter && req.requestDate !== dateFilter) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [requests, searchQuery, requestTypeFilter, statusFilter, priorityFilter, departmentFilter, dateFilter]);
-
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
-  const paginatedRequests = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredRequests.slice(start, start + pageSize);
-  }, [filteredRequests, currentPage, pageSize]);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const paginatedRequests = requests;
 
   const handleRowClick = (requestId: string) => {
     onNavigate?.(`requests/${encodeURIComponent(requestId)}`);
@@ -412,7 +469,30 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {paginatedRequests.length === 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={9} className="amx-empty-table-cell">
+                      <div className="amx-empty-state">
+                        <span className="material-symbols-outlined amx-empty-icon" aria-hidden="true">
+                          sync
+                        </span>
+                        <p className="amx-empty-title">Loading requests...</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : apiError ? (
+                  <tr>
+                    <td colSpan={9} className="amx-empty-table-cell">
+                      <div className="amx-empty-state">
+                        <span className="material-symbols-outlined amx-empty-icon" aria-hidden="true">
+                          error
+                        </span>
+                        <p className="amx-empty-title">Unable to load requests</p>
+                        <p className="amx-empty-desc">{apiError}</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : paginatedRequests.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="amx-empty-table-cell">
                       <div className="amx-empty-state">
@@ -502,9 +582,9 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
           {/* Pagination */}
           <div className="amx-consumables-pagination">
             <div className="amx-pagination-info">
-              Showing {filteredRequests.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
-              {Math.min(currentPage * pageSize, filteredRequests.length)} of{' '}
-              {filteredRequests.length} requests
+              Showing {requests.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
+              {Math.min(currentPage * pageSize, total)} of{' '}
+              {total} requests
             </div>
             <div className="amx-pagination-controls">
               <button

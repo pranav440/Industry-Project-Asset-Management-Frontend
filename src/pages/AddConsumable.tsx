@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import {
-  getStoredConsumables,
-  saveStoredConsumables,
   computeStockStatus,
   CONSUMABLE_FILTER_OPTIONS,
   type ConsumableDetailsData,
 } from '../data/consumablesData';
+import { createConsumable, type AssetApiError, type ConsumableApiRecord } from '../api/assetApi';
 import './AddConsumable.css';
 
 interface AddConsumablePageProps {
@@ -51,6 +50,8 @@ export const AddConsumablePage: React.FC<AddConsumablePageProps> = ({
   const [errors, setErrors] = useState<FormErrors>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [createdConsumable, setCreatedConsumable] = useState<ConsumableDetailsData | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -116,7 +117,36 @@ export const AddConsumablePage: React.FC<AddConsumablePageProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const mapConsumable = (item: ConsumableApiRecord): ConsumableDetailsData => ({
+    id: item.consumable_id,
+    name: item.name,
+    category: item.category,
+    batchId: item.batch_id,
+    location: item.location,
+    availableStock: item.available_stock,
+    threshold: item.threshold,
+    expiryDate: item.expiry_date || '',
+    status: item.stock_status,
+    batchQuantity: item.batch_quantity,
+    issueHistory: item.issue_history.map((issue) => ({
+      id: issue.issue_id,
+      issueDate: issue.issue_date,
+      quantity: issue.quantity,
+      requestReference: issue.request_reference || '',
+      issuedBy: issue.issued_by,
+      remainingStock: issue.remaining_stock,
+    })),
+    movementLedger: item.movement_ledger.map((movement) => ({
+      id: movement.movement_id,
+      timestamp: movement.timestamp,
+      operationType: movement.operation_type,
+      deltaQuantity: movement.delta_quantity,
+      postBalance: movement.post_balance,
+      reference: movement.reference,
+    })),
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) {
       showToast('Please fix all form validation errors.');
@@ -125,39 +155,29 @@ export const AddConsumablePage: React.FC<AddConsumablePageProps> = ({
 
     const stockNum = parseInt(formData.initialStock, 10);
     const threshNum = parseInt(formData.threshold, 10);
-    const generatedId = `CON-${new Date().getFullYear()}-${String(Math.floor(1000 + Math.random() * 9000))}`;
-    const now = new Date();
-    const timestampStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    const newConsumable: ConsumableDetailsData = {
-      id: generatedId,
-      name: formData.name.trim(),
-      category: formData.category,
-      location: formData.location,
-      availableStock: stockNum,
-      threshold: threshNum,
-      batchId: formData.batchId.trim(),
-      expiryDate: formData.expiryDate ? formData.expiryDate.trim() : '',
-      status: computeStockStatus(stockNum, threshNum),
-      batchQuantity: stockNum,
-      issueHistory: [],
-      movementLedger: [
-        {
-          id: `MOV-${Date.now().toString().slice(-4)}`,
-          timestamp: timestampStr,
-          operationType: 'Initial Inward / Batch Receipt',
-          deltaQuantity: stockNum,
-          postBalance: stockNum,
-          reference: `Initial Registration & Batch Intake (${formData.batchId.trim()})`,
-        },
-      ],
-    };
-
-    const currentList = getStoredConsumables();
-    const updatedList = [newConsumable, ...currentList];
-    saveStoredConsumables(updatedList);
-    setCreatedConsumable(newConsumable);
-    showToast(`Consumable "${newConsumable.name}" registered successfully.`);
+    setIsSaving(true);
+    setApiError(null);
+    try {
+      const response = await createConsumable({
+        name: formData.name.trim(),
+        category: formData.category,
+        location: formData.location,
+        initial_stock: stockNum,
+        threshold: threshNum,
+        batch_id: formData.batchId.trim(),
+        ...(formData.expiryDate.trim() ? { expiry_date: formData.expiryDate.trim() } : {}),
+      });
+      const newConsumable = mapConsumable(response);
+      setCreatedConsumable(newConsumable);
+      showToast(`Consumable "${newConsumable.name}" registered successfully.`);
+    } catch (error: unknown) {
+      const errorStatus = (error as AssetApiError).status;
+      const message = errorStatus === 401 ? 'Your session has expired. Please sign in again.' : errorStatus === 403 ? 'Admin access is required.' : errorStatus === 422 ? (error instanceof Error ? error.message : 'Please fix the form validation errors.') : error instanceof Error ? error.message : 'Unable to create consumable.';
+      setApiError(message);
+      showToast(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const parsedStock = parseInt(formData.initialStock, 10);
@@ -223,6 +243,7 @@ export const AddConsumablePage: React.FC<AddConsumablePageProps> = ({
       )}
 
       <div className="amx-add-consumable-container">
+        {apiError && <div role="alert" style={{ marginBottom: '16px', color: '#ba1a1a' }}>{apiError}</div>}
         {/* Breadcrumb Navigation */}
         <nav className="amx-breadcrumb-nav" aria-label="Breadcrumb">
           <button
@@ -434,8 +455,8 @@ export const AddConsumablePage: React.FC<AddConsumablePageProps> = ({
                 >
                   Cancel
                 </button>
-                <button type="submit" className="amx-btn-primary">
-                  Save Consumable
+                <button type="submit" className="amx-btn-primary" disabled={isSaving}>
+                  {isSaving ? 'Saving...' : 'Save Consumable'}
                 </button>
               </div>
             </form>

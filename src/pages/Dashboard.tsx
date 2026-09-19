@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { MetricCard } from '../components/MetricCard';
 import { RequestsTable } from '../components/RequestsTable';
@@ -8,20 +8,33 @@ import { RecentPOs } from '../components/RecentPOs';
 import { ReportsAnalyticsCard } from '../components/ReportsAnalyticsCard';
 import { StockLevels } from '../components/StockLevels';
 import { ConsumptionChart } from '../components/ConsumptionChart';
-import {
-  KPI_METRICS,
-  MY_REQUESTS,
-  ASSET_INVENTORY,
-  EXPIRY_ALERTS,
-  RECENT_POS,
-  STOCK_LEVELS,
-  CONSUMPTION_DATA,
-} from '../data/dashboardData';
+import type { MetricCardData, RequestItem, AssetInventoryData, ExpiryAlertItem, StockLevelItem } from '../data/dashboardData';
+import { DashboardApiError, getAdminDashboard, type DashboardApiResponse } from '../services/dashboardApi';
 import './Dashboard.css';
 
 interface DashboardPageProps {
   onNavigate?: (route: string) => void;
   onSignOut?: () => void;
+}
+
+const neutralValue = '—';
+const neutralInventory: AssetInventoryData = {
+  location: 'N/A',
+  custodian: 'N/A',
+  category: 'N/A',
+};
+
+function formatDisplayDate(value: string | null | undefined): string {
+  if (!value) return neutralValue;
+  const dateValue = new Date(value);
+  if (Number.isNaN(dateValue.getTime())) return neutralValue;
+  return dateValue.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function displayStatus(status: string): 'Approved' | 'Pending' | 'Cancelled' {
+  if (status === 'Fulfilled') return 'Approved';
+  if (status === 'Rejected') return 'Cancelled';
+  return 'Pending';
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -30,6 +43,46 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardApiResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDashboard = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const data = await getAdminDashboard();
+        if (!isMounted) return;
+        setDashboard(data);
+      } catch (err) {
+        if (!isMounted) return;
+
+        const status = (err as DashboardApiError)?.status;
+        if (status === 401) {
+          setError('Your session has expired. Please sign in again.');
+        } else if (status === 403) {
+          setError('This dashboard is restricted to administrators.');
+        } else if (status && status >= 500) {
+          setError('The dashboard service is temporarily unavailable. Please retry.');
+        } else {
+          setError('Unable to load dashboard data. Please check your connection and retry.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadDashboard();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -51,35 +104,186 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     }
   };
 
-  // Filter requests based on search query
-  const filteredRequests = useMemo(() => {
-    if (!searchQuery.trim()) return MY_REQUESTS;
-    const q = searchQuery.toLowerCase();
-    return MY_REQUESTS.filter(
-      (r) =>
-        r.id.toLowerCase().includes(q) ||
-        r.itemName.toLowerCase().includes(q) ||
-        r.status.toLowerCase().includes(q)
-    );
-  }, [searchQuery]);
+  const requestsForTable = useMemo<RequestItem[]>(() => {
+    const source = dashboard?.my_requests ?? [];
+    return source.map((request) => ({
+      id: request.request_id,
+      itemName: request.requested_item,
+      status: displayStatus(request.status),
+      approvalDate: formatDisplayDate(request.approval_date),
+      fulfilmentDate: formatDisplayDate(request.fulfillment_date),
+      filterType: request.status === 'Fulfilled' || request.status === 'Rejected' ? 'closed' : 'open',
+    }));
+  }, [dashboard]);
 
-  // Filter POs based on search query
-  const filteredPOs = useMemo(() => {
-    if (!searchQuery.trim()) return RECENT_POS;
-    const q = searchQuery.toLowerCase();
-    return RECENT_POS.filter(
-      (po) =>
-        po.poNumber.toLowerCase().includes(q) ||
-        po.vendor.toLowerCase().includes(q)
+  const filteredRequests = useMemo(() => {
+    if (!searchQuery.trim()) return requestsForTable;
+    const query = searchQuery.toLowerCase();
+    return requestsForTable.filter(
+      (request) =>
+        request.id.toLowerCase().includes(query) ||
+        request.itemName.toLowerCase().includes(query) ||
+        request.status.toLowerCase().includes(query),
     );
-  }, [searchQuery]);
+  }, [requestsForTable, searchQuery]);
+
+  const assetInventoryData: AssetInventoryData = useMemo(() => ({
+    location: dashboard?.asset_inventory ? 'N/A' : neutralInventory.location,
+    custodian: dashboard?.asset_inventory ? 'N/A' : neutralInventory.custodian,
+    category: dashboard?.asset_inventory ? 'N/A' : neutralInventory.category,
+  }), [dashboard]);
+
+  const metricCards: MetricCardData[] = useMemo(() => {
+    const summary = dashboard?.summary;
+    return [
+      {
+        id: 'open-requests',
+        title: 'Open Requests',
+        value: summary ? String(summary.open_requests) : '—',
+        icon: 'pending_actions',
+        trend: { direction: 'down', text: 'Live data' },
+        statusType: 'default',
+      },
+      {
+        id: 'pending-approvals',
+        title: 'Pending Approvals',
+        value: summary ? String(summary.pending_approvals) : '—',
+        icon: 'gavel',
+        subtext: 'Requires action',
+        statusType: 'error',
+      },
+      {
+        id: 'low-stock-alerts',
+        title: 'Low Stock Alerts',
+        value: summary ? String(summary.low_stock_alerts) : '—',
+        icon: 'warning',
+        subtext: 'Items critical',
+        statusType: 'warning',
+      },
+      {
+        id: 'monthly-spend',
+        title: 'Monthly Spend',
+        value: summary?.monthly_spend == null ? 'N/A' : `₹${summary.monthly_spend}`,
+        icon: 'payments',
+        subtext: 'Not available',
+        statusType: 'default',
+      },
+      {
+        id: 'budget-utilized',
+        title: 'Budget Utilized',
+        value: summary?.budget_utilized == null ? 'N/A' : `${summary.budget_utilized}%`,
+        icon: 'pie_chart',
+        progress: summary?.budget_utilized == null ? 0 : Math.min(100, Math.max(0, summary.budget_utilized)),
+        statusType: 'progress',
+      },
+    ];
+  }, [dashboard]);
+
+  const expiryAlerts: ExpiryAlertItem[] = useMemo(() => {
+    return (dashboard?.expiry_alerts ?? []).map((alert) => ({
+      id: Number(alert.item_id.replace(/\D/g, '') || 0),
+      title: alert.name,
+      expiryText: `Exp: ${alert.expiry_date}`,
+      isUrgent: alert.severity === 'urgent',
+    }));
+  }, [dashboard]);
+
+  const stockLevels: StockLevelItem[] = useMemo(() => {
+    return (dashboard?.stock_levels ?? []).map((stock, index) => {
+      const total = stock.threshold > 0 ? stock.threshold : Math.max(1, stock.available_stock);
+      const percentage = total > 0 ? (stock.available_stock / total) * 100 : 0;
+      return {
+        id: `${stock.category}-${index}`,
+        category: stock.category,
+        current: stock.available_stock,
+        total,
+        percentage: Math.min(100, Math.max(0, percentage)),
+        isCritical: stock.status !== 'In Stock',
+        colorHex: ['#acedff', '#4cd7f6', '#0075a6', '#004e5c', '#ba1a1a'][index % 5],
+      };
+    });
+  }, [dashboard]);
+
+  const recentPOs = useMemo(() => [], []);
+  const consumptionData = useMemo(() => ({
+    total: 'N/A',
+    departments: [],
+  }), []);
+
+  if (loading && !dashboard) {
+    return (
+      <DashboardLayout
+        currentNav="Dashboard"
+        onNavigate={handleNav}
+        onSignOut={onSignOut}
+        onSearch={(value) => setSearchQuery(value)}
+        onAddAsset={() => onNavigate?.('assets/new')}
+        onNotificationsClick={() => showToast('Dashboard data is loading.')}
+        onHelpClick={() => showToast('AssetMX Enterprise Help Center & User Manual.')}
+        onProfileClick={() => showToast('Loading user dashboard...')}
+      >
+        <div
+          style={{
+            padding: '32px 20px',
+            textAlign: 'center',
+            color: 'var(--amx-dash-text-muted)',
+            fontStyle: 'italic',
+          }}
+        >
+          Loading dashboard data...
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout
+        currentNav="Dashboard"
+        onNavigate={handleNav}
+        onSignOut={onSignOut}
+        onSearch={(value) => setSearchQuery(value)}
+        onAddAsset={() => onNavigate?.('assets/new')}
+        onNotificationsClick={() => showToast('Dashboard unavailable.')}
+        onHelpClick={() => showToast('AssetMX Enterprise Help Center & User Manual.')}
+        onProfileClick={() => showToast('Dashboard access check failed.')}
+      >
+        <div
+          style={{
+            padding: '28px 20px',
+            color: 'var(--amx-dash-text-primary)',
+          }}
+        >
+          <div
+            className="amx-card-panel"
+            style={{
+              maxWidth: 720,
+              margin: '0 auto',
+              padding: '22px 20px',
+              border: '1px solid rgba(186, 26, 26, 0.4)',
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Dashboard unavailable</div>
+            <div style={{ marginBottom: 16, color: 'var(--amx-dash-text-muted)' }}>{error}</div>
+            <button
+              type="button"
+              className="amx-export-btn"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout
       currentNav="Dashboard"
       onNavigate={handleNav}
       onSignOut={onSignOut}
-      onSearch={(q) => setSearchQuery(q)}
+      onSearch={(value) => setSearchQuery(value)}
       onAddAsset={() => onNavigate?.('assets/new')}
       onNotificationsClick={() =>
         showToast('1 Alert: Printer Ink (Cyan) expires today; Stationery low stock.')
@@ -87,7 +291,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       onHelpClick={() => showToast('AssetMX Enterprise Help Center & User Manual.')}
       onProfileClick={() => showToast('Active User: Administrator (Role: Admin, Dept: IT).')}
     >
-      {/* Toast Notification */}
       {toastMessage && (
         <div
           role="status"
@@ -118,7 +321,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       )}
 
-      {/* Row 1: Dashboard Overview Header */}
       <div className="amx-overview-header">
         <div>
           <h2 className="amx-overview-title">Dashboard Overview</h2>
@@ -143,28 +345,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </div>
 
-      {/* Row 2: 5 KPI Metric Cards */}
       <section className="amx-kpi-grid" aria-label="Key Performance Indicators">
-        {KPI_METRICS.map((metric) => (
+        {metricCards.map((metric) => (
           <MetricCard key={metric.id} data={metric} />
         ))}
       </section>
 
-      {/* Row 3: My Requests & Asset Inventory */}
       <div className="amx-row-2-1">
         <RequestsTable requests={filteredRequests} />
         <AssetInventoryCard
-          data={ASSET_INVENTORY}
+          data={assetInventoryData}
           onFilterChange={(dim, val) =>
             showToast(`Asset Inventory filtered by ${dim}: ${val}`)
           }
         />
       </div>
 
-      {/* Row 4: Expiry Alerts, Recent POs & Analytics Highlight */}
       <div className="amx-row-3">
-        <ExpiryAlerts alerts={EXPIRY_ALERTS} />
-        <RecentPOs pos={filteredPOs} />
+        <ExpiryAlerts alerts={expiryAlerts} />
+        <RecentPOs pos={recentPOs} />
         <ReportsAnalyticsCard
           onViewAll={() =>
             showToast('Navigating to Reports & Compliance Analytics...')
@@ -172,12 +371,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         />
       </div>
 
-      {/* Row 5: Stock Levels & Consumption by Dept */}
       <div className="amx-row-2">
-        <StockLevels stocks={STOCK_LEVELS} />
+        <StockLevels stocks={stockLevels} />
         <ConsumptionChart
-          total={CONSUMPTION_DATA.total}
-          departments={CONSUMPTION_DATA.departments}
+          total={consumptionData.total}
+          departments={consumptionData.departments}
         />
       </div>
     </DashboardLayout>

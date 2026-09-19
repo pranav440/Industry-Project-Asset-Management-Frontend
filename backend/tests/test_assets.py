@@ -6,8 +6,20 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.deps import get_current_user
-from app.models import Asset, AssetMovement, AssetStatus, AuditLog, Maintenance, User, UserRole
+from app.models import (
+    Asset,
+    AssetMovement,
+    AssetStatus,
+    AuditLog,
+    Consumable,
+    ConsumableIssue,
+    ConsumableStockMovement,
+    Maintenance,
+    User,
+    UserRole,
+)
 from app.routers.assets import router
+from app.routers.consumables import router as consumables_router
 from app.seed import DEMO_ASSETS, seed_demo_assets
 
 
@@ -21,6 +33,7 @@ def make_client(*, raise_server_exceptions: bool = True) -> tuple[TestClient, se
     Base.metadata.create_all(engine)
     app = FastAPI()
     app.include_router(router)
+    app.include_router(consumables_router)
 
     def db_override():
         with session_factory() as db:
@@ -360,3 +373,160 @@ def test_maintenance_and_audit_are_atomic_when_audit_creation_fails(monkeypatch)
         asset = db.query(Asset).filter_by(asset_id=created["asset_id"]).one()
         assert db.query(Maintenance).filter_by(asset_id=asset.id).count() == 0
         assert db.query(AuditLog).filter_by(asset_id=asset.id).count() == 0
+
+
+def consumable_payload(**overrides) -> dict:
+    payload = {
+        "name": "Cyan Dye Ink Cartridge",
+        "category": "Printing & Inks",
+        "batch_id": "BAT-2026-09A",
+        "location": "Admin Store",
+        "initial_stock": 50,
+        "threshold": 10,
+        "expiry_date": "2027-01-31",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_consumable_crud_and_initial_inward():
+    client, session_factory, _, _ = make_client()
+    created = client.post("/api/consumables", json=consumable_payload())
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["consumable_id"].startswith("CON-")
+    assert body["available_stock"] == 50
+    assert body["batch_quantity"] == 50
+    assert body["stock_status"] == "In Stock"
+    assert len(body["movement_ledger"]) == 1
+    assert body["movement_ledger"][0]["operation_type"] == "Initial Inward / Batch Receipt"
+    consumable_id = body["consumable_id"]
+
+    listed = client.get("/api/consumables", params={"search": "Cyan", "category": "Printing & Inks", "location": "Admin Store"})
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 1
+    assert listed.json()["items"][0]["consumable_id"] == consumable_id
+
+    updated = client.put(
+        f"/api/consumables/{consumable_id}",
+        json={"name": "Updated Cyan Cartridge", "threshold": 20},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Updated Cyan Cartridge"
+    assert updated.json()["threshold"] == 20
+    assert updated.json()["available_stock"] == 50
+
+    detail = client.get(f"/api/consumables/{consumable_id}")
+    assert detail.status_code == 200
+    assert len(detail.json()["movement_ledger"]) == 1
+
+    with session_factory() as db:
+        record = db.query(Consumable).filter_by(consumable_id=consumable_id).one()
+        assert db.query(ConsumableStockMovement).filter_by(consumable_id=record.id).count() == 1
+        assert db.query(AuditLog).filter_by(consumable_id=record.id).count() == 2
+
+
+def test_consumable_stock_adjustments_and_filters():
+    client, session_factory, _, _ = make_client()
+    created = client.post("/api/consumables", json=consumable_payload(initial_stock=10, threshold=10)).json()
+    consumable_id = created["consumable_id"]
+
+    positive = client.post(
+        f"/api/consumables/{consumable_id}/stock",
+        json={"operation_type": "Initial Inward / Batch Receipt", "delta_quantity": 5, "reference": "Restock"},
+    )
+    assert positive.status_code == 200
+    assert positive.json()["available_stock"] == 15
+    assert positive.json()["movement_ledger"][0]["post_balance"] == 15
+
+    negative = client.post(
+        f"/api/consumables/{consumable_id}/stock",
+        json={"operation_type": "Stock Adjustment / Correction", "delta_quantity": -3},
+    )
+    assert negative.status_code == 200
+    assert negative.json()["available_stock"] == 12
+    assert negative.json()["stock_status"] == "In Stock"
+
+    assert client.post(
+        f"/api/consumables/{consumable_id}/stock",
+        json={"operation_type": "Stock Adjustment / Correction", "delta_quantity": 0},
+    ).status_code == 422
+    assert client.post(
+        f"/api/consumables/{consumable_id}/stock",
+        json={"operation_type": "Stock Adjustment / Correction", "delta_quantity": -100},
+    ).status_code == 409
+
+    low = client.post("/api/consumables", json=consumable_payload(name="Low Item", initial_stock=2, threshold=5, batch_id="BAT-LOW")).json()
+    assert client.get("/api/consumables", params={"status": "Low Stock"}).json()["total"] == 1
+    assert client.get("/api/consumables", params={"expiry": "upcoming"}).status_code == 200
+    assert client.get("/api/consumables", params={"page": 1, "page_size": 1}).json()["page_size"] == 1
+
+    with session_factory() as db:
+        record = db.query(Consumable).filter_by(consumable_id=consumable_id).one()
+        assert record.available_stock == 12
+        assert db.query(ConsumableStockMovement).filter_by(consumable_id=record.id).count() == 3
+        assert db.query(AuditLog).filter_by(consumable_id=record.id).count() == 3
+        assert low["stock_status"] == "Low Stock"
+
+
+def test_consumable_issue_persists_issue_movement_and_audit():
+    client, session_factory, _, _ = make_client()
+    created = client.post("/api/consumables", json=consumable_payload(initial_stock=10)).json()
+    consumable_id = created["consumable_id"]
+
+    issued = client.post(
+        f"/api/consumables/{consumable_id}/issue",
+        json={"quantity": 4, "request_reference": "REQ-PRN-8821"},
+    )
+    assert issued.status_code == 200, issued.text
+    body = issued.json()
+    assert body["available_stock"] == 6
+    assert body["issue_history"][0]["quantity"] == 4
+    assert body["issue_history"][0]["remaining_stock"] == 6
+    assert body["movement_ledger"][0]["operation_type"] == "Disbursement / Issue"
+    assert body["movement_ledger"][0]["delta_quantity"] == -4
+    assert body["movement_ledger"][0]["post_balance"] == 6
+
+    assert client.post(f"/api/consumables/{consumable_id}/issue", json={"quantity": 7}).status_code == 409
+    assert client.post(f"/api/consumables/{consumable_id}/issue", json={"quantity": 0}).status_code == 422
+    assert client.post(f"/api/consumables/{consumable_id}/issue", json={"quantity": -1}).status_code == 422
+
+    with session_factory() as db:
+        record = db.query(Consumable).filter_by(consumable_id=consumable_id).one()
+        assert record.available_stock == 6
+        assert db.query(ConsumableIssue).filter_by(consumable_id=record.id).count() == 1
+        assert db.query(ConsumableStockMovement).filter_by(consumable_id=record.id).count() == 2
+        audits = db.query(AuditLog).filter_by(consumable_id=record.id).all()
+        assert any(audit.action == "Consumable issued" for audit in audits)
+
+
+def test_consumable_authorization_missing_and_invalid_records():
+    client, _, _, employee = make_client()
+    client.app.dependency_overrides.pop(get_current_user)
+    assert client.get("/api/consumables").status_code == 401
+    assert client.post("/api/consumables", json=consumable_payload()).status_code == 401
+
+    client.app.dependency_overrides[get_current_user] = lambda: employee
+    assert client.get("/api/consumables").status_code == 403
+    assert client.post("/api/consumables", json=consumable_payload()).status_code == 403
+
+    client.app.dependency_overrides[get_current_user] = lambda: User(
+        id=1, full_name="Admin", email="admin@example.com", employee_id="ADM001", role=UserRole.admin, password_hash="x"
+    )
+    assert client.get("/api/consumables/CON-MISSING").status_code == 404
+    assert client.put("/api/consumables/CON-MISSING", json={"name": "x"}).status_code == 404
+    assert client.post("/api/consumables/CON-MISSING/stock", json={"operation_type": "Stock Adjustment / Correction", "delta_quantity": 1}).status_code == 404
+    assert client.post("/api/consumables/CON-MISSING/issue", json={"quantity": 1}).status_code == 404
+
+
+def test_consumable_audit_failure_rolls_back(monkeypatch):
+    client, session_factory, _, _ = make_client(raise_server_exceptions=False)
+    import app.routers.consumables as consumables_router
+
+    monkeypatch.setattr(consumables_router, "_audit", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("audit failed")))
+    response = client.post("/api/consumables", json=consumable_payload())
+    assert response.status_code == 500
+    with session_factory() as db:
+        assert db.query(Consumable).count() == 0
+        assert db.query(ConsumableStockMovement).count() == 0
+        assert db.query(AuditLog).count() == 0

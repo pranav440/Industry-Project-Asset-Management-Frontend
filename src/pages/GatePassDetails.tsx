@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
+import { type GatePassItemData } from '../data/gatePassData';
 import {
-  getStoredGatePasses,
-  saveStoredGatePasses,
-  type GatePassItemData,
-  type GatePassStatus,
-} from '../data/gatePassData';
+  decideGatePass,
+  getGatePass,
+  mapGatePassApiRecord,
+  overrideGatePass,
+  GatePassApiError,
+} from '../api/gatePassApi';
 import './GatePassDetails.css';
 
 interface GatePassDetailsPageProps {
@@ -22,19 +24,26 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
   const [gatePass, setGatePass] = useState<GatePassItemData | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Decision Modal State (Supported: Approve, Reject, Override)
   const [isDecisionModalOpen, setIsDecisionModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'Approve' | 'Reject' | 'Override'>('Approve');
   const [operationalRemarks, setOperationalRemarks] = useState('');
 
   useEffect(() => {
-    const list = getStoredGatePasses();
-    const found = list.find((p) => p.id === passId);
-    if (found) {
-      setGatePass(found);
-    } else if (list.length > 0) {
-      setGatePass(list[0]);
-    }
+    let active = true;
+    getGatePass(passId)
+      .then((data) => {
+        if (!active) return;
+        setGatePass(mapGatePassApiRecord(data));
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const status = (error as GatePassApiError).status;
+        showToast(status === 404 ? 'Gate pass not found.' : status === 401 ? 'Your session has expired. Please sign in again.' : error instanceof Error ? error.message : 'Unable to load gate pass details.');
+      });
+
+    return () => {
+      active = false;
+    };
   }, [passId]);
 
   const showToast = (msg: string) => {
@@ -71,72 +80,37 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
 
   const statusClass = gatePass.status.toLowerCase();
 
-  // Open Decision Modal
   const handleOpenDecisionModal = (mode: 'Approve' | 'Reject' | 'Override') => {
     setModalMode(mode);
     setOperationalRemarks('');
     setIsDecisionModalOpen(true);
   };
 
-  // Confirm Decision Transition
-  const handleConfirmDecision = (e: React.FormEvent) => {
+  const handleConfirmDecision = async (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date();
-    const timestampStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    let targetStatus: GatePassStatus = gatePass.status;
-    let actionName = 'Administrative decision';
-    let authState = gatePass.authorizationState;
-    let decStatus = gatePass.decisionStatus;
+    try {
+      const note = operationalRemarks.trim();
+      const updated = modalMode === 'Override'
+        ? await overrideGatePass(passId, { note: note || undefined })
+        : await decideGatePass(passId, {
+            target_status: modalMode === 'Approve' ? 'Approved' : 'Rejected',
+            note: note || undefined,
+          });
 
-    if (modalMode === 'Approve') {
-      targetStatus = 'Approved';
-      actionName = 'Approval decision';
-      authState = 'Administrative Clearance Granted';
-      decStatus = 'Approved by Administrator';
-    } else if (modalMode === 'Reject') {
-      targetStatus = 'Rejected';
-      actionName = 'Rejection decision';
-      authState = 'Administrative Request Denied';
-      decStatus = 'Rejected by Administrator';
-    } else if (modalMode === 'Override') {
-      targetStatus = 'Approved';
-      actionName = 'Override';
-      authState = 'Administrative Override Clearance';
-      decStatus = 'Override Granted by Administrator';
+      setGatePass(mapGatePassApiRecord(updated));
+      setIsDecisionModalOpen(false);
+      showToast(`Gate Pass ${passId} status updated successfully.`);
+    } catch (error: unknown) {
+      const status = (error as GatePassApiError).status;
+      showToast(status === 409
+        ? 'This gate pass state change is not allowed.'
+        : status === 422
+        ? 'The decision payload is invalid.'
+        : error instanceof Error
+        ? error.message
+        : 'Unable to update the gate pass.');
     }
-
-    const newHistoryEntry = {
-      id: `EVT-GP-${Date.now().toString().slice(-4)}`,
-      timestamp: timestampStr,
-      action: actionName,
-      performedBy: 'Administrator',
-      note: operationalRemarks.trim() || undefined,
-      statusSnapshot: targetStatus,
-    };
-
-    const updatedPass: GatePassItemData = {
-      ...gatePass,
-      status: targetStatus,
-      authorizationState: authState,
-      decisionStatus: decStatus,
-      decisionDate: timestampStr,
-      decisionBy: 'Administrator',
-      escalation: modalMode === 'Override' || modalMode === 'Approve' ? { isEscalated: false } : gatePass.escalation,
-      history: [newHistoryEntry, ...gatePass.history],
-    };
-
-    const all = getStoredGatePasses();
-    const idx = all.findIndex((p) => p.id === gatePass.id);
-    if (idx >= 0) {
-      all[idx] = updatedPass;
-    } else {
-      all.push(updatedPass);
-    }
-    saveStoredGatePasses(all);
-    setGatePass(updatedPass);
-    setIsDecisionModalOpen(false);
-    showToast(`Gate Pass ${gatePass.id} status updated to "${targetStatus}".`);
   };
 
   return (
