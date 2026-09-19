@@ -1,11 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { ReportTabs } from '../components/ReportTabs';
-import {
-  getStoredReportAssets,
-  REPORT_FILTER_OPTIONS,
-  type AssetUtilizationItem,
-} from '../data/reportsData';
+import { getAdminReports, ReportsApiError, type AdminReportsApiResponse } from '../services/reportsApi';
 import './Reports.css';
 
 interface MaintenanceReportPageProps {
@@ -13,21 +9,56 @@ interface MaintenanceReportPageProps {
   onSignOut?: () => void;
 }
 
+function buildDateRange(value: string): { date_from?: string; date_to?: string } {
+  if (!value) return {};
+  const to = new Date();
+  const from = new Date(to);
+  const days = value === '30d' ? 30 : value === '90d' ? 90 : value === '180d' ? 180 : value === '365d' ? 365 : 0;
+  if (!days) return {};
+  from.setDate(to.getDate() - days);
+  return { date_from: from.toISOString().slice(0, 10), date_to: to.toISOString().slice(0, 10) };
+}
+
 export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
-  const [assets, setAssets] = useState<AssetUtilizationItem[]>([]);
+  const [report, setReport] = useState<AdminReportsApiResponse | null>(null);
   const [dateRangeFilter, setDateRangeFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setAssets(getStoredReportAssets());
-  }, []);
+    let isMounted = true;
+    const loadReport = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getAdminReports({
+          ...buildDateRange(dateRangeFilter),
+          location: locationFilter,
+          category: categoryFilter,
+        });
+        if (isMounted) setReport(data);
+      } catch (err) {
+        if (!isMounted) return;
+        setError(err instanceof ReportsApiError && err.status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : 'Unable to load the maintenance report. Please retry.');
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    loadReport();
+    return () => {
+      isMounted = false;
+    };
+  }, [categoryFilter, dateRangeFilter, locationFilter]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -56,58 +87,45 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
     }
   };
 
-  // Filter assets
-  const filteredAssets = useMemo(() => {
-    return assets.filter((asset) => {
-      if (locationFilter && asset.location !== locationFilter) return false;
-      if (categoryFilter && asset.category !== categoryFilter) return false;
-      return true;
-    });
-  }, [assets, locationFilter, categoryFilter]);
+  const maintenance = report?.maintenance_vs_asset_value;
+  const maintenanceByAsset = maintenance?.maintenance_by_asset ?? {};
 
   // Summary Metrics:
   // - Maintenance Cost
   // - Asset Value
   // - Assets Maintained
   const summaryMetrics = useMemo(() => {
-    const totalMaintCost = filteredAssets.reduce((sum, a) => sum + a.maintenanceCost, 0);
-    const totalAssetVal = filteredAssets.reduce((sum, a) => sum + a.assetValue, 0);
-    const assetsMaintained = filteredAssets.filter((a) => a.maintenanceCost > 0).length;
+    const totalMaintCost = maintenance?.total_maintenance_cost ?? 0;
+    const totalAssetVal = maintenance?.total_asset_value ?? 0;
+    const assetsMaintained = Object.keys(maintenanceByAsset).length;
 
     return {
       maintenanceCost: `₹${totalMaintCost.toLocaleString('en-IN')}`,
       assetValue: `₹${totalAssetVal.toLocaleString('en-IN')}`,
       assetsMaintained,
+      ratio: maintenance?.maintenance_cost_ratio ?? 0,
     };
-  }, [filteredAssets]);
+  }, [maintenance, maintenanceByAsset]);
 
   // Visualization: Value to Maintenance Breakdown (Category breakdown comparing Asset Value vs Maintenance Cost)
   const categoryBreakdown = useMemo(() => {
-    const categories: ('Hardware' | 'Furniture' | 'Lab Equipment' | 'IT Equipment')[] = [
-      'Hardware',
-      'Furniture',
-      'Lab Equipment',
-      'IT Equipment',
-    ];
-
-    return categories.map((cat) => {
-      const items = filteredAssets.filter((a) => a.category === cat);
-      const assetVal = items.reduce((sum, a) => sum + a.assetValue, 0);
-      const maintCost = items.reduce((sum, a) => sum + a.maintenanceCost, 0);
-
+    const assetValues = maintenance?.asset_value_by_category ?? {};
+    const maintenanceCosts = maintenance?.maintenance_cost_by_category ?? {};
+    return Array.from(new Set([...Object.keys(assetValues), ...Object.keys(maintenanceCosts)])).map((category) => {
       return {
-        category: cat,
-        assetVal,
-        maintCost,
+        category,
+        assetVal: assetValues[category] ?? 0,
+        maintCost: maintenanceCosts[category] ?? 0,
       };
     });
-  }, [filteredAssets]);
+  }, [maintenance]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredAssets.length / pageSize));
+  const maintenanceRows = useMemo(() => Object.entries(maintenanceByAsset), [maintenanceByAsset]);
+  const totalPages = Math.max(1, Math.ceil(maintenanceRows.length / pageSize));
   const paginatedAssets = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredAssets.slice(start, start + pageSize);
-  }, [filteredAssets, currentPage]);
+    return maintenanceRows.slice(start, start + pageSize);
+  }, [maintenanceRows, currentPage]);
 
   return (
     <DashboardLayout
@@ -195,11 +213,11 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
               onChange={(e) => setDateRangeFilter(e.target.value)}
               aria-label="Filter by Date Range"
             >
-              {REPORT_FILTER_OPTIONS.dateRanges.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="">All Time</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="90d">Last 90 Days</option>
+              <option value="180d">Last 6 Months</option>
+              <option value="365d">Last 1 Year</option>
             </select>
 
             {/* Location */}
@@ -209,11 +227,12 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
               onChange={(e) => setLocationFilter(e.target.value)}
               aria-label="Filter by Location"
             >
-              {REPORT_FILTER_OPTIONS.locations.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="">All Locations</option>
+              <option value="HQ - Floor 4">HQ - Floor 4</option>
+              <option value="HQ - Floor 2">HQ - Floor 2</option>
+              <option value="Lab - Building A">Lab - Building A</option>
+              <option value="Warehouse">Warehouse</option>
+              <option value="Server Room">Server Room</option>
             </select>
 
             {/* Category */}
@@ -223,10 +242,9 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
               onChange={(e) => setCategoryFilter(e.target.value)}
               aria-label="Filter by Category"
             >
-              {REPORT_FILTER_OPTIONS.categories.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+              <option value="">All Categories</option>
+              {Object.keys(maintenance?.asset_value_by_category ?? {}).map((category) => (
+                <option key={category} value={category}>{category}</option>
               ))}
             </select>
 
@@ -244,6 +262,15 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
             </button>
           </div>
         </div>
+
+        {loading && <div className="amx-reports-main-card" style={{ padding: '32px 20px', textAlign: 'center' }}>Loading maintenance report data...</div>}
+        {!loading && error && (
+          <div className="amx-reports-main-card" style={{ padding: '32px 20px', textAlign: 'center' }}>
+            <div style={{ color: 'var(--amx-dash-text)', fontWeight: 700, marginBottom: 8 }}>Unable to load the maintenance report</div>
+            <div style={{ color: 'var(--amx-dash-text-muted)', marginBottom: 16 }}>{error}</div>
+            <button type="button" className="amx-btn-secondary" onClick={() => window.location.reload()}>Retry</button>
+          </div>
+        )}
 
         {/* 3 Summary Cards Grid */}
         <div className="amx-reports-summary-grid cols-3">
@@ -286,7 +313,7 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
             <div className="amx-metric-value" style={{ color: '#059669' }}>
               {summaryMetrics.assetsMaintained}
             </div>
-            <div className="amx-metric-subtext">Units with recorded maintenance</div>
+            <div className="amx-metric-subtext">Cost ratio: {summaryMetrics.ratio}%</div>
           </div>
         </div>
 
@@ -349,26 +376,16 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  paginatedAssets.map((asset) => (
-                    <tr key={asset.id}>
-                      <td style={{ fontFamily: 'JetBrains Mono', fontWeight: 600 }}>{asset.id}</td>
-                      <td style={{ fontWeight: 600 }}>{asset.name}</td>
-                      <td>{asset.category}</td>
-                      <td className="amx-value-text">₹{asset.assetValue.toLocaleString('en-IN')}</td>
-                      <td className="amx-cost-text">₹{asset.maintenanceCost.toLocaleString('en-IN')}</td>
-                      <td>{asset.lastServiceDate}</td>
+                  paginatedAssets.map(([assetId, maintenanceCost]) => (
+                    <tr key={assetId}>
+                      <td style={{ fontFamily: 'JetBrains Mono', fontWeight: 600 }}>{assetId}</td>
+                      <td style={{ fontWeight: 600 }}>—</td>
+                      <td>—</td>
+                      <td className="amx-value-text">—</td>
+                      <td className="amx-cost-text">₹{maintenanceCost.toLocaleString('en-IN')}</td>
+                      <td>—</td>
                       <td>
-                        <span
-                          className={`amx-report-badge ${
-                            asset.status === 'In Maintenance'
-                              ? 'maintenance'
-                              : asset.status === 'In Use'
-                              ? 'in-use'
-                              : 'available'
-                          }`}
-                        >
-                          {asset.status === 'In Maintenance' ? 'Under Maintenance' : 'Operational'}
-                        </span>
+                        <span className="amx-report-badge maintenance">Recorded maintenance</span>
                       </td>
                     </tr>
                   ))
@@ -380,8 +397,8 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
           {/* Pagination */}
           <div className="amx-reports-pagination-bar">
             <span>
-              Showing {filteredAssets.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} to{' '}
-              {Math.min(currentPage * pageSize, filteredAssets.length)} of {filteredAssets.length} assets
+              Showing {maintenanceRows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} to{' '}
+              {Math.min(currentPage * pageSize, maintenanceRows.length)} of {maintenanceRows.length} assets
             </span>
             <div className="amx-pagination-controls">
               <button

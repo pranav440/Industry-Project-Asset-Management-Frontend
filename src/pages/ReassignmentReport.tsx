@@ -1,11 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { ReportTabs } from '../components/ReportTabs';
-import {
-  getStoredReportMovements,
-  REPORT_FILTER_OPTIONS,
-  type ReassignmentMovementRecord,
-} from '../data/reportsData';
+import { getAdminReports, ReportsApiError, type AdminReportsApiResponse } from '../services/reportsApi';
 import './Reports.css';
 
 interface ReassignmentReportPageProps {
@@ -13,21 +9,56 @@ interface ReassignmentReportPageProps {
   onSignOut?: () => void;
 }
 
+function buildDateRange(value: string): { date_from?: string; date_to?: string } {
+  if (!value) return {};
+  const to = new Date();
+  const from = new Date(to);
+  const days = value === '30d' ? 30 : value === '90d' ? 90 : value === '180d' ? 180 : value === '365d' ? 365 : 0;
+  if (!days) return {};
+  from.setDate(to.getDate() - days);
+  return { date_from: from.toISOString().slice(0, 10), date_to: to.toISOString().slice(0, 10) };
+}
+
 export const ReassignmentReportPage: React.FC<ReassignmentReportPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
-  const [movements, setMovements] = useState<ReassignmentMovementRecord[]>([]);
+  const [report, setReport] = useState<AdminReportsApiResponse | null>(null);
   const [dateRangeFilter, setDateRangeFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setMovements(getStoredReportMovements());
-  }, []);
+    let isMounted = true;
+    const loadReport = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getAdminReports({
+          ...buildDateRange(dateRangeFilter),
+          location: locationFilter,
+          category: categoryFilter,
+        });
+        if (isMounted) setReport(data);
+      } catch (err) {
+        if (!isMounted) return;
+        setError(err instanceof ReportsApiError && err.status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : 'Unable to load the reassignment report. Please retry.');
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    loadReport();
+    return () => {
+      isMounted = false;
+    };
+  }, [categoryFilter, dateRangeFilter, locationFilter]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -56,71 +87,43 @@ export const ReassignmentReportPage: React.FC<ReassignmentReportPageProps> = ({
     }
   };
 
-  // Filter movements
-  const filteredMovements = useMemo(() => {
-    return movements.filter((mov) => {
-      if (
-        locationFilter &&
-        mov.previousLocation !== locationFilter &&
-        mov.newLocation !== locationFilter
-      ) {
-        return false;
-      }
-      if (categoryFilter && mov.category !== categoryFilter) return false;
-      return true;
-    });
-  }, [movements, locationFilter, categoryFilter]);
+  const reassignment = report?.reassignment;
+  const movements = reassignment?.records ?? [];
 
   // Summary Metrics:
   // - Total Reassignments
   // - Asset Movements
   // - Locations Involved
   const summaryMetrics = useMemo(() => {
-    const totalReassignments = filteredMovements.length;
-    const assetMovements = filteredMovements.filter(
-      (m) => m.previousLocation !== m.newLocation
-    ).length;
-
-    const locSet = new Set<string>();
-    filteredMovements.forEach((m) => {
-      locSet.add(m.previousLocation);
-      locSet.add(m.newLocation);
-    });
+    const totalReassignments = reassignment?.total_movements ?? 0;
+    const assetMovements = movements.length;
+    const locationsInvolved = Object.keys(reassignment?.by_location ?? {}).length;
 
     return {
       totalReassignments,
       assetMovements,
-      locationsInvolved: locSet.size,
+      locationsInvolved,
     };
-  }, [filteredMovements]);
+  }, [movements.length, reassignment]);
 
   // Chart: Reassignment & Movement Activity Over Time (Grouped by month or category)
   const activityByCategory = useMemo(() => {
-    const categories: ('Hardware' | 'Furniture' | 'Lab Equipment' | 'IT Equipment')[] = [
-      'Hardware',
-      'Furniture',
-      'Lab Equipment',
-      'IT Equipment',
-    ];
-
-    const total = filteredMovements.length;
-
-    return categories.map((cat) => {
-      const count = filteredMovements.filter((m) => m.category === cat).length;
-      const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+    const total = reassignment?.total_movements ?? 0;
+    return Object.entries(reassignment?.by_location ?? {}).map(([location, count]) => {
+      const amount = Number(count);
       return {
-        category: cat,
-        count,
-        percentage: pct,
+        category: location,
+        count: amount,
+        percentage: total > 0 ? Math.round((amount / total) * 100) : 0,
       };
     });
-  }, [filteredMovements]);
+  }, [reassignment]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredMovements.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(movements.length / pageSize));
   const paginatedMovements = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredMovements.slice(start, start + pageSize);
-  }, [filteredMovements, currentPage]);
+    return movements.slice(start, start + pageSize);
+  }, [movements, currentPage]);
 
   return (
     <DashboardLayout
@@ -208,11 +211,11 @@ export const ReassignmentReportPage: React.FC<ReassignmentReportPageProps> = ({
               onChange={(e) => setDateRangeFilter(e.target.value)}
               aria-label="Filter by Date Range"
             >
-              {REPORT_FILTER_OPTIONS.dateRanges.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="">All Time</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="90d">Last 90 Days</option>
+              <option value="180d">Last 6 Months</option>
+              <option value="365d">Last 1 Year</option>
             </select>
 
             {/* Location */}
@@ -222,10 +225,9 @@ export const ReassignmentReportPage: React.FC<ReassignmentReportPageProps> = ({
               onChange={(e) => setLocationFilter(e.target.value)}
               aria-label="Filter by Location"
             >
-              {REPORT_FILTER_OPTIONS.locations.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+              <option value="">All Locations</option>
+              {Object.keys(reassignment?.by_location ?? {}).map((location) => (
+                <option key={location} value={location}>{location}</option>
               ))}
             </select>
 
@@ -236,11 +238,11 @@ export const ReassignmentReportPage: React.FC<ReassignmentReportPageProps> = ({
               onChange={(e) => setCategoryFilter(e.target.value)}
               aria-label="Filter by Category"
             >
-              {REPORT_FILTER_OPTIONS.categories.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="">All Categories</option>
+              <option value="Hardware">Hardware</option>
+              <option value="Furniture">Furniture</option>
+              <option value="Lab Equipment">Lab Equipment</option>
+              <option value="IT Equipment">IT Equipment</option>
             </select>
 
             {/* Reset */}
@@ -257,6 +259,15 @@ export const ReassignmentReportPage: React.FC<ReassignmentReportPageProps> = ({
             </button>
           </div>
         </div>
+
+        {loading && <div className="amx-reports-main-card" style={{ padding: '32px 20px', textAlign: 'center' }}>Loading reassignment report data...</div>}
+        {!loading && error && (
+          <div className="amx-reports-main-card" style={{ padding: '32px 20px', textAlign: 'center' }}>
+            <div style={{ color: 'var(--amx-dash-text)', fontWeight: 700, marginBottom: 8 }}>Unable to load the reassignment report</div>
+            <div style={{ color: 'var(--amx-dash-text-muted)', marginBottom: 16 }}>{error}</div>
+            <button type="button" className="amx-btn-secondary" onClick={() => window.location.reload()}>Retry</button>
+          </div>
+        )}
 
         {/* 3 Summary Cards Grid */}
         <div className="amx-reports-summary-grid cols-3">
@@ -351,28 +362,30 @@ export const ReassignmentReportPage: React.FC<ReassignmentReportPageProps> = ({
                   <th>New Location</th>
                   <th>Movement Date</th>
                   <th>Reason</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedMovements.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="amx-table-empty">
+                    <td colSpan={9} className="amx-table-empty">
                       No reassignment or movement records match current filter criteria.
                     </td>
                   </tr>
                 ) : (
                   paginatedMovements.map((mov) => (
-                    <tr key={mov.id}>
-                      <td style={{ fontFamily: 'JetBrains Mono', fontWeight: 600 }}>{mov.assetId}</td>
-                      <td style={{ fontWeight: 600 }}>{mov.assetName}</td>
-                      <td>{mov.previousCustodian}</td>
-                      <td style={{ color: '#00687a', fontWeight: 600 }}>{mov.newCustodian}</td>
-                      <td>{mov.previousLocation}</td>
-                      <td style={{ color: '#059669', fontWeight: 600 }}>{mov.newLocation}</td>
-                      <td>{mov.movementDate}</td>
+                    <tr key={mov.movement_id}>
+                      <td style={{ fontFamily: 'JetBrains Mono', fontWeight: 600 }}>{mov.asset_id}</td>
+                      <td style={{ fontWeight: 600 }}>{mov.asset_name}</td>
+                      <td>{mov.from_custodian}</td>
+                      <td style={{ color: '#00687a', fontWeight: 600 }}>{mov.to_custodian}</td>
+                      <td>{mov.from_location}</td>
+                      <td style={{ color: '#059669', fontWeight: 600 }}>{mov.to_location}</td>
+                      <td>{mov.initiated_at ? new Date(mov.initiated_at).toLocaleString() : '—'}</td>
                       <td style={{ maxWidth: '280px', color: 'var(--amx-dash-text-muted)' }}>
-                        {mov.reason}
+                        {mov.reason || '—'}
                       </td>
+                      <td>{mov.status}</td>
                     </tr>
                   ))
                 )}
@@ -382,9 +395,9 @@ export const ReassignmentReportPage: React.FC<ReassignmentReportPageProps> = ({
 
           {/* Pagination */}
           <div className="amx-reports-pagination-bar">
-            <span>
-              Showing {filteredMovements.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} to{' '}
-              {Math.min(currentPage * pageSize, filteredMovements.length)} of {filteredMovements.length} transfers
+              <span>
+                Showing {movements.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} to{' '}
+                {Math.min(currentPage * pageSize, movements.length)} of {movements.length} transfers
             </span>
             <div className="amx-pagination-controls">
               <button

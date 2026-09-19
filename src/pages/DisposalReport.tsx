@@ -1,11 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { ReportTabs } from '../components/ReportTabs';
-import {
-  getStoredReportAssets,
-  REPORT_FILTER_OPTIONS,
-  type AssetUtilizationItem,
-} from '../data/reportsData';
+import { getAdminReports, ReportsApiError, type AdminReportsApiResponse } from '../services/reportsApi';
 import './Reports.css';
 
 interface DisposalReportPageProps {
@@ -13,21 +9,56 @@ interface DisposalReportPageProps {
   onSignOut?: () => void;
 }
 
+function buildDateRange(value: string): { date_from?: string; date_to?: string } {
+  if (!value) return {};
+  const to = new Date();
+  const from = new Date(to);
+  const days = value === '30d' ? 30 : value === '90d' ? 90 : value === '180d' ? 180 : value === '365d' ? 365 : 0;
+  if (!days) return {};
+  from.setDate(to.getDate() - days);
+  return { date_from: from.toISOString().slice(0, 10), date_to: to.toISOString().slice(0, 10) };
+}
+
 export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
-  const [assets, setAssets] = useState<AssetUtilizationItem[]>([]);
+  const [report, setReport] = useState<AdminReportsApiResponse | null>(null);
   const [dateRangeFilter, setDateRangeFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setAssets(getStoredReportAssets());
-  }, []);
+    let isMounted = true;
+    const loadReport = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getAdminReports({
+          ...buildDateRange(dateRangeFilter),
+          location: locationFilter,
+          category: categoryFilter,
+        });
+        if (isMounted) setReport(data);
+      } catch (err) {
+        if (!isMounted) return;
+        setError(err instanceof ReportsApiError && err.status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : 'Unable to load the disposal report. Please retry.');
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    loadReport();
+    return () => {
+      isMounted = false;
+    };
+  }, [categoryFilter, dateRangeFilter, locationFilter]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -56,61 +87,41 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
     }
   };
 
-  // Filter assets
-  const filteredAssets = useMemo(() => {
-    return assets.filter((asset) => {
-      if (locationFilter && asset.location !== locationFilter) return false;
-      if (categoryFilter && asset.category !== categoryFilter) return false;
-      return true;
-    });
-  }, [assets, locationFilter, categoryFilter]);
+  const lifecycle = report?.lifecycle;
+  const statusDistribution = lifecycle?.status_distribution ?? {};
 
   // Summary Metrics:
   // - Assets Approaching Disposal
   // - Assets Approaching Replacement
   // - Estimated Lifecycle End
   const summaryMetrics = useMemo(() => {
-    const approachingDisposal = filteredAssets.filter((a) => a.lifecycleAction === 'Disposal').length;
-    const approachingReplacement = filteredAssets.filter((a) => a.lifecycleAction === 'Replacement').length;
-    const total = approachingDisposal + approachingReplacement;
-
     return {
-      approachingDisposal,
-      approachingReplacement,
-      totalLifecycleEnd: total,
+      disposedAssets: lifecycle?.disposed_assets ?? 0,
+      replacementForecast: lifecycle?.forecast === null ? 'N/A' : '—',
+      averageAgeDays: lifecycle?.age_summary.average_asset_age_days ?? 0,
     };
-  }, [filteredAssets]);
+  }, [lifecycle]);
 
   // Visualization: Lifecycle Milestone Schedule by Quarter
   const quartersSchedule = useMemo(() => {
-    const quarters: ('Q3 2026' | 'Q4 2026' | 'Q1 2027' | 'Q2 2027' | 'Q3 2027' | 'Q4 2027')[] = [
-      'Q3 2026',
-      'Q4 2026',
-      'Q1 2027',
-      'Q2 2027',
-      'Q3 2027',
-      'Q4 2027',
-    ];
-
-    return quarters.map((q) => {
-      const qAssets = filteredAssets.filter((a) => a.quarterApproaching === q);
-      const disposal = qAssets.filter((a) => a.lifecycleAction === 'Disposal').length;
-      const replacement = qAssets.filter((a) => a.lifecycleAction === 'Replacement').length;
-
+    const maxUnits = Math.max(1, ...Object.values(statusDistribution));
+    return Object.entries(statusDistribution).map(([status, count]) => {
       return {
-        quarter: q,
-        disposal,
-        replacement,
-        total: disposal + replacement,
+        quarter: status,
+        disposal: Number(count),
+        replacement: 0,
+        total: Number(count),
+        percentage: Math.round((Number(count) / maxUnits) * 100),
       };
     });
-  }, [filteredAssets]);
+  }, [statusDistribution]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredAssets.length / pageSize));
+  const lifecycleRows = useMemo(() => Object.entries(statusDistribution), [statusDistribution]);
+  const totalPages = Math.max(1, Math.ceil(lifecycleRows.length / pageSize));
   const paginatedAssets = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredAssets.slice(start, start + pageSize);
-  }, [filteredAssets, currentPage]);
+    return lifecycleRows.slice(start, start + pageSize);
+  }, [lifecycleRows, currentPage]);
 
   return (
     <DashboardLayout
@@ -198,11 +209,11 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
               onChange={(e) => setDateRangeFilter(e.target.value)}
               aria-label="Filter by Date Range"
             >
-              {REPORT_FILTER_OPTIONS.dateRanges.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="">All Time</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="90d">Last 90 Days</option>
+              <option value="180d">Last 6 Months</option>
+              <option value="365d">Last 1 Year</option>
             </select>
 
             {/* Location */}
@@ -212,11 +223,7 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
               onChange={(e) => setLocationFilter(e.target.value)}
               aria-label="Filter by Location"
             >
-              {REPORT_FILTER_OPTIONS.locations.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="">All Locations</option>
             </select>
 
             {/* Category */}
@@ -226,11 +233,11 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
               onChange={(e) => setCategoryFilter(e.target.value)}
               aria-label="Filter by Category"
             >
-              {REPORT_FILTER_OPTIONS.categories.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="">All Categories</option>
+              <option value="Hardware">Hardware</option>
+              <option value="Furniture">Furniture</option>
+              <option value="Lab Equipment">Lab Equipment</option>
+              <option value="IT Equipment">IT Equipment</option>
             </select>
 
             {/* Reset */}
@@ -248,6 +255,15 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
           </div>
         </div>
 
+        {loading && <div className="amx-reports-main-card" style={{ padding: '32px 20px', textAlign: 'center' }}>Loading lifecycle report data...</div>}
+        {!loading && error && (
+          <div className="amx-reports-main-card" style={{ padding: '32px 20px', textAlign: 'center' }}>
+            <div style={{ color: 'var(--amx-dash-text)', fontWeight: 700, marginBottom: 8 }}>Unable to load the disposal report</div>
+            <div style={{ color: 'var(--amx-dash-text-muted)', marginBottom: 16 }}>{error}</div>
+            <button type="button" className="amx-btn-secondary" onClick={() => window.location.reload()}>Retry</button>
+          </div>
+        )}
+
         {/* 3 Summary Cards Grid */}
         <div className="amx-reports-summary-grid cols-3">
           {/* Assets Approaching Disposal */}
@@ -259,7 +275,7 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
               </span>
             </div>
             <div className="amx-metric-value" style={{ color: '#DC2626' }}>
-              {summaryMetrics.approachingDisposal}
+              {summaryMetrics.disposedAssets}
             </div>
             <div className="amx-metric-subtext">Due for retirement or e-waste</div>
           </div>
@@ -273,7 +289,7 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
               </span>
             </div>
             <div className="amx-metric-value" style={{ color: '#7E22CE' }}>
-              {summaryMetrics.approachingReplacement}
+              {summaryMetrics.replacementForecast}
             </div>
             <div className="amx-metric-subtext">Due for hardware refresh</div>
           </div>
@@ -287,7 +303,7 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
               </span>
             </div>
             <div className="amx-metric-value" style={{ color: '#00687a' }}>
-              {summaryMetrics.totalLifecycleEnd}
+              {summaryMetrics.averageAgeDays} days
             </div>
             <div className="amx-metric-subtext">Total tracked lifecycle actions</div>
           </div>
@@ -301,24 +317,20 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
                 <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#7E22CE' }}>
                   calendar_month
                 </span>
-                Lifecycle Milestone Schedule by Quarter
+                Lifecycle Status Distribution
               </h3>
-              <p className="amx-chart-subtitle">Quarterly schedule of disposal vs replacement requirements</p>
+              <p className="amx-chart-subtitle">Current lifecycle status counts from the backend</p>
             </div>
           </div>
 
           <div className="amx-bar-list">
             {quartersSchedule.map((q) => {
-              const maxUnits = 6;
-              const repPct = Math.round((q.replacement / maxUnits) * 100);
-              const dispPct = Math.round((q.disposal / maxUnits) * 100);
-
               return (
                 <div key={q.quarter} className="amx-bar-item">
                   <div className="amx-bar-meta">
                     <span style={{ fontWeight: 600 }}>{q.quarter}</span>
                     <span className="amx-bar-count">
-                      Replacement: {q.replacement} | Disposal: {q.disposal} (Total: {q.total})
+                      {q.total} assets
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
@@ -326,20 +338,10 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
                       <div
                         className="amx-bar-fill"
                         style={{
-                          width: `${repPct}%`,
-                          backgroundColor: '#7E22CE',
+                          width: `${q.percentage}%`,
+                          backgroundColor: '#00687a',
                         }}
-                        title={`Replacement: ${q.replacement}`}
-                      />
-                    </div>
-                    <div className="amx-bar-bg" style={{ flex: 1 }}>
-                      <div
-                        className="amx-bar-fill"
-                        style={{
-                          width: `${dispPct}%`,
-                          backgroundColor: '#DC2626',
-                        }}
-                        title={`Disposal: ${q.disposal}`}
+                        title={`${q.quarter}: ${q.total}`}
                       />
                     </div>
                   </div>
@@ -350,12 +352,12 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
 
           <div className="amx-chart-legends">
             <div className="amx-legend-item">
-              <span className="amx-legend-dot" style={{ backgroundColor: '#7E22CE' }} />
-              <span>Replacement Action</span>
+              <span className="amx-legend-dot" style={{ backgroundColor: '#00687a' }} />
+              <span>Lifecycle status count</span>
             </div>
             <div className="amx-legend-item">
-              <span className="amx-legend-dot" style={{ backgroundColor: '#DC2626' }} />
-              <span>Disposal Action</span>
+              <span className="amx-legend-dot" style={{ backgroundColor: '#7E22CE' }} />
+              <span>Replacement forecast: N/A</span>
             </div>
           </div>
         </div>
@@ -384,36 +386,18 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  paginatedAssets.map((asset) => (
-                    <tr key={asset.id}>
-                      <td style={{ fontFamily: 'JetBrains Mono', fontWeight: 600 }}>{asset.id}</td>
-                      <td style={{ fontWeight: 600 }}>{asset.name}</td>
-                      <td>{asset.category}</td>
-                      <td>{asset.location}</td>
+                  paginatedAssets.map(([status, count]) => (
+                    <tr key={status}>
+                      <td style={{ fontFamily: 'JetBrains Mono', fontWeight: 600 }}>—</td>
+                      <td style={{ fontWeight: 600 }}>{count} assets</td>
+                      <td>—</td>
+                      <td>—</td>
                       <td>
-                        <span
-                          className={`amx-report-badge ${
-                            asset.status === 'In Use'
-                              ? 'in-use'
-                              : asset.status === 'Available'
-                              ? 'available'
-                              : 'maintenance'
-                          }`}
-                        >
-                          {asset.status}
-                        </span>
+                        <span className="amx-report-badge available">{status}</span>
                       </td>
-                      <td>{asset.acquisitionDate}</td>
-                      <td style={{ fontFamily: 'JetBrains Mono' }}>{asset.estimatedEndOfLife}</td>
-                      <td>
-                        <span
-                          className={`amx-report-badge ${
-                            asset.lifecycleAction === 'Replacement' ? 'replacement' : 'disposal'
-                          }`}
-                        >
-                          {asset.lifecycleAction}
-                        </span>
-                      </td>
+                      <td>—</td>
+                      <td style={{ fontFamily: 'JetBrains Mono' }}>—</td>
+                      <td><span className="amx-report-badge replacement">N/A</span></td>
                     </tr>
                   ))
                 )}
@@ -424,8 +408,8 @@ export const DisposalReportPage: React.FC<DisposalReportPageProps> = ({
           {/* Pagination */}
           <div className="amx-reports-pagination-bar">
             <span>
-              Showing {filteredAssets.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} to{' '}
-              {Math.min(currentPage * pageSize, filteredAssets.length)} of {filteredAssets.length} assets
+              Showing {lifecycleRows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} to{' '}
+              {Math.min(currentPage * pageSize, lifecycleRows.length)} of {lifecycleRows.length} lifecycle statuses
             </span>
             <div className="amx-pagination-controls">
               <button

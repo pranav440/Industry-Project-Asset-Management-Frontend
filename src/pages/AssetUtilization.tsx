@@ -1,11 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { ReportTabs } from '../components/ReportTabs';
-import {
-  getStoredReportAssets,
-  REPORT_FILTER_OPTIONS,
-  type AssetUtilizationItem,
-} from '../data/reportsData';
+import { getAdminReports, ReportsApiError, type AdminReportsApiResponse } from '../services/reportsApi';
 import './Reports.css';
 
 interface AssetUtilizationPageProps {
@@ -13,21 +9,56 @@ interface AssetUtilizationPageProps {
   onSignOut?: () => void;
 }
 
+function buildDateRange(value: string): { date_from?: string; date_to?: string } {
+  if (!value) return {};
+  const to = new Date();
+  const from = new Date(to);
+  const days = value === '30d' ? 30 : value === '90d' ? 90 : value === '180d' ? 180 : value === '365d' ? 365 : 0;
+  if (!days) return {};
+  from.setDate(to.getDate() - days);
+  return { date_from: from.toISOString().slice(0, 10), date_to: to.toISOString().slice(0, 10) };
+}
+
 export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
-  const [assets, setAssets] = useState<AssetUtilizationItem[]>([]);
+  const [report, setReport] = useState<AdminReportsApiResponse | null>(null);
   const [dateRangeFilter, setDateRangeFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setAssets(getStoredReportAssets());
-  }, []);
+    let isMounted = true;
+    const loadReport = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getAdminReports({
+          ...buildDateRange(dateRangeFilter),
+          location: locationFilter,
+          category: categoryFilter,
+        });
+        if (isMounted) setReport(data);
+      } catch (err) {
+        if (!isMounted) return;
+        setError(err instanceof ReportsApiError && err.status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : 'Unable to load the asset utilization report. Please retry.');
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    loadReport();
+    return () => {
+      isMounted = false;
+    };
+  }, [categoryFilter, dateRangeFilter, locationFilter]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -56,14 +87,8 @@ export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
     }
   };
 
-  // Filter assets
-  const filteredAssets = useMemo(() => {
-    return assets.filter((asset) => {
-      if (locationFilter && asset.location !== locationFilter) return false;
-      if (categoryFilter && asset.category !== categoryFilter) return false;
-      return true;
-    });
-  }, [assets, locationFilter, categoryFilter]);
+  const utilization = report?.asset_utilization;
+  const statusCounts = utilization?.status_counts ?? {};
 
   // Summary Metrics:
   // - Total Assets
@@ -71,10 +96,10 @@ export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
   // - Available Assets
   // - Assets in Maintenance
   const summaryMetrics = useMemo(() => {
-    const total = filteredAssets.length;
-    const inUse = filteredAssets.filter((a) => a.status === 'In Use').length;
-    const available = filteredAssets.filter((a) => a.status === 'Available').length;
-    const inMaintenance = filteredAssets.filter((a) => a.status === 'In Maintenance').length;
+    const total = utilization?.total_assets ?? 0;
+    const inUse = statusCounts['In Use'] ?? 0;
+    const available = statusCounts.Available ?? 0;
+    const inMaintenance = statusCounts['In Maintenance'] ?? 0;
 
     return {
       total,
@@ -82,92 +107,42 @@ export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
       available,
       inMaintenance,
     };
-  }, [filteredAssets]);
+  }, [statusCounts, utilization?.total_assets]);
 
   // Chart 1: Asset Utilization by Category
   const categoryChartData = useMemo(() => {
-    const categories: ('Hardware' | 'Furniture' | 'Lab Equipment' | 'IT Equipment')[] = [
-      'Hardware',
-      'Furniture',
-      'Lab Equipment',
-      'IT Equipment',
-    ];
-
-    return categories.map((cat) => {
-      const items = filteredAssets.filter((a) => a.category === cat);
-      const total = items.length;
-      const inUse = items.filter((a) => a.status === 'In Use').length;
-      const pct = total > 0 ? Math.round((inUse / total) * 100) : 0;
+    const total = utilization?.total_assets ?? 0;
+    return Object.entries(utilization?.by_category ?? {}).map(([category, count]) => {
+      const amount = Number(count);
       return {
-        category: cat,
-        total,
-        inUse,
-        percentage: pct,
+        category,
+        total: amount,
+        percentage: total > 0 ? Math.round((amount / total) * 100) : 0,
       };
     });
-  }, [filteredAssets]);
+  }, [utilization]);
 
   // Chart 2: Asset Utilization by Location
   const locationChartData = useMemo(() => {
-    const locations: ('HQ - Floor 4' | 'HQ - Floor 2' | 'Lab - Building A' | 'Warehouse' | 'Server Room')[] = [
-      'HQ - Floor 4',
-      'HQ - Floor 2',
-      'Lab - Building A',
-      'Warehouse',
-      'Server Room',
-    ];
-
-    return locations.map((loc) => {
-      const items = filteredAssets.filter((a) => a.location === loc);
-      const total = items.length;
-      const inUse = items.filter((a) => a.status === 'In Use').length;
-      const pct = total > 0 ? Math.round((inUse / total) * 100) : 0;
+    const total = utilization?.total_assets ?? 0;
+    return Object.entries(utilization?.by_location ?? {}).map(([location, count]) => {
+      const amount = Number(count);
       return {
-        location: loc,
-        total,
-        inUse,
-        percentage: pct,
+        location,
+        total: amount,
+        percentage: total > 0 ? Math.round((amount / total) * 100) : 0,
       };
     });
-  }, [filteredAssets]);
+  }, [utilization]);
 
   // Breakdown Table (Category x Location Aggregation)
   const breakdownRows = useMemo(() => {
-    const groups: Record<
-      string,
-      {
-        category: string;
-        location: string;
-        total: number;
-        inUse: number;
-        available: number;
-        inMaintenance: number;
-      }
-    > = {};
-
-    filteredAssets.forEach((a) => {
-      const key = `${a.category}__${a.location}`;
-      if (!groups[key]) {
-        groups[key] = {
-          category: a.category,
-          location: a.location,
-          total: 0,
-          inUse: 0,
-          available: 0,
-          inMaintenance: 0,
-        };
-      }
-      groups[key].total += 1;
-      if (a.status === 'In Use') groups[key].inUse += 1;
-      if (a.status === 'Available') groups[key].available += 1;
-      if (a.status === 'In Maintenance') groups[key].inMaintenance += 1;
-    });
-
-    return Object.values(groups).map((g) => ({
-      ...g,
-      utilizationPct: g.total > 0 ? Math.round((g.inUse / g.total) * 100) : 0,
+    return Object.entries(utilization?.by_category ?? {}).map(([category, count]) => ({
+      category,
+      location: 'All locations',
+      total: Number(count),
     }));
-  }, [filteredAssets]);
+  }, [utilization]);
 
   const totalPages = Math.max(1, Math.ceil(breakdownRows.length / pageSize));
   const paginatedRows = useMemo(() => {
@@ -261,11 +236,11 @@ export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
               onChange={(e) => setDateRangeFilter(e.target.value)}
               aria-label="Filter by Date Range"
             >
-              {REPORT_FILTER_OPTIONS.dateRanges.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="">All Time</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="90d">Last 90 Days</option>
+              <option value="180d">Last 6 Months</option>
+              <option value="365d">Last 1 Year</option>
             </select>
 
             {/* Location */}
@@ -275,10 +250,9 @@ export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
               onChange={(e) => setLocationFilter(e.target.value)}
               aria-label="Filter by Location"
             >
-              {REPORT_FILTER_OPTIONS.locations.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+              <option value="">All Locations</option>
+              {Object.keys(utilization?.by_location ?? {}).map((location) => (
+                <option key={location} value={location}>{location}</option>
               ))}
             </select>
 
@@ -289,10 +263,9 @@ export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
               onChange={(e) => setCategoryFilter(e.target.value)}
               aria-label="Filter by Category"
             >
-              {REPORT_FILTER_OPTIONS.categories.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+              <option value="">All Categories</option>
+              {Object.keys(utilization?.by_category ?? {}).map((category) => (
+                <option key={category} value={category}>{category}</option>
               ))}
             </select>
 
@@ -310,6 +283,15 @@ export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
             </button>
           </div>
         </div>
+
+        {loading && <div className="amx-reports-main-card" style={{ padding: '32px 20px', textAlign: 'center' }}>Loading asset utilization report data...</div>}
+        {!loading && error && (
+          <div className="amx-reports-main-card" style={{ padding: '32px 20px', textAlign: 'center' }}>
+            <div style={{ color: 'var(--amx-dash-text)', fontWeight: 700, marginBottom: 8 }}>Unable to load the asset utilization report</div>
+            <div style={{ color: 'var(--amx-dash-text-muted)', marginBottom: 16 }}>{error}</div>
+            <button type="button" className="amx-btn-secondary" onClick={() => window.location.reload()}>Retry</button>
+          </div>
+        )}
 
         {/* 4 Summary Cards Grid */}
         <div className="amx-reports-summary-grid cols-4">
@@ -389,7 +371,7 @@ export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
                   <div className="amx-bar-meta">
                     <span>{item.category}</span>
                     <span className="amx-bar-count">
-                      {item.inUse} of {item.total} in use ({item.percentage}%)
+                      {item.total} assets ({item.percentage}% of total)
                     </span>
                   </div>
                   <div className="amx-bar-bg">
@@ -425,7 +407,7 @@ export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
                   <div className="amx-bar-meta">
                     <span>{item.location}</span>
                     <span className="amx-bar-count">
-                      {item.inUse} of {item.total} in use ({item.percentage}%)
+                      {item.total} assets ({item.percentage}% of total)
                     </span>
                   </div>
                   <div className="amx-bar-bg">
@@ -471,10 +453,10 @@ export const AssetUtilizationPage: React.FC<AssetUtilizationPageProps> = ({
                       <td style={{ fontWeight: 600 }}>{row.category}</td>
                       <td>{row.location}</td>
                       <td>{row.total}</td>
-                      <td style={{ color: '#059669', fontWeight: 600 }}>{row.inUse}</td>
-                      <td style={{ color: '#1D4ED8' }}>{row.available}</td>
-                      <td style={{ color: '#D97706' }}>{row.inMaintenance}</td>
-                      <td style={{ fontWeight: 600 }}>{row.utilizationPct}%</td>
+                      <td style={{ color: '#059669', fontWeight: 600 }}>—</td>
+                      <td style={{ color: '#1D4ED8' }}>—</td>
+                      <td style={{ color: '#D97706' }}>—</td>
+                      <td style={{ fontWeight: 600 }}>{utilization?.utilization_rate ?? 0}%</td>
                     </tr>
                   ))
                 )}

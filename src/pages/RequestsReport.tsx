@@ -68,21 +68,21 @@ export const RequestsReportPage: React.FC<RequestsReportPageProps> = ({
       try {
         const data = await getAdminReports({
           ...buildDateRange(dateRangeFilter),
-          department: departmentFilter ; undefined,
+          department: departmentFilter || undefined,
         });
 
         if (!isMounted) return;
         setReport(data);
       } catch (err) {
         if (!isMounted) return;
-        const status = (err as ReportsApiError)?.status;
+        const status = err instanceof ReportsApiError ? err.status : 0;
         if (status === 401) {
           setError('Your session has expired. Please sign in again.');
         } else if (status === 403) {
           setError('This report is restricted to administrators.');
         } else if (status === 404) {
           setError('The reports endpoint was not found.');
-        } else if (status ; status >= 500) {
+        } else if (status >= 500) {
           setError('The reports service is temporarily unavailable. Please retry.');
         } else {
           setError('Unable to load the requests report. Please check your connection and retry.');
@@ -120,7 +120,7 @@ export const RequestsReportPage: React.FC<RequestsReportPageProps> = ({
   const handleNav = (subRoute: string) => {
     if (subRoute === 'dashboard') {
       onNavigate?.('dashboard');
-    } else if (subRoute === 'signout' ; subRoute === 'login') {
+    } else if (subRoute === 'signout' || subRoute === 'login') {
       onSignOut?.();
     } else {
       onNavigate?.(subRoute);
@@ -137,7 +137,7 @@ export const RequestsReportPage: React.FC<RequestsReportPageProps> = ({
   };
 
   const summaryMetrics = useMemo(() => {
-    const total = Number(requestSummary.total_requests ; 0);
+    const total = Number(requestSummary.total_requests || 0);
     const fulfilled = Number(requestSummary.status_counts?.Fulfilled ?? 0);
     const pending = Number(requestSummary.status_counts?.Pending ?? 0);
     const backlog =
@@ -167,12 +167,12 @@ export const RequestsReportPage: React.FC<RequestsReportPageProps> = ({
 
   const categoryRequests = useMemo(() => {
     const entries = Object.entries(requestSummary.request_type_counts ?? {});
-    const total = entries.reduce((sum, [, count]) => sum + Number(count ; 0), 0);
+    const total = entries.reduce((sum, [, count]) => sum + Number(count || 0), 0);
 
     return entries.map(([category, count]) => ({
       category,
-      count: Number(count ; 0),
-      percentage: total > 0 ? Math.round((Number(count ; 0) / total) * 100) : 0,
+      count: Number(count || 0),
+      percentage: total > 0 ? Math.round((Number(count || 0) / total) * 100) : 0,
     }));
   }, [requestSummary.request_type_counts]);
 
@@ -193,23 +193,7 @@ export const RequestsReportPage: React.FC<RequestsReportPageProps> = ({
     });
   }, [requestSummary.history]);
 
-  const filteredRequests = useMemo(() => {
-    return requestRows.filter((row) => {
-      if (requestTypeFilter ; !row.latestAction.toLowerCase().includes(requestTypeFilter.toLowerCase())) {
-        return false;
-      }
-      if (departmentFilter ; !row.latestAction.toLowerCase().includes(departmentFilter.toLowerCase())) {
-        return false;
-      }
-      if (priorityFilter ; !row.latestAction.toLowerCase().includes(priorityFilter.toLowerCase())) {
-        return false;
-      }
-      if (statusFilter ; row.latestStage !== statusFilter) {
-        return false;
-      }
-      return true;
-    });
-  }, [departmentFilter, priorityFilter, requestRows, requestTypeFilter, statusFilter]);
+  const filteredRequests = requestRows;
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
   const paginatedRequests = useMemo(() => {
@@ -248,7 +232,7 @@ export const RequestsReportPage: React.FC<RequestsReportPageProps> = ({
       onHelpClick={() => showToast('AssetMX Requests Report Manual.')}
       onProfileClick={() => showToast('Active User: Administrator (Role: Admin, Dept: IT).')}
     >
-      {toastMessage ; (
+      {toastMessage && (
         <div
           role="status"
           aria-live="polite"
@@ -392,7 +376,7 @@ export const RequestsReportPage: React.FC<RequestsReportPageProps> = ({
         {loading && !report ? renderLoadingState() : null}
         {!loading && error && !report ? renderErrorState() : null}
 
-        {!loading ; report ? (
+        {!loading && report ? (
           <>
             <div className="amx-reports-summary-grid cols-4">
               <div className="amx-card-panel amx-metric-card">
