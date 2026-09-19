@@ -11,6 +11,7 @@ from app.routers import auth
 from app.routers import consumables
 from app.routers import dashboard
 from app.routers import gate_passes
+from app.routers import reports
 from app.routers import requests
 from app.seed import seed_demo_assets, seed_users
 
@@ -44,6 +45,7 @@ app.include_router(consumables.router)
 app.include_router(requests.router)
 app.include_router(gate_passes.router)
 app.include_router(dashboard.router)
+app.include_router(reports.router)
 
 
 @app.get("/api/health")
