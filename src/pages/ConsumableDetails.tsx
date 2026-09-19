@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import {
-  getStoredConsumables,
-  saveStoredConsumables,
-  computeStockStatus,
   getExpiryClassification,
   CONSUMABLE_FILTER_OPTIONS,
   type ConsumableDetailsData,
 } from '../data/consumablesData';
+import {
+  getConsumable,
+  issueConsumable,
+  updateConsumable,
+  updateConsumableStock,
+  type AssetApiError,
+  type ConsumableApiRecord,
+} from '../api/assetApi';
 import './ConsumableDetails.css';
 
 interface ConsumableDetailsPageProps {
@@ -22,6 +27,8 @@ export const ConsumableDetailsPage: React.FC<ConsumableDetailsPageProps> = ({
   onSignOut,
 }) => {
   const [consumable, setConsumable] = useState<ConsumableDetailsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Modal states
@@ -49,16 +56,56 @@ export const ConsumableDetailsPage: React.FC<ConsumableDetailsPageProps> = ({
   const [editBatchId, setEditBatchId] = useState('');
   const [editExpiryDate, setEditExpiryDate] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const mapConsumable = (item: ConsumableApiRecord): ConsumableDetailsData => ({
+    id: item.consumable_id,
+    name: item.name,
+    category: item.category,
+    batchId: item.batch_id,
+    location: item.location,
+    availableStock: item.available_stock,
+    threshold: item.threshold,
+    expiryDate: item.expiry_date || '',
+    status: item.stock_status,
+    batchQuantity: item.batch_quantity,
+    issueHistory: item.issue_history.map((issue) => ({
+      id: issue.issue_id,
+      issueDate: issue.issue_date,
+      quantity: issue.quantity,
+      requestReference: issue.request_reference || '',
+      issuedBy: issue.issued_by,
+      remainingStock: issue.remaining_stock,
+    })),
+    movementLedger: item.movement_ledger.map((movement) => ({
+      id: movement.movement_id,
+      timestamp: movement.timestamp,
+      operationType: movement.operation_type,
+      deltaQuantity: movement.delta_quantity,
+      postBalance: movement.post_balance,
+      reference: movement.reference,
+    })),
+  });
+
+  const apiErrorMessage = (error: unknown) => {
+    const errorStatus = (error as AssetApiError).status;
+    if (errorStatus === 401) return 'Your session has expired. Please sign in again.';
+    if (errorStatus === 403) return 'Admin access is required.';
+    if (errorStatus === 404) return 'Consumable not found.';
+    if (errorStatus === 409) return error instanceof Error ? error.message : 'The stock operation could not be completed.';
+    if (errorStatus === 422) return error instanceof Error ? error.message : 'Please check the entered values.';
+    return error instanceof Error ? error.message : 'Unable to complete the request.';
+  };
 
   useEffect(() => {
-    const list = getStoredConsumables();
-    const found = list.find((c) => c.id === consumableId);
-    if (found) {
-      setConsumable(found);
-    } else if (list.length > 0) {
-      // Fallback to first if not found directly
-      setConsumable(list[0]);
-    }
+    let active = true;
+    setLoading(true);
+    setApiError(null);
+    getConsumable(consumableId)
+      .then((record) => active && setConsumable(mapConsumable(record)))
+      .catch((error: unknown) => active && setApiError(apiErrorMessage(error)))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
   }, [consumableId]);
 
   const showToast = (msg: string) => {
@@ -81,15 +128,15 @@ export const ConsumableDetailsPage: React.FC<ConsumableDetailsPageProps> = ({
     }
   };
 
-  if (!consumable) {
+  if (loading || !consumable) {
     return (
       <DashboardLayout currentNav="Consumables" onNavigate={handleNav} onSignOut={onSignOut}>
-        <div style={{ padding: '32px', textAlign: 'center' }}>Loading consumable details...</div>
+        <div role={apiError ? 'alert' : 'status'} style={{ padding: '32px', textAlign: 'center' }}>{apiError || 'Loading consumable details...'}</div>
       </DashboardLayout>
     );
   }
 
-  const currentStatus = computeStockStatus(consumable.availableStock, consumable.threshold);
+  const currentStatus = consumable.status;
   const expiryClass = getExpiryClassification(consumable.expiryDate);
 
   // Calculate stock sufficiency percentage
@@ -125,7 +172,7 @@ export const ConsumableDetailsPage: React.FC<ConsumableDetailsPageProps> = ({
   };
 
   // --- Save / Action Handlers ---
-  const handleSaveUpdateStock = (e: React.FormEvent) => {
+  const handleSaveUpdateStock = async (e: React.FormEvent) => {
     e.preventDefault();
     const qtyNum = parseInt(updateQty, 10);
     if (isNaN(qtyNum) || qtyNum === 0) {
@@ -133,100 +180,47 @@ export const ConsumableDetailsPage: React.FC<ConsumableDetailsPageProps> = ({
       return;
     }
 
-    const newStock = consumable.availableStock + qtyNum;
-    if (newStock < 0) {
-      setUpdateError(`Cannot reduce stock below zero (current available: ${consumable.availableStock}).`);
-      return;
+    setIsSaving(true);
+    try {
+      const response = await updateConsumableStock(consumable.id, {
+        operation_type: updateOpType,
+        delta_quantity: qtyNum,
+        ...(updateReason.trim() ? { reference: updateReason.trim() } : {}),
+      });
+      setConsumable(mapConsumable(response));
+      setIsUpdateStockOpen(false);
+      showToast(`Stock updated successfully. New balance: ${response.available_stock} units.`);
+    } catch (error: unknown) {
+      setUpdateError(apiErrorMessage(error));
+    } finally {
+      setIsSaving(false);
     }
-
-    const now = new Date();
-    const timestampStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    const newLedgerEntry = {
-      id: `MOV-${Date.now().toString().slice(-4)}`,
-      timestamp: timestampStr,
-      operationType: updateOpType,
-      deltaQuantity: qtyNum,
-      postBalance: newStock,
-      reference: updateReason.trim() || 'Manual stock adjustment',
-    };
-
-    const updatedConsumable: ConsumableDetailsData = {
-      ...consumable,
-      availableStock: newStock,
-      status: computeStockStatus(newStock, consumable.threshold),
-      movementLedger: [newLedgerEntry, ...consumable.movementLedger],
-    };
-
-    const all = getStoredConsumables();
-    const idx = all.findIndex((c) => c.id === consumable.id);
-    if (idx >= 0) {
-      all[idx] = updatedConsumable;
-    } else {
-      all.push(updatedConsumable);
-    }
-    saveStoredConsumables(all);
-    setConsumable(updatedConsumable);
-    setIsUpdateStockOpen(false);
-    showToast(`Stock updated successfully. New balance: ${newStock} units.`);
   };
 
-  const handleSaveIssue = (e: React.FormEvent) => {
+  const handleSaveIssue = async (e: React.FormEvent) => {
     e.preventDefault();
     const qtyNum = parseInt(issueQty, 10);
     if (isNaN(qtyNum) || qtyNum <= 0) {
       setIssueError('Issue quantity must be a positive number greater than 0.');
       return;
     }
-    if (qtyNum > consumable.availableStock) {
-      setIssueError(`Quantity exceeds available stock (${consumable.availableStock} available).`);
-      return;
+    setIsSaving(true);
+    try {
+      const response = await issueConsumable(consumable.id, {
+        quantity: qtyNum,
+        ...(issueRef.trim() ? { request_reference: issueRef.trim() } : {}),
+      });
+      setConsumable(mapConsumable(response));
+      setIsIssueModalOpen(false);
+      showToast(`Issued ${qtyNum} units. Remaining stock: ${response.available_stock}.`);
+    } catch (error: unknown) {
+      setIssueError(apiErrorMessage(error));
+    } finally {
+      setIsSaving(false);
     }
-
-    const newStock = consumable.availableStock - qtyNum;
-    const now = new Date();
-    const timestampStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    const newIssueEntry = {
-      id: `ISS-${Date.now().toString().slice(-4)}`,
-      issueDate: timestampStr,
-      quantity: qtyNum,
-      requestReference: issueRef.trim() || 'Standard Consumption Dispatch',
-      issuedBy: issuedBy.trim() || 'Marcus Vance (Admin)',
-      remainingStock: newStock,
-    };
-
-    const newLedgerEntry = {
-      id: `MOV-${Date.now().toString().slice(-4)}`,
-      timestamp: timestampStr,
-      operationType: 'Disbursement / Issue' as const,
-      deltaQuantity: -qtyNum,
-      postBalance: newStock,
-      reference: `Disbursement / Issue: ${issueRef.trim() || 'Internal Consumption'}`,
-    };
-
-    const updatedConsumable: ConsumableDetailsData = {
-      ...consumable,
-      availableStock: newStock,
-      status: computeStockStatus(newStock, consumable.threshold),
-      issueHistory: [newIssueEntry, ...consumable.issueHistory],
-      movementLedger: [newLedgerEntry, ...consumable.movementLedger],
-    };
-
-    const all = getStoredConsumables();
-    const idx = all.findIndex((c) => c.id === consumable.id);
-    if (idx >= 0) {
-      all[idx] = updatedConsumable;
-    } else {
-      all.push(updatedConsumable);
-    }
-    saveStoredConsumables(all);
-    setConsumable(updatedConsumable);
-    setIsIssueModalOpen(false);
-    showToast(`Issued ${qtyNum} units. Remaining stock: ${newStock}.`);
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editName.trim()) {
       setEditError('Item Name is required.');
@@ -250,28 +244,24 @@ export const ConsumableDetailsPage: React.FC<ConsumableDetailsPageProps> = ({
       return;
     }
 
-    const updatedConsumable: ConsumableDetailsData = {
-      ...consumable,
-      name: editName.trim(),
-      category: editCategory,
-      location: editLocation,
-      threshold: threshNum,
-      batchId: editBatchId.trim(),
-      expiryDate: editExpiryDate.trim(),
-      status: computeStockStatus(consumable.availableStock, threshNum),
-    };
-
-    const all = getStoredConsumables();
-    const idx = all.findIndex((c) => c.id === consumable.id);
-    if (idx >= 0) {
-      all[idx] = updatedConsumable;
-    } else {
-      all.push(updatedConsumable);
+    setIsSaving(true);
+    try {
+      const response = await updateConsumable(consumable.id, {
+        name: editName.trim(),
+        category: editCategory,
+        location: editLocation,
+        threshold: threshNum,
+        batch_id: editBatchId.trim(),
+        expiry_date: editExpiryDate.trim() || null,
+      });
+      setConsumable(mapConsumable(response));
+      setIsEditModalOpen(false);
+      showToast('Consumable details updated successfully.');
+    } catch (error: unknown) {
+      setEditError(apiErrorMessage(error));
+    } finally {
+      setIsSaving(false);
     }
-    saveStoredConsumables(all);
-    setConsumable(updatedConsumable);
-    setIsEditModalOpen(false);
-    showToast('Consumable details updated successfully.');
   };
 
   return (
@@ -709,8 +699,8 @@ export const ConsumableDetailsPage: React.FC<ConsumableDetailsPageProps> = ({
                 >
                   Cancel
                 </button>
-                <button type="submit" className="amx-btn-primary">
-                  Save Adjustment
+                <button type="submit" className="amx-btn-primary" disabled={isSaving}>
+                  {isSaving ? 'Saving...' : 'Save Adjustment'}
                 </button>
               </div>
             </form>
@@ -788,8 +778,8 @@ export const ConsumableDetailsPage: React.FC<ConsumableDetailsPageProps> = ({
                 >
                   Cancel
                 </button>
-                <button type="submit" className="amx-btn-primary">
-                  Confirm Issue
+                <button type="submit" className="amx-btn-primary" disabled={isSaving}>
+                  {isSaving ? 'Issuing...' : 'Confirm Issue'}
                 </button>
               </div>
             </form>
@@ -902,8 +892,8 @@ export const ConsumableDetailsPage: React.FC<ConsumableDetailsPageProps> = ({
                 >
                   Cancel
                 </button>
-                <button type="submit" className="amx-btn-primary">
-                  Save Changes
+                <button type="submit" className="amx-btn-primary" disabled={isSaving}>
+                  {isSaving ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>

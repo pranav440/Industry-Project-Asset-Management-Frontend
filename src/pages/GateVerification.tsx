@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
+import { type GatePassItemData } from '../data/gatePassData';
 import {
-  getStoredGatePasses,
-  saveStoredGatePasses,
-  type GatePassItemData,
-} from '../data/gatePassData';
+  escalateGatePass,
+  getGatePass,
+  mapGatePassApiRecord,
+  verifyEntryGatePass,
+  verifyExitGatePass,
+  GatePassApiError,
+} from '../api/gatePassApi';
 import './GateVerification.css';
 
 interface GateVerificationPageProps {
@@ -21,7 +25,6 @@ export const GateVerificationPage: React.FC<GateVerificationPageProps> = ({
   const [gatePass, setGatePass] = useState<GatePassItemData | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Form Inputs for Verification
   const [exitGateInput, setExitGateInput] = useState('North Gate - Commercial Bay 1');
   const [exitNotesInput, setExitNotesInput] = useState('');
   const [entryGateInput, setEntryGateInput] = useState('Destination Receiving Gate');
@@ -29,15 +32,24 @@ export const GateVerificationPage: React.FC<GateVerificationPageProps> = ({
   const [escalateReasonInput, setEscalateReasonInput] = useState('');
 
   useEffect(() => {
-    const list = getStoredGatePasses();
-    const found = list.find((p) => p.id === passId);
-    if (found) {
-      setGatePass(found);
-      if (found.gateActivity.exitGate) setExitGateInput(found.gateActivity.exitGate);
-      if (found.gateActivity.entryGate) setEntryGateInput(found.gateActivity.entryGate);
-    } else if (list.length > 0) {
-      setGatePass(list[0]);
-    }
+    let active = true;
+    getGatePass(passId)
+      .then((data) => {
+        if (!active) return;
+        const mapped = mapGatePassApiRecord(data);
+        setGatePass(mapped);
+        if (mapped.gateActivity.exitGate) setExitGateInput(mapped.gateActivity.exitGate);
+        if (mapped.gateActivity.entryGate) setEntryGateInput(mapped.gateActivity.entryGate);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const status = (error as GatePassApiError).status;
+        showToast(status === 404 ? 'Gate pass not found.' : status === 401 ? 'Your session has expired. Please sign in again.' : error instanceof Error ? error.message : 'Unable to load gate verification.');
+      });
+
+    return () => {
+      active = false;
+    };
   }, [passId]);
 
   const showToast = (msg: string) => {
@@ -72,124 +84,75 @@ export const GateVerificationPage: React.FC<GateVerificationPageProps> = ({
     );
   }
 
-  const nowString = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  };
-
-  // 1. Verify Exit
-  const handleVerifyExit = (e: React.FormEvent) => {
+  const handleVerifyExit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const timestamp = nowString();
 
-    const newHistoryEntry = {
-      id: `EVT-GP-${Date.now().toString().slice(-4)}`,
-      timestamp,
-      action: 'Exit verification',
-      performedBy: 'Guard Station A',
-      note: exitNotesInput.trim() || `Outbound dispatch recorded at ${exitGateInput}`,
-      statusSnapshot: 'Active' as const,
-    };
-
-    const updatedPass: GatePassItemData = {
-      ...gatePass,
-      status: 'Active',
-      authorizationState: 'Active in Transit',
-      gateActivity: {
-        ...gatePass.gateActivity,
-        exitStatus: 'Verified',
-        exitTimestamp: timestamp,
-        exitGate: exitGateInput,
-        exitOfficer: 'Guard Station A',
-        exitNotes: exitNotesInput.trim() || undefined,
-      },
-      history: [newHistoryEntry, ...gatePass.history],
-    };
-
-    const all = getStoredGatePasses();
-    const idx = all.findIndex((p) => p.id === gatePass.id);
-    if (idx >= 0) all[idx] = updatedPass;
-    saveStoredGatePasses(all);
-    setGatePass(updatedPass);
-    showToast(`Exit verification recorded for ${gatePass.id}. Pass is now Active.`);
+    try {
+      const updated = await verifyExitGatePass(passId, {
+        exit_gate: exitGateInput.trim(),
+        exit_notes: exitNotesInput.trim() || undefined,
+      });
+      setGatePass(mapGatePassApiRecord(updated));
+      showToast(`Exit verification recorded for ${passId}.`);
+    } catch (error: unknown) {
+      const status = (error as GatePassApiError).status;
+      showToast(status === 409
+        ? 'This gate pass cannot be exited in its current state.'
+        : status === 422
+        ? 'Exit gate details are required.'
+        : error instanceof Error
+        ? error.message
+        : 'Unable to record exit verification.');
+    }
   };
 
-  // 2. Verify Entry
-  const handleVerifyEntry = (e: React.FormEvent) => {
+  const handleVerifyEntry = async (e: React.FormEvent) => {
     e.preventDefault();
-    const timestamp = nowString();
 
-    const newHistoryEntry = {
-      id: `EVT-GP-${Date.now().toString().slice(-4)}`,
-      timestamp,
-      action: 'Entry verification',
-      performedBy: 'Host Receiving Desk',
-      note: entryNotesInput.trim() || `Inbound arrival recorded at ${entryGateInput}`,
-      statusSnapshot: 'Completed' as const,
-    };
-
-    const updatedPass: GatePassItemData = {
-      ...gatePass,
-      status: 'Completed',
-      authorizationState: 'Completed',
-      gateActivity: {
-        ...gatePass.gateActivity,
-        entryStatus: 'Verified',
-        entryTimestamp: timestamp,
-        entryGate: entryGateInput,
-        entryOfficer: 'Host Receiving Desk',
-        entryNotes: entryNotesInput.trim() || undefined,
-      },
-      history: [newHistoryEntry, ...gatePass.history],
-    };
-
-    const all = getStoredGatePasses();
-    const idx = all.findIndex((p) => p.id === gatePass.id);
-    if (idx >= 0) all[idx] = updatedPass;
-    saveStoredGatePasses(all);
-    setGatePass(updatedPass);
-    showToast(`Entry verification recorded for ${gatePass.id}. Movement Completed.`);
+    try {
+      const updated = await verifyEntryGatePass(passId, {
+        entry_gate: entryGateInput.trim(),
+        entry_notes: entryNotesInput.trim() || undefined,
+      });
+      setGatePass(mapGatePassApiRecord(updated));
+      showToast(`Entry verification recorded for ${passId}.`);
+    } catch (error: unknown) {
+      const status = (error as GatePassApiError).status;
+      showToast(status === 409
+        ? 'This gate pass cannot be completed in its current state.'
+        : status === 422
+        ? 'Entry gate details are required.'
+        : error instanceof Error
+        ? error.message
+        : 'Unable to record entry verification.');
+    }
   };
 
-  // 3. Escalate Pass
-  const handleEscalatePass = (e: React.FormEvent) => {
+  const handleEscalatePass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!escalateReasonInput.trim()) {
       showToast('Please provide an operational reason for escalation.');
       return;
     }
-    const timestamp = nowString();
 
-    const newHistoryEntry = {
-      id: `EVT-GP-${Date.now().toString().slice(-4)}`,
-      timestamp,
-      action: 'Escalation',
-      performedBy: 'Guard Station A',
-      note: escalateReasonInput.trim(),
-      statusSnapshot: 'Escalated' as const,
-    };
-
-    const updatedPass: GatePassItemData = {
-      ...gatePass,
-      status: 'Escalated',
-      authorizationState: 'Escalated — Gate Exception',
-      escalation: {
-        isEscalated: true,
+    try {
+      const updated = await escalateGatePass(passId, {
         reason: escalateReasonInput.trim(),
-        timestamp,
-        actionRequired: 'Administrative gate exception review required.',
-        escalatedBy: 'Guard Station A',
-      },
-      history: [newHistoryEntry, ...gatePass.history],
-    };
-
-    const all = getStoredGatePasses();
-    const idx = all.findIndex((p) => p.id === gatePass.id);
-    if (idx >= 0) all[idx] = updatedPass;
-    saveStoredGatePasses(all);
-    setGatePass(updatedPass);
-    setEscalateReasonInput('');
-    showToast(`Gate Pass ${gatePass.id} has been flagged for Escalation.`);
+        action_required: 'Administrative gate exception review required.',
+      });
+      setGatePass(mapGatePassApiRecord(updated));
+      setEscalateReasonInput('');
+      showToast(`Gate Pass ${passId} has been flagged for escalation.`);
+    } catch (error: unknown) {
+      const status = (error as GatePassApiError).status;
+      showToast(status === 409
+        ? 'This gate pass cannot be escalated in its current state.'
+        : status === 422
+        ? 'Escalation details are invalid.'
+        : error instanceof Error
+        ? error.message
+        : 'Unable to escalate the gate pass.');
+    }
   };
 
   return (

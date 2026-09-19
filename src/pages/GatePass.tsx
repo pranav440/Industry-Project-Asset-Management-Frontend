@@ -1,12 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import {
-  getStoredGatePasses,
-  saveStoredGatePasses,
   GATE_PASS_FILTER_OPTIONS,
   type GatePassItemData,
   type GatePassType,
 } from '../data/gatePassData';
+import {
+  createGatePass,
+  listGatePasses,
+  mapGatePassApiRecord,
+  GatePassApiError,
+} from '../api/gatePassApi';
 import './GatePass.css';
 
 interface GatePassPageProps {
@@ -25,10 +29,12 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
   const [dateFilter, setDateFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const pageSize = 10;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Minimal Create Gate Pass Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createType, setCreateType] = useState<GatePassType>('Asset Movement');
   const [createAsset, setCreateAsset] = useState('');
@@ -38,8 +44,54 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
   const [createPurpose, setCreatePurpose] = useState('');
 
   useEffect(() => {
-    setPasses(getStoredGatePasses());
-  }, []);
+    let active = true;
+    setIsLoading(true);
+    setApiError(null);
+
+    listGatePasses({
+      search: searchQuery,
+      pass_type: passTypeFilter,
+      status: statusFilter,
+      date: dateFilter,
+      location: locationFilter,
+      page: currentPage,
+      page_size: pageSize,
+    })
+      .then((result) => {
+        if (!active) return;
+        setPasses(result.items.map((item) => mapGatePassApiRecord(item)));
+        setTotal(result.total);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const status = (error as GatePassApiError).status;
+        const message = status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : status === 403
+          ? 'Admin access is required to view gate passes.'
+          : status === 404
+          ? 'The selected gate pass could not be found.'
+          : status === 409
+          ? 'This gate pass action is not allowed in the current state.'
+          : status === 422
+          ? 'The gate pass filters or payload are invalid.'
+          : status && status >= 500
+          ? 'The gate pass service is temporarily unavailable.'
+          : error instanceof Error
+          ? error.message
+          : 'Unable to load gate passes.';
+        setApiError(message);
+        setPasses([]);
+        setTotal(0);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [searchQuery, passTypeFilter, statusFilter, dateFilter, locationFilter, currentPage]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -60,11 +112,6 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
     showToast('Gate pass filters reset to default.');
   };
 
-  // 4 KPI Summary Cards Metrics:
-  // 1. Pending Approval
-  // 2. Active Passes
-  // 3. Completed
-  // 4. Escalated
   const summaryMetrics = useMemo(() => {
     let pendingApproval = 0;
     let activePasses = 0;
@@ -86,7 +133,6 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
     };
   }, [passes]);
 
-  // Filter gate passes
   const filteredPasses = useMemo(() => {
     return passes.filter((p) => {
       if (searchQuery.trim()) {
@@ -120,12 +166,8 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
     });
   }, [passes, searchQuery, passTypeFilter, statusFilter, dateFilter, locationFilter]);
 
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredPasses.length / pageSize));
-  const paginatedPasses = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredPasses.slice(start, start + pageSize);
-  }, [filteredPasses, currentPage, pageSize]);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const paginatedPasses = filteredPasses;
 
   const handleRowClick = (passId: string) => {
     onNavigate?.(`gate-pass/${encodeURIComponent(passId)}`);
@@ -150,63 +192,48 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
     }
   };
 
-  // Submit new Gate Pass
-  const handleCreateGatePass = (e: React.FormEvent) => {
+  const handleCreateGatePass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createAsset.trim() || !createDestination.trim() || !createMovementDate) {
       showToast('Please complete all required fields.');
       return;
     }
 
-    const nextIdNum = passes.length + 12;
-    const newId = `GP-2026-${String(nextIdNum).padStart(4, '0')}`;
-    const today = new Date().toISOString().split('T')[0];
+    try {
+      await createGatePass({
+        pass_type: createType,
+        asset_or_item: createAsset.trim(),
+        quantity: Number(createQuantity) || 1,
+        destination: createDestination.trim(),
+        movement_date: createMovementDate,
+        purpose: createPurpose.trim() || 'Internal organizational equipment movement.',
+      });
 
-    const newPass: GatePassItemData = {
-      id: newId,
-      passType: createType,
-      requestDate: today,
-      status: 'Pending',
-      requesterName: 'Administrator',
-      department: 'IT Administration',
-      assetOrItem: createAsset.trim(),
-      quantity: Number(createQuantity) || 1,
-      currentLocation: 'Main Office - Central Storage',
-      destination: createDestination.trim(),
-      movementDate: createMovementDate,
-      purpose: createPurpose.trim() || 'Internal organizational equipment movement.',
-      authorizationState: 'Pending Administrative Decision',
-      decisionStatus: 'Awaiting Review',
-      gateActivity: {
-        exitStatus: 'Pending',
-        exitGate: 'North Gate - Commercial Bay 1',
-        entryStatus: 'Pending',
-        entryGate: createDestination.trim() + ' Gate',
-      },
-      escalation: {
-        isEscalated: false,
-      },
-      history: [
-        {
-          id: `EVT-GP-${Date.now().toString().slice(-4)}`,
-          timestamp: `${today} 10:00`,
-          action: 'Gate pass created',
-          performedBy: 'Administrator',
-          note: createPurpose.trim() || 'Initial submission',
-          statusSnapshot: 'Pending',
-        },
-      ],
-    };
-
-    const updated = [newPass, ...passes];
-    saveStoredGatePasses(updated);
-    setPasses(updated);
-    setIsCreateModalOpen(false);
-    setCreateAsset('');
-    setCreateDestination('');
-    setCreateMovementDate('');
-    setCreatePurpose('');
-    showToast(`Gate Pass ${newId} created successfully.`);
+      setIsCreateModalOpen(false);
+      setCreateAsset('');
+      setCreateDestination('');
+      setCreateMovementDate('');
+      setCreatePurpose('');
+      setCreateQuantity(1);
+      setCurrentPage(1);
+      setSearchQuery('');
+      setPassTypeFilter('');
+      setStatusFilter('');
+      setDateFilter('');
+      setLocationFilter('');
+      showToast('Gate pass created successfully.');
+    } catch (error: unknown) {
+      const status = (error as GatePassApiError).status;
+      showToast(status === 401
+        ? 'Your session has expired. Please sign in again.'
+        : status === 403
+        ? 'Admin access is required to create gate passes.'
+        : status === 422
+        ? 'The gate pass payload is invalid.'
+        : error instanceof Error
+        ? error.message
+        : 'Unable to create the gate pass.');
+    }
   };
 
   return (
@@ -468,7 +495,31 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {paginatedPasses.length === 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={8} className="amx-empty-table-cell">
+                      <div className="amx-empty-state">
+                        <span className="material-symbols-outlined amx-empty-icon" aria-hidden="true">
+                          sync
+                        </span>
+                        <p className="amx-empty-title">Loading gate passes...</p>
+                        <p className="amx-empty-desc">Fetching the latest administrative gate pass records.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : apiError ? (
+                  <tr>
+                    <td colSpan={8} className="amx-empty-table-cell">
+                      <div className="amx-empty-state">
+                        <span className="material-symbols-outlined amx-empty-icon" aria-hidden="true">
+                          error
+                        </span>
+                        <p className="amx-empty-title">Unable to load gate passes</p>
+                        <p className="amx-empty-desc">{apiError}</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : paginatedPasses.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="amx-empty-table-cell">
                       <div className="amx-empty-state">
