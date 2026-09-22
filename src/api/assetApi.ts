@@ -21,6 +21,27 @@ export interface NewAssetPayload {
 
 export type AssetStatus = 'Active' | 'In Maintenance' | 'Disposed' | 'In Transit';
 
+export interface MaintenanceHistoryApiRecord {
+  id: string;
+  date: string;
+  serviceEvent: string;
+  vendor: string;
+  cost: string;
+  status: 'Completed' | 'Scheduled' | 'In Progress';
+}
+
+export interface AuditLogApiRecord {
+  id: number;
+  action: string;
+  asset_identifier: string;
+  actor_user_id: number;
+  occurred_at: string;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
+  movement_id: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
 export interface AssetRecord {
   asset_id: string;
   name: string;
@@ -41,8 +62,8 @@ export interface AssetRecord {
   qr_code_value: string;
   qr_code_data_url: string;
   movement_history: AssetMovementRecord[];
-  maintenance_history: unknown[];
-  audit_history: unknown[];
+  maintenance_history: MaintenanceHistoryApiRecord[];
+  audit_history: AuditLogApiRecord[];
 }
 
 export interface AssetListResponse {

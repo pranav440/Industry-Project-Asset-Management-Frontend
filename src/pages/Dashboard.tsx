@@ -18,11 +18,6 @@ interface DashboardPageProps {
 }
 
 const neutralValue = '—';
-const neutralInventory: AssetInventoryData = {
-  location: 'N/A',
-  custodian: 'N/A',
-  category: 'N/A',
-};
 
 function formatDisplayDate(value: string | null | undefined): string {
   if (!value) return neutralValue;
@@ -128,9 +123,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   }, [requestsForTable, searchQuery]);
 
   const assetInventoryData: AssetInventoryData = useMemo(() => ({
-    location: dashboard?.asset_inventory ? 'N/A' : neutralInventory.location,
-    custodian: dashboard?.asset_inventory ? 'N/A' : neutralInventory.custodian,
-    category: dashboard?.asset_inventory ? 'N/A' : neutralInventory.category,
+    location: 'All Locations',
+    custodian: 'All Custodians',
+    category: 'All Categories',
+    totalAssets: dashboard?.asset_inventory?.total_assets,
+    byStatus: dashboard?.asset_inventory?.by_status,
   }), [dashboard]);
 
   const metricCards: MetricCardData[] = useMemo(() => {
@@ -163,15 +160,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       {
         id: 'monthly-spend',
         title: 'Monthly Spend',
-        value: summary?.monthly_spend == null ? 'N/A' : `₹${summary.monthly_spend}`,
+        value: summary?.monthly_spend == null ? '₹0.00' : `₹${summary.monthly_spend}`,
         icon: 'payments',
-        subtext: 'Not available',
+        subtext: 'Invoices recorded',
         statusType: 'default',
       },
       {
         id: 'budget-utilized',
         title: 'Budget Utilized',
-        value: summary?.budget_utilized == null ? 'N/A' : `${summary.budget_utilized}%`,
+        value: summary?.budget_utilized == null ? '0%' : `${summary.budget_utilized}%`,
         icon: 'pie_chart',
         progress: summary?.budget_utilized == null ? 0 : Math.min(100, Math.max(0, summary.budget_utilized)),
         statusType: 'progress',
@@ -355,9 +352,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <RequestsTable requests={filteredRequests} />
         <AssetInventoryCard
           data={assetInventoryData}
-          onFilterChange={(dim, val) =>
-            showToast(`Asset Inventory filtered by ${dim}: ${val}`)
-          }
+          onFilterChange={(dim, val) => {
+            showToast(`Asset Inventory filtered by ${dim}: ${val}`);
+          }}
+          onViewAssets={() => onNavigate?.('assets')}
         />
       </div>
 

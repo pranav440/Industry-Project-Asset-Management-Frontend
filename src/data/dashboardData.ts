@@ -25,6 +25,8 @@ export interface AssetInventoryData {
   location: string;
   custodian: string;
   category: string;
+  totalAssets?: number;
+  byStatus?: Record<string, number>;
 }
 
 export interface ExpiryAlertItem {

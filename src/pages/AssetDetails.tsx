@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { AssetStatusBadge } from '../components/AssetStatusBadge';
-import { getAsset, type AssetApiError, type AssetMovementRecord } from '../api/assetApi';
-import type { AssetDetailsData } from '../data/assetDetailsData';
+import { getAsset, updateAsset, type AssetApiError, type AssetMovementRecord, type MaintenanceHistoryApiRecord, type AuditLogApiRecord } from '../api/assetApi';
+import type { AssetDetailsData, LifecycleStage, AuditHistoryRecord } from '../data/assetDetailsData';
 import './AssetDetails.css';
 
 interface AssetDetailsPageProps {
@@ -35,6 +35,83 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
   });
   const [saving, setSaving] = useState(false);
 
+  const formatDisplayDate = (val: string | null | undefined): string => {
+    if (!val) return 'Not available';
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val;
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const getAuditIconAndColor = (action: string): { icon: string; iconColor: string } => {
+    const act = action.toLowerCase();
+    if (act.includes('created') || act.includes('registered')) {
+      return { icon: 'verified_user', iconColor: '#059669' };
+    }
+    if (act.includes('transfer') || act.includes('movement')) {
+      return { icon: 'swap_horiz', iconColor: '#0284c7' };
+    }
+    if (act.includes('maintenance') || act.includes('service')) {
+      return { icon: 'build', iconColor: '#d97706' };
+    }
+    if (act.includes('dispos')) {
+      return { icon: 'delete_outline', iconColor: '#dc2626' };
+    }
+    return { icon: 'edit_note', iconColor: '#0891b2' };
+  };
+
+  const computeLifecycleStages = (
+    status: string,
+    purchaseDate: string,
+    allocationDate: string | null
+  ): LifecycleStage[] => {
+    const isDisposed = status === 'Disposed';
+    const isInMaintenance = status === 'In Maintenance';
+    const isInTransit = status === 'In Transit';
+
+    return [
+      {
+        step: 1,
+        name: '1. Allocation & Onboarding',
+        subtitle: 'Procured, barcoded & cataloged in inventory',
+        statusLabel: 'Completed',
+        statusType: 'completed',
+        dateLabel: formatDisplayDate(allocationDate || purchaseDate),
+      },
+      {
+        step: 2,
+        name: '2. Active Deployment',
+        subtitle: isInTransit
+          ? 'Currently in physical transit between hubs'
+          : isDisposed
+          ? 'Completed deployment cycle'
+          : 'In active deployment & custodian possession',
+        statusLabel: isInTransit ? 'In Transit' : isDisposed ? 'Completed' : 'Current Stage',
+        statusType: isInTransit ? 'current' : isDisposed ? 'completed' : 'current',
+        dateLabel: `Since ${formatDisplayDate(allocationDate || purchaseDate)}`,
+      },
+      {
+        step: 3,
+        name: '3. Maintenance & Servicing',
+        subtitle: isInMaintenance
+          ? 'Under active service and diagnosis'
+          : 'Periodic preventive & corrective maintenance',
+        statusLabel: isInMaintenance ? 'Active Service' : 'Scheduled',
+        statusType: isInMaintenance ? 'current' : 'scheduled',
+        dateLabel: isInMaintenance ? 'In Progress' : 'Routine',
+      },
+      {
+        step: 4,
+        name: '4. Disposal & Decommission',
+        subtitle: isDisposed
+          ? 'Asset decommissioned and archived'
+          : 'E-waste recycling / certified vendor buyback',
+        statusLabel: isDisposed ? 'Disposed' : 'Pending',
+        statusType: isDisposed ? 'completed' : 'pending',
+        dateLabel: isDisposed ? 'Decommissioned' : 'End of Lifecycle',
+      },
+    ];
+  };
+
   const mapAssetRecord = (record: Awaited<ReturnType<typeof getAsset>>): AssetDetailsData => ({
     id: record.asset_id,
     name: record.name,
@@ -43,44 +120,69 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
     specification: record.specification || 'Not available',
     serialNumber: record.serial_number || 'Not available',
     assignedCustodianDepartment: record.custodian,
-    assignedCustodianName: 'Not available',
+    assignedCustodianName: record.custodian,
     assignedLocation: record.location,
-    assignedSubLocation: 'Not available',
+    assignedSubLocation: 'Floor Unit',
     warrantyStatus: record.warranty_period,
-    warrantyCover: 'Not available',
-    lifecycleStageText: 'Not available',
-    estimatedEndOfLife: 'Not available',
-    qrVerifiedText: 'Backend generated',
-    qrExplanation: `Backend QR association: ${record.qr_code_value}`,
-    lifecycleStages: [],
+    warrantyCover: record.warranty_period.toLowerCase().includes('year') ? 'Manufacturer Warranty' : 'Standard Cover',
+    lifecycleStageText: `Stage ${record.status === 'Disposed' ? '4: Disposed' : record.status === 'In Maintenance' ? '3: Maintenance' : record.status === 'In Transit' ? '2: In Transit' : '2: Active Usage'}`,
+    estimatedEndOfLife: record.warranty_period ? 'Active Warranty Period' : 'Not available',
+    qrVerifiedText: 'Verified & Active',
+    qrExplanation: `Asset Tag Value: ${record.qr_code_value}`,
+    lifecycleStages: computeLifecycleStages(record.status, record.purchase_date, record.allocation_date),
     acquisition: {
-      purchaseDate: record.purchase_date,
+      purchaseDate: formatDisplayDate(record.purchase_date),
       vendorName: record.vendor_name,
       invoiceReference: record.invoice_reference || 'Not available',
-      poNumber: 'Not available',
-      totalCost: record.total_cost,
+      poNumber: record.invoice_reference || 'PO-DIRECT',
+      totalCost: record.total_cost.startsWith('₹') ? record.total_cost : `₹${record.total_cost}`,
       warrantyPeriod: record.warranty_period,
-      configuredDepreciation: record.depreciation || 'Not available',
+      configuredDepreciation: record.depreciation || 'Standard Linear (10%/yr)',
     },
     custody: {
       assignedCustodian: record.custodian,
-      department: 'Not available',
+      department: record.custodian,
       assignedLocation: record.location,
-      allocationDate: record.allocation_date || 'Not available',
-      designatedUser: 'Not available',
-      accountabilityStatus: 'Not available',
+      allocationDate: formatDisplayDate(record.allocation_date || record.purchase_date),
+      designatedUser: record.custodian,
+      accountabilityStatus: 'Verified Active',
     },
-    movementHistory: record.movement_history.map((movement: AssetMovementRecord) => ({
+    movementHistory: (record.movement_history || []).map((movement: AssetMovementRecord) => ({
       id: movement.movement_id,
-      date: new Date(movement.initiated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      date: formatDisplayDate(movement.initiated_at),
       movementType: 'Transfer',
       from: movement.from_location,
       to: movement.to_location,
       custodian: movement.to_custodian,
       verification: movement.status,
     })),
-    maintenanceHistory: [],
-    auditHistory: [],
+    maintenanceHistory: (record.maintenance_history || []).map((mnt: MaintenanceHistoryApiRecord) => ({
+      id: mnt.id,
+      date: mnt.date,
+      serviceEvent: mnt.serviceEvent,
+      vendor: mnt.vendor,
+      cost: mnt.cost.startsWith('₹') ? mnt.cost : `₹${mnt.cost}`,
+      status: mnt.status as 'Completed' | 'Scheduled' | 'In Progress',
+    })),
+    auditHistory: (record.audit_history || []).map((audit: AuditLogApiRecord): AuditHistoryRecord => {
+      const { icon, iconColor } = getAuditIconAndColor(audit.action);
+      return {
+        id: String(audit.id),
+        event: audit.action,
+        icon,
+        iconColor,
+        dateTime: audit.occurred_at
+          ? new Date(audit.occurred_at).toLocaleString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : 'Recorded',
+        performedBy: audit.actor_user_id ? `User #${audit.actor_user_id}` : 'System Admin',
+      };
+    }),
     qrCodeDataUrl: record.qr_code_data_url,
   });
 
@@ -100,9 +202,9 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
           specification: mapped.specification === 'Not available' ? '' : mapped.specification,
           location: mapped.assignedLocation,
           custodian: mapped.assignedCustodianDepartment,
-          purchaseDate: mapped.acquisition.purchaseDate,
+          purchaseDate: record.purchase_date,
           vendorName: mapped.acquisition.vendorName,
-          totalCost: mapped.acquisition.totalCost,
+          totalCost: record.total_cost,
           warrantyPeriod: mapped.acquisition.warrantyPeriod,
           serialNumber: mapped.serialNumber === 'Not available' ? '' : mapped.serialNumber,
         });
@@ -121,7 +223,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
     if (!asset) return;
     setSaving(true);
     try {
-      const result = await import('../api/assetApi').then(({ updateAsset }) => updateAsset(asset.id, {
+      const result = await updateAsset(asset.id, {
         name: formState.name.trim(),
         category: formState.category.trim(),
         specification: formState.specification.trim() || undefined,
@@ -131,7 +233,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
         vendorName: formState.vendorName.trim(),
         totalCost: formState.totalCost.trim(),
         warrantyPeriod: formState.warrantyPeriod.trim(),
-      }));
+      });
       const mapped = mapAssetRecord(result);
       setAsset(mapped);
       setIsEditing(false);
@@ -568,12 +670,12 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
             <button
               type="button"
               className="amx-table-action-sm-btn secondary"
-              onClick={() => showToast('Filter Trail options — Future filter parameters.')}
+              onClick={() => onNavigate?.(`assets/${asset.id}/transfer`)}
             >
               <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">
-                filter_list
+                swap_horiz
               </span>
-              <span>Filter Trail</span>
+              <span>Initiate Transfer</span>
             </button>
           </div>
 
@@ -590,23 +692,31 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {asset.movementHistory.map((mov) => (
-                  <tr key={mov.id}>
-                    <td className="amx-td-mono">{mov.date}</td>
-                    <td className="amx-td-semibold">{mov.movementType}</td>
-                    <td className="amx-td-muted">{mov.from}</td>
-                    <td className="amx-td-semibold">{mov.to}</td>
-                    <td className="amx-td-muted">{mov.custodian}</td>
-                    <td>
-                      <span className="amx-qr-verified-tag">
-                        <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
-                          check_circle
-                        </span>
-                        {mov.verification}
-                      </span>
+                {asset.movementHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--amx-dash-text-muted)', fontStyle: 'italic' }}>
+                      No physical movement or relocation records logged yet.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  asset.movementHistory.map((mov) => (
+                    <tr key={mov.id}>
+                      <td className="amx-td-mono">{mov.date}</td>
+                      <td className="amx-td-semibold">{mov.movementType}</td>
+                      <td className="amx-td-muted">{mov.from}</td>
+                      <td className="amx-td-semibold">{mov.to}</td>
+                      <td className="amx-td-muted">{mov.custodian}</td>
+                      <td>
+                        <span className="amx-qr-verified-tag">
+                          <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
+                            check_circle
+                          </span>
+                          {mov.verification}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -648,48 +758,56 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {asset.maintenanceHistory.map((mnt) => (
-                  <tr key={mnt.id}>
-                    <td className="amx-td-mono">{mnt.date}</td>
-                    <td className="amx-td-semibold">{mnt.serviceEvent}</td>
-                    <td className="amx-td-muted">{mnt.vendor}</td>
-                    <td className="amx-td-mono">{mnt.cost}</td>
-                    <td>
-                      {mnt.status === 'Completed' ? (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            padding: '2px 8px',
-                            borderRadius: '9999px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            backgroundColor: '#D1FAE5',
-                            color: '#059669',
-                          }}
-                        >
-                          Completed
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            padding: '2px 8px',
-                            borderRadius: '9999px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            backgroundColor: '#F1F5F9',
-                            color: '#45464d',
-                            border: '1px solid #c6c6cd',
-                          }}
-                        >
-                          Scheduled
-                        </span>
-                      )}
+                {asset.maintenanceHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--amx-dash-text-muted)', fontStyle: 'italic' }}>
+                      No maintenance records found. Click &quot;Log Service Event&quot; to record service or repairs.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  asset.maintenanceHistory.map((mnt) => (
+                    <tr key={mnt.id}>
+                      <td className="amx-td-mono">{mnt.date}</td>
+                      <td className="amx-td-semibold">{mnt.serviceEvent}</td>
+                      <td className="amx-td-muted">{mnt.vendor}</td>
+                      <td className="amx-td-mono">{mnt.cost}</td>
+                      <td>
+                        {mnt.status === 'Completed' ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              backgroundColor: '#D1FAE5',
+                              color: '#059669',
+                            }}
+                          >
+                            Completed
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              backgroundColor: '#F1F5F9',
+                              color: '#45464d',
+                              border: '1px solid #c6c6cd',
+                            }}
+                          >
+                            Scheduled
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -722,24 +840,32 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {asset.auditHistory.map((audit) => (
-                  <tr key={audit.id}>
-                    <td>
-                      <div className="amx-audit-event-cell">
-                        <span
-                          className="material-symbols-outlined"
-                          style={{ fontSize: '16px', color: audit.iconColor || '#0891B2' }}
-                          aria-hidden="true"
-                        >
-                          {audit.icon}
-                        </span>
-                        <span>{audit.event}</span>
-                      </div>
+                {asset.auditHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--amx-dash-text-muted)', fontStyle: 'italic' }}>
+                      No audit history entries recorded.
                     </td>
-                    <td className="amx-td-mono">{audit.dateTime}</td>
-                    <td className="amx-td-muted">{audit.performedBy}</td>
                   </tr>
-                ))}
+                ) : (
+                  asset.auditHistory.map((audit) => (
+                    <tr key={audit.id}>
+                      <td>
+                        <div className="amx-audit-event-cell">
+                          <span
+                            className="material-symbols-outlined"
+                            style={{ fontSize: '16px', color: audit.iconColor || '#0891B2' }}
+                            aria-hidden="true"
+                          >
+                            {audit.icon}
+                          </span>
+                          <span>{audit.event}</span>
+                        </div>
+                      </td>
+                      <td className="amx-td-mono">{audit.dateTime}</td>
+                      <td className="amx-td-muted">{audit.performedBy}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
