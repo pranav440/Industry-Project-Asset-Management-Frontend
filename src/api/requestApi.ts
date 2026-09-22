@@ -13,7 +13,7 @@ export interface RequestHistoryApiRecord {
   note: string | null;
 }
 
-export interface RequestApiRecord {
+export interface RequestListItemApiRecord {
   request_id: string;
   requester_name: string;
   requester_email: string;
@@ -29,11 +29,14 @@ export interface RequestApiRecord {
   processing_guidelines: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface RequestApiRecord extends RequestListItemApiRecord {
   history: RequestHistoryApiRecord[];
 }
 
 export interface RequestListResponse {
-  items: RequestApiRecord[];
+  items: RequestListItemApiRecord[];
   total: number;
   page: number;
   page_size: number;

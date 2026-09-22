@@ -97,7 +97,7 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
   const summaryMetrics = useMemo(() => {
     const totalMaintCost = maintenance?.total_maintenance_cost ?? 0;
     const totalAssetVal = maintenance?.total_asset_value ?? 0;
-    const assetsMaintained = Object.keys(maintenanceByAsset).length;
+    const assetsMaintained = maintenance?.maintenance_details?.length ?? Object.keys(maintenanceByAsset).length;
 
     return {
       maintenanceCost: `₹${totalMaintCost.toLocaleString('en-IN')}`,
@@ -120,7 +120,7 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
     });
   }, [maintenance]);
 
-  const maintenanceRows = useMemo(() => Object.entries(maintenanceByAsset), [maintenanceByAsset]);
+  const maintenanceRows = useMemo(() => maintenance?.maintenance_details ?? [], [maintenance]);
   const totalPages = Math.max(1, Math.ceil(maintenanceRows.length / pageSize));
   const paginatedAssets = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -376,16 +376,16 @@ export const MaintenanceReportPage: React.FC<MaintenanceReportPageProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  paginatedAssets.map(([assetId, maintenanceCost]) => (
-                    <tr key={assetId}>
-                      <td style={{ fontFamily: 'JetBrains Mono', fontWeight: 600 }}>{assetId}</td>
-                      <td style={{ fontWeight: 600 }}>—</td>
-                      <td>—</td>
-                      <td className="amx-value-text">—</td>
-                      <td className="amx-cost-text">₹{maintenanceCost.toLocaleString('en-IN')}</td>
-                      <td>—</td>
+                  paginatedAssets.map((item) => (
+                    <tr key={item.asset_id}>
+                      <td style={{ fontFamily: 'JetBrains Mono', fontWeight: 600 }}>{item.asset_id}</td>
+                      <td style={{ fontWeight: 600 }}>{item.asset_name}</td>
+                      <td>{item.category}</td>
+                      <td className="amx-value-text">₹{item.asset_value.toLocaleString('en-IN')}</td>
+                      <td className="amx-cost-text">₹{item.maintenance_cost.toLocaleString('en-IN')}</td>
+                      <td>{item.last_service ? new Date(item.last_service).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
                       <td>
-                        <span className="amx-report-badge maintenance">Recorded maintenance</span>
+                        <span className="amx-report-badge maintenance">{item.maintenance_status}</span>
                       </td>
                     </tr>
                   ))

@@ -307,6 +307,9 @@ def test_reports_returns_admin_dashboard_contract():
 
     assert payload["maintenance_vs_asset_value"]["total_maintenance_cost"] == 4000.0
     assert payload["maintenance_vs_asset_value"]["total_asset_value"] == 310000.0
+    assert len(payload["maintenance_vs_asset_value"]["maintenance_details"]) == 2
+    assert payload["maintenance_vs_asset_value"]["maintenance_details"][0]["asset_name"] in {"Laptop A", "Laptop B"}
+    assert payload["maintenance_vs_asset_value"]["maintenance_details"][0]["maintenance_status"] == "Completed"
 
     assert payload["lifecycle"]["status_distribution"]["Disposed"] == 1
     assert payload["lifecycle"]["forecast"] is None

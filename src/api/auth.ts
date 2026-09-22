@@ -28,85 +28,38 @@ function errorMessage(body: ApiError, fallback: string): string {
   return fallback;
 }
 
-function createDevToken(userId: number, role: string, remember: boolean): string {
-  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const exp = Math.floor(Date.now() / 1000) + (remember ? 7 * 24 * 3600 : 8 * 3600);
-  const payload = btoa(
-    JSON.stringify({
-      sub: String(userId),
-      role: role,
-      exp: exp,
-      iat: Math.floor(Date.now() / 1000),
-    })
-  );
-  return `${header}.${payload}.dev_signature`;
-}
-
-const DEV_SEED_USERS: Record<string, { id: number; name: string; email: string; empId: string; role: UserRole }> = {
-  employee: { id: 1, name: 'Employee', email: 'employee@assetmx.local', empId: 'EMP001', role: 'employee' },
-  host: { id: 2, name: 'Host', email: 'host@assetmx.local', empId: 'HST001', role: 'host' },
-  admin: { id: 3, name: 'Admin', email: 'admin@assetmx.local', empId: 'ADM001', role: 'admin' },
-  guard: { id: 4, name: 'Guard', email: 'guard@assetmx.local', empId: 'GRD001', role: 'guard' },
-  superadmin: { id: 5, name: 'SuperAdmin', email: 'superadmin@assetmx.local', empId: 'SAD001', role: 'superadmin' },
-};
-
 export async function login(payload: LoginPayload): Promise<AuthUser> {
-  try {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        role: payload.role,
-        identifier: payload.identifier,
-        password: payload.password,
-        remember: Boolean(payload.remember),
-      }),
-    });
+  const response = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      role: payload.role,
+      identifier: payload.identifier,
+      password: payload.password,
+      remember: Boolean(payload.remember),
+    }),
+  });
 
-    const body = (await response.json().catch(() => ({}))) as LoginResponse & ApiError;
+  const body = (await response.json().catch(() => ({}))) as LoginResponse & ApiError;
 
-    if (response.ok) {
-      saveSession(body.access_token, body.user, Boolean(payload.remember));
-      return body.user;
-    } else if (response.status === 401 || response.status === 422) {
-      throw new Error(errorMessage(body, 'Invalid credentials'));
-    }
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message !== 'Failed to fetch' && !err.message.includes('fetch')) {
-      throw err;
-    }
+  if (response.ok) {
+    saveSession(body.access_token, body.user, Boolean(payload.remember));
+    return body.user;
   }
 
-  // Seamless fallback for local frontend standalone testing when backend is not running
-  const devProfile = DEV_SEED_USERS[payload.role] || DEV_SEED_USERS.admin;
-  const user: AuthUser = {
-    id: devProfile.id,
-    full_name: devProfile.name,
-    email: payload.identifier.includes('@') ? payload.identifier : devProfile.email,
-    employee_id: payload.identifier.includes('@') ? devProfile.empId : payload.identifier,
-    role: payload.role,
-  };
-  const token = createDevToken(user.id, user.role, Boolean(payload.remember));
-  saveSession(token, user, Boolean(payload.remember));
-  return user;
+  throw new Error(errorMessage(body, response.status === 401 || response.status === 422 ? 'Invalid credentials' : 'Unable to log in.'));
 }
 
 async function postAuth<T>(path: string, body: unknown): Promise<T> {
-  try {
-    const response = await fetch(`/api/auth/${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const result = (await response.json().catch(() => ({}))) as T & ApiError;
-    if (response.ok) return result;
-    if (response.status < 500) throw new Error(errorMessage(result, 'Request failed'));
-  } catch (err: unknown) {
-    if (err instanceof Error && !err.message.includes('fetch') && err.message !== 'Failed to fetch') {
-      throw err;
-    }
-  }
-  return { detail: 'Request processed successfully (Offline Mode)' } as T;
+  const response = await fetch(`/api/auth/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const result = (await response.json().catch(() => ({}))) as T & ApiError;
+
+  if (response.ok) return result;
+  throw new Error(errorMessage(result, 'Authentication request failed.'));
 }
 
 export function requestPasswordReset(identifier: string) {

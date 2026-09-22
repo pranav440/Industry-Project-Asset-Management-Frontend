@@ -57,6 +57,16 @@ export interface AdminReportsApiResponse {
     total_maintenance_cost: number;
     total_asset_value: number;
     maintenance_by_asset: Record<string, number>;
+    maintenance_details: Array<{
+      asset_id: string;
+      asset_name: string;
+      category: string;
+      asset_value: number;
+      maintenance_cost: number;
+      last_service: string | null;
+      maintenance_status: string;
+      maintenance_type: string;
+    }>;
     maintenance_cost_ratio: number;
     asset_value_by_category: Record<string, number>;
     maintenance_cost_by_category: Record<string, number>;

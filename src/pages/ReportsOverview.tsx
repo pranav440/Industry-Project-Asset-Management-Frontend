@@ -188,10 +188,20 @@ export const ReportsOverviewPage: React.FC<ReportsOverviewPageProps> = ({
   const maintenance = report?.maintenance_vs_asset_value ?? {
     total_maintenance_cost: 0,
     total_asset_value: 0,
-    maintenance_by_asset: {},
+    maintenance_by_asset: {} as Record<string, number>,
+    maintenance_details: [] as Array<{
+      asset_id: string;
+      asset_name: string;
+      category: string;
+      asset_value: number;
+      maintenance_cost: number;
+      last_service: string | null;
+      maintenance_status: string;
+      maintenance_type: string;
+    }>,
     maintenance_cost_ratio: 0,
-    asset_value_by_category: {},
-    maintenance_cost_by_category: {},
+    asset_value_by_category: {} as Record<string, number>,
+    maintenance_cost_by_category: {} as Record<string, number>,
   };
 
   const lifecycle = report?.lifecycle ?? {

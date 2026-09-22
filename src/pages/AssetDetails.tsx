@@ -20,61 +20,91 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
 
   const [asset, setAsset] = useState<AssetDetailsData | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [formState, setFormState] = useState({
+    name: '',
+    category: '',
+    specification: '',
+    location: '',
+    custodian: '',
+    purchaseDate: '',
+    vendorName: '',
+    totalCost: '',
+    warrantyPeriod: '',
+    serialNumber: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const mapAssetRecord = (record: Awaited<ReturnType<typeof getAsset>>): AssetDetailsData => ({
+    id: record.asset_id,
+    name: record.name,
+    status: record.status,
+    category: record.category,
+    specification: record.specification || 'Not available',
+    serialNumber: record.serial_number || 'Not available',
+    assignedCustodianDepartment: record.custodian,
+    assignedCustodianName: 'Not available',
+    assignedLocation: record.location,
+    assignedSubLocation: 'Not available',
+    warrantyStatus: record.warranty_period,
+    warrantyCover: 'Not available',
+    lifecycleStageText: 'Not available',
+    estimatedEndOfLife: 'Not available',
+    qrVerifiedText: 'Backend generated',
+    qrExplanation: `Backend QR association: ${record.qr_code_value}`,
+    lifecycleStages: [],
+    acquisition: {
+      purchaseDate: record.purchase_date,
+      vendorName: record.vendor_name,
+      invoiceReference: record.invoice_reference || 'Not available',
+      poNumber: 'Not available',
+      totalCost: record.total_cost,
+      warrantyPeriod: record.warranty_period,
+      configuredDepreciation: record.depreciation || 'Not available',
+    },
+    custody: {
+      assignedCustodian: record.custodian,
+      department: 'Not available',
+      assignedLocation: record.location,
+      allocationDate: record.allocation_date || 'Not available',
+      designatedUser: 'Not available',
+      accountabilityStatus: 'Not available',
+    },
+    movementHistory: record.movement_history.map((movement: AssetMovementRecord) => ({
+      id: movement.movement_id,
+      date: new Date(movement.initiated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      movementType: 'Transfer',
+      from: movement.from_location,
+      to: movement.to_location,
+      custodian: movement.to_custodian,
+      verification: movement.status,
+    })),
+    maintenanceHistory: [],
+    auditHistory: [],
+    qrCodeDataUrl: record.qr_code_data_url,
+  });
 
   useEffect(() => {
     let active = true;
     setAsset(null);
     setApiError(null);
+    setIsEditing(false);
     getAsset(assetId)
       .then((record) => {
         if (!active) return;
-        setAsset({
-          id: record.asset_id,
-          name: record.name,
-          status: record.status,
-          category: record.category,
-          specification: record.specification || 'Not available',
-          serialNumber: record.serial_number || 'Not available',
-          assignedCustodianDepartment: record.custodian,
-          assignedCustodianName: 'Not available',
-          assignedLocation: record.location,
-          assignedSubLocation: 'Not available',
-          warrantyStatus: record.warranty_period,
-          warrantyCover: 'Not available',
-          lifecycleStageText: 'Not available',
-          estimatedEndOfLife: 'Not available',
-          qrVerifiedText: 'Backend generated',
-          qrExplanation: `Backend QR association: ${record.qr_code_value}`,
-          lifecycleStages: [],
-          acquisition: {
-            purchaseDate: record.purchase_date,
-            vendorName: record.vendor_name,
-            invoiceReference: record.invoice_reference || 'Not available',
-            poNumber: 'Not available',
-            totalCost: record.total_cost,
-            warrantyPeriod: record.warranty_period,
-            configuredDepreciation: record.depreciation || 'Not available',
-          },
-          custody: {
-            assignedCustodian: record.custodian,
-            department: 'Not available',
-            assignedLocation: record.location,
-            allocationDate: record.allocation_date || 'Not available',
-            designatedUser: 'Not available',
-            accountabilityStatus: 'Not available',
-          },
-          movementHistory: record.movement_history.map((movement: AssetMovementRecord) => ({
-            id: movement.movement_id,
-            date: new Date(movement.initiated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-            movementType: 'Transfer',
-            from: movement.from_location,
-            to: movement.to_location,
-            custodian: movement.to_custodian,
-            verification: movement.status,
-          })),
-          maintenanceHistory: [],
-          auditHistory: [],
-          qrCodeDataUrl: record.qr_code_data_url,
+        const mapped = mapAssetRecord(record);
+        setAsset(mapped);
+        setFormState({
+          name: mapped.name,
+          category: mapped.category,
+          specification: mapped.specification === 'Not available' ? '' : mapped.specification,
+          location: mapped.assignedLocation,
+          custodian: mapped.assignedCustodianDepartment,
+          purchaseDate: mapped.acquisition.purchaseDate,
+          vendorName: mapped.acquisition.vendorName,
+          totalCost: mapped.acquisition.totalCost,
+          warrantyPeriod: mapped.acquisition.warrantyPeriod,
+          serialNumber: mapped.serialNumber === 'Not available' ? '' : mapped.serialNumber,
         });
       })
       .catch((error: unknown) => {
@@ -86,6 +116,32 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
       active = false;
     };
   }, [assetId]);
+
+  const handleEditSave = async () => {
+    if (!asset) return;
+    setSaving(true);
+    try {
+      const result = await import('../api/assetApi').then(({ updateAsset }) => updateAsset(asset.id, {
+        name: formState.name.trim(),
+        category: formState.category.trim(),
+        specification: formState.specification.trim() || undefined,
+        location: formState.location.trim(),
+        custodian: formState.custodian.trim(),
+        purchaseDate: formState.purchaseDate,
+        vendorName: formState.vendorName.trim(),
+        totalCost: formState.totalCost.trim(),
+        warrantyPeriod: formState.warrantyPeriod.trim(),
+      }));
+      const mapped = mapAssetRecord(result);
+      setAsset(mapped);
+      setIsEditing(false);
+      showToast(`Asset ${asset.id} updated successfully.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Asset update failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -215,16 +271,72 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
             <button
               type="button"
               className="amx-action-btn-primary"
-              onClick={() => showToast(`Edit Asset details for ${asset.id} — Future module workflow.`)}
+              onClick={() => setIsEditing((current) => !current)}
               aria-label="Edit Asset"
             >
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
                 edit
               </span>
-              <span>Edit Asset</span>
+              <span>{isEditing ? 'Cancel Edit' : 'Edit Asset'}</span>
             </button>
           </div>
         </div>
+
+        {isEditing && (
+          <div className="amx-details-card" style={{ marginBottom: '20px' }}>
+            <div className="amx-card-header-bar">
+              <h3 className="amx-card-heading">Edit Asset Details</h3>
+            </div>
+            <div className="amx-2col-fields-grid" style={{ marginTop: '16px' }}>
+              <label className="amx-field-group">
+                <span className="amx-field-label">Asset Name</span>
+                <input value={formState.name} onChange={(e) => setFormState((current) => ({ ...current, name: e.target.value }))} />
+              </label>
+              <label className="amx-field-group">
+                <span className="amx-field-label">Category</span>
+                <input value={formState.category} onChange={(e) => setFormState((current) => ({ ...current, category: e.target.value }))} />
+              </label>
+              <label className="amx-field-group">
+                <span className="amx-field-label">Specification</span>
+                <input value={formState.specification} onChange={(e) => setFormState((current) => ({ ...current, specification: e.target.value }))} />
+              </label>
+              <label className="amx-field-group">
+                <span className="amx-field-label">Serial Number</span>
+                <input value={formState.serialNumber} onChange={(e) => setFormState((current) => ({ ...current, serialNumber: e.target.value }))} />
+              </label>
+              <label className="amx-field-group">
+                <span className="amx-field-label">Location</span>
+                <input value={formState.location} onChange={(e) => setFormState((current) => ({ ...current, location: e.target.value }))} />
+              </label>
+              <label className="amx-field-group">
+                <span className="amx-field-label">Custodian</span>
+                <input value={formState.custodian} onChange={(e) => setFormState((current) => ({ ...current, custodian: e.target.value }))} />
+              </label>
+              <label className="amx-field-group">
+                <span className="amx-field-label">Purchase Date</span>
+                <input type="date" value={formState.purchaseDate} onChange={(e) => setFormState((current) => ({ ...current, purchaseDate: e.target.value }))} />
+              </label>
+              <label className="amx-field-group">
+                <span className="amx-field-label">Vendor Name</span>
+                <input value={formState.vendorName} onChange={(e) => setFormState((current) => ({ ...current, vendorName: e.target.value }))} />
+              </label>
+              <label className="amx-field-group">
+                <span className="amx-field-label">Total Cost</span>
+                <input value={formState.totalCost} onChange={(e) => setFormState((current) => ({ ...current, totalCost: e.target.value }))} />
+              </label>
+              <label className="amx-field-group">
+                <span className="amx-field-label">Warranty Period</span>
+                <input value={formState.warrantyPeriod} onChange={(e) => setFormState((current) => ({ ...current, warrantyPeriod: e.target.value }))} />
+              </label>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+              <button type="button" className="amx-action-btn-secondary" onClick={() => setIsEditing(false)}>Cancel</button>
+              <button type="button" className="amx-action-btn-primary" onClick={handleEditSave} disabled={saving}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 1. Asset Summary & QR Identification Grid */}
         <div className="amx-summary-grid">

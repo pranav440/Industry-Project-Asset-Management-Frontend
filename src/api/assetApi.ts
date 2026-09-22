@@ -305,8 +305,23 @@ export function registerNewAsset(payload: NewAssetPayload): Promise<AssetRecord>
 }
 
 export function updateAsset(assetId: string, payload: Partial<NewAssetPayload> & { status?: AssetStatus }): Promise<AssetRecord> {
+  const normalizedPayload: Record<string, unknown> = {};
+
+  if (payload.name !== undefined) normalizedPayload.name = payload.name;
+  if (payload.status !== undefined) normalizedPayload.status = payload.status;
+  if (payload.category !== undefined) normalizedPayload.category = payload.category;
+  if (payload.specification !== undefined) normalizedPayload.specification = payload.specification;
+  if (payload.location !== undefined) normalizedPayload.location = payload.location;
+  if (payload.custodian !== undefined) normalizedPayload.custodian = payload.custodian;
+  if (payload.purchaseDate !== undefined) normalizedPayload.purchase_date = payload.purchaseDate;
+  if (payload.vendorName !== undefined) normalizedPayload.vendor_name = payload.vendorName;
+  if (payload.totalCost !== undefined) normalizedPayload.total_cost = payload.totalCost;
+  if (payload.warrantyPeriod !== undefined) normalizedPayload.warranty_period = payload.warrantyPeriod;
+  if (payload.invoiceReference !== undefined) normalizedPayload.invoice_reference = payload.invoiceReference;
+  if (payload.documents !== undefined) normalizedPayload.documents = payload.documents;
+
   return request<AssetRecord>(`/api/assets/${encodeURIComponent(assetId)}`, {
     method: 'PUT',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(normalizedPayload),
   });
 }

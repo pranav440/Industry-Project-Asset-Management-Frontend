@@ -91,31 +91,26 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
     })
       .then((result) => {
         if (!active) return;
-        const rows = result.items.map((item) => ({
-          id: item.request_id,
-          requesterName: item.requester_name,
-          requesterEmail: item.requester_email,
-          department: item.department,
-          requestType: item.request_type,
-          requestedItem: item.requested_item,
-          category: item.category,
-          quantity: item.quantity,
-          priority: item.priority,
-          requestDate: item.request_date,
-          status: item.status,
-          justification: item.justification,
-          processingGuidelines: item.processing_guidelines,
-          history: item.history.map((entry) => ({
-            id: entry.history_id,
-            timestamp: entry.timestamp,
-            stage: entry.stage,
-            action: entry.action,
-            performedBy: entry.performed_by,
-            note: entry.note ?? undefined,
-          })),
-        }));
+        const rows = Array.isArray(result.items)
+          ? result.items.map((item) => ({
+              id: item.request_id,
+              requesterName: item.requester_name,
+              requesterEmail: item.requester_email,
+              department: item.department,
+              requestType: item.request_type,
+              requestedItem: item.requested_item,
+              category: item.category,
+              quantity: item.quantity,
+              priority: item.priority,
+              requestDate: item.request_date,
+              status: item.status,
+              justification: item.justification,
+              processingGuidelines: item.processing_guidelines,
+              history: [],
+            }))
+          : [];
         setRequests(rows);
-        setTotal(result.total);
+        setTotal(Number(result.total ?? 0));
       })
       .catch((error: unknown) => {
         if (!active) return;

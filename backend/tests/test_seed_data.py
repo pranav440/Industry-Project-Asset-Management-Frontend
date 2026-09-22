@@ -55,6 +55,9 @@ def test_development_seed_is_idempotent_and_reuses_existing_assets():
         assert db.query(GatePassHistory).count() > 0
         assert db.query(AuditLog).count() > 0
 
+        pending_requests = db.scalars(select(Request).where(Request.status == 'Pending')).all()
+        assert any(request.request_id == 'REQ-DEV-0001' for request in pending_requests)
+
         assert db.query(Maintenance).count() == db.query(Maintenance).count()
         assert db.query(Consumable).count() == db.query(Consumable).count()
         assert db.query(Request).count() == db.query(Request).count()

@@ -13,7 +13,7 @@ from app.routers import dashboard
 from app.routers import gate_passes
 from app.routers import reports
 from app.routers import requests
-from app.seed import seed_demo_assets, seed_users
+from app.seed import seed_demo_assets, seed_development_demo_data, seed_users
 
 
 @asynccontextmanager
@@ -24,6 +24,7 @@ async def lifespan(_app: FastAPI):
     try:
         seed_users(db)
         seed_demo_assets(db)
+        seed_development_demo_data(db)
     finally:
         db.close()
     yield

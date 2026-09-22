@@ -161,6 +161,24 @@ def get_admin_reports(
         if asset is not None:
             maintenance_asset_value += _as_float(asset.total_cost)
 
+    maintenance_details = []
+    maintenance_by_asset: dict[str, float] = {}
+    for record in maintenance_records:
+        asset = db.get(Asset, record.asset_id)
+        asset_key = asset.asset_id if asset is not None else str(record.asset_id)
+        maintenance_by_asset[asset_key] = maintenance_by_asset.get(asset_key, 0.0) + _as_float(record.maintenance_cost)
+        maintenance_details.append({
+            "asset_id": asset_key,
+            "asset_name": asset.name if asset is not None else "Unknown Asset",
+            "category": asset.category if asset is not None else "Unknown",
+            "asset_value": _as_float(asset.total_cost) if asset is not None else 0.0,
+            "maintenance_cost": _as_float(record.maintenance_cost),
+            "last_service": record.service_date.isoformat() if record.service_date else None,
+            "maintenance_status": record.status.value if record.status is not None else "Completed",
+            "maintenance_type": record.maintenance_type.value if record.maintenance_type is not None else "Preventive",
+        })
+    maintenance_details.sort(key=lambda item: (item["last_service"] or "", item["asset_name"]), reverse=True)
+
     total_asset_value = sum(_as_float(asset.total_cost) for asset in filtered_assets)
 
     lifecycle_status_counts = {status.value: 0 for status in AssetStatus}
@@ -225,10 +243,8 @@ def get_admin_reports(
         "maintenance_vs_asset_value": {
             "total_maintenance_cost": float(round(maintenance_cost, 2)),
             "total_asset_value": float(round(total_asset_value, 2)),
-            "maintenance_by_asset": {
-                db.get(Asset, record.asset_id).asset_id if db.get(Asset, record.asset_id) else str(record.asset_id): _as_float(record.maintenance_cost)
-                for record in maintenance_records
-            },
+            "maintenance_by_asset": maintenance_by_asset,
+            "maintenance_details": maintenance_details,
             "maintenance_cost_ratio": (
                 round((maintenance_cost / total_asset_value) * 100, 2) if total_asset_value else 0.0
             ),
