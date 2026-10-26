@@ -22,13 +22,17 @@ import RequestsReportPage from './pages/RequestsReport';
 import ReassignmentReportPage from './pages/ReassignmentReport';
 import MaintenanceReportPage from './pages/MaintenanceReport';
 import DisposalReportPage from './pages/DisposalReport';
-import { clearSession, getToken, getTokenExpiry, replaceUser } from './auth/session';
+import EmployeeDashboardPage from './pages/EmployeeDashboard';
+import EmployeeCreateRequestPage from './pages/EmployeeCreateRequest';
+import { clearSession, getToken, getTokenExpiry, getUser, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
+
 
 type Route =
   | 'login'
   | 'forgot-password'
   | 'dashboard'
+  | 'create-request'
   | 'assets'
   | 'asset-details'
   | 'asset-transfer'
@@ -55,6 +59,9 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
     const path = window.location.pathname;
     if (path.startsWith('/forgot-password')) {
       return { name: 'forgot-password' };
+    }
+    if (path === '/create-request' || path === '/create-request/') {
+      return { name: 'create-request' };
     }
     // Reports Routes
     if (path === '/reports/utilization' || path === '/reports/utilization/') {
@@ -224,7 +231,40 @@ export default function App() {
     navigate('/login');
   };
 
+  const currentUser = getUser();
+  const isEmployee = currentUser?.role === 'employee';
+
+  useEffect(() => {
+    if (sessionChecked && getToken()) {
+      const user = getUser();
+      if (
+        user?.role === 'employee' &&
+        route !== 'dashboard' &&
+        route !== 'create-request' &&
+        route !== 'login' &&
+        route !== 'forgot-password'
+      ) {
+        window.history.replaceState({}, '', '/dashboard');
+        setRouteInfo({ name: 'dashboard' });
+      }
+    }
+  }, [route, sessionChecked]);
+
   const handleSubRouteNav = (subRoute: string) => {
+    if (isEmployee) {
+      if (subRoute === 'dashboard') {
+        navigate('/dashboard');
+      } else if (subRoute === 'create-request') {
+        navigate('/create-request');
+      } else if (subRoute === 'signout' || subRoute === 'login') {
+        signOut();
+      } else {
+        // Unimplemented employee subroutes remain on dashboard for this phase
+        navigate('/dashboard');
+      }
+      return;
+    }
+
     if (subRoute === 'dashboard') {
       navigate('/dashboard');
     } else if (subRoute === 'assets') {
@@ -255,6 +295,7 @@ export default function App() {
       navigate(`/${subRoute}`);
     }
   };
+
 
   if (route === 'forgot-password') {
     return (
@@ -473,6 +514,15 @@ export default function App() {
 
   // Dashboard Route
   if (route === 'dashboard' && getToken()) {
+    if (isEmployee) {
+      return (
+        <EmployeeDashboardPage
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
+
     return (
       <DashboardPage
         onNavigate={handleSubRouteNav}
@@ -480,6 +530,17 @@ export default function App() {
       />
     );
   }
+
+  // Employee Create Request Route
+  if (route === 'create-request' && getToken()) {
+    return (
+      <EmployeeCreateRequestPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
 
   return (
     <LoginPage

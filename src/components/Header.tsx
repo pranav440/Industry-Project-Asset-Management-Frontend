@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getUser, type UserRole } from '../auth/session';
 
 interface HeaderProps {
   onSearch?: (query: string) => void;
@@ -7,6 +8,9 @@ interface HeaderProps {
   onHelpClick?: () => void;
   onProfileClick?: () => void;
   searchPlaceholder?: string;
+  userName?: string;
+  userRoleSubtitle?: string;
+  role?: UserRole;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,8 +20,15 @@ export const Header: React.FC<HeaderProps> = ({
   onHelpClick,
   onProfileClick,
   searchPlaceholder = 'Search assets, requests...',
+  userName,
+  userRoleSubtitle,
+  role,
 }) => {
   const [internalVal, setInternalVal] = useState(searchValue ?? '');
+  const currentUser = getUser();
+  const resolvedRole = role ?? currentUser?.role ?? 'admin';
+  const resolvedName = userName ?? (resolvedRole === 'employee' ? (currentUser?.full_name || 'Marcus Vance') : currentUser?.full_name);
+  const resolvedSubtitle = userRoleSubtitle ?? (resolvedRole === 'employee' ? 'Product Design (Employee)' : 'Administrator (Admin)');
 
   useEffect(() => {
     if (searchValue !== undefined) {
@@ -55,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           className="amx-header-btn"
-          aria-label="1 unread notification: Low stock alerts detected"
+          aria-label="1 unread notification"
           title="Notifications"
           onClick={onNotificationsClick}
         >
@@ -73,9 +84,40 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="material-symbols-outlined" aria-hidden="true">help_outline</span>
         </button>
 
+        {resolvedName && (
+          <div
+            className="amx-header-user-meta"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              marginRight: '2px',
+            }}
+          >
+            <span
+              style={{
+                fontSize: '13.5px',
+                fontWeight: 600,
+                color: 'var(--amx-dash-text)',
+                lineHeight: 1.2,
+              }}
+            >
+              {resolvedName}
+            </span>
+            <span
+              style={{
+                fontSize: '11px',
+                color: 'var(--amx-dash-text-muted)',
+              }}
+            >
+              {resolvedSubtitle}
+            </span>
+          </div>
+        )}
+
         <div
           className="amx-user-avatar"
-          title="User Profile (Admin)"
+          title={`User Profile (${resolvedRole})`}
           role="button"
           tabIndex={0}
           aria-label="User Profile menu"
@@ -94,3 +136,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+

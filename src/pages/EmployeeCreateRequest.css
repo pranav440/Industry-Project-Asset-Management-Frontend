@@ -1,0 +1,1153 @@
+/* =====================================================================
+   AssetMX Employee Create Request Styles — Frozen Stitch Design
+   ===================================================================== */
+
+.amx-cr-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 1360px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* -------------------------------------------------------------
+   Top Breadcrumbs & Page Header
+   ------------------------------------------------------------- */
+.amx-cr-header-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.amx-cr-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-cr-crumb-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--amx-dash-text-muted, #76777d);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.amx-cr-crumb-link:hover {
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-cr-crumb-sep {
+  color: var(--amx-dash-border, #c6c6cd);
+}
+
+.amx-cr-crumb-current {
+  color: var(--amx-dash-text, #191c1e);
+  font-weight: 600;
+}
+
+.amx-cr-title-row {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .amx-cr-title-row {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.amx-cr-title-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-cr-headline-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.amx-cr-headline {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 34px;
+  letter-spacing: -0.02em;
+  color: var(--amx-dash-text, #191c1e);
+  margin: 0;
+}
+
+.amx-cr-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background-color: var(--amx-dash-surface-high, #e6e8ea);
+  color: var(--amx-dash-cyan, #00687a);
+  border: 1px solid var(--amx-dash-border, #c6c6cd);
+}
+
+.amx-cr-subtitle {
+  font-size: 13.5px;
+  color: var(--amx-dash-text-muted, #76777d);
+  margin: 0;
+}
+
+.amx-cr-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+}
+
+@media (min-width: 768px) {
+  .amx-cr-header-actions {
+    align-self: auto;
+  }
+}
+
+.amx-cr-btn-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amx-dash-text-muted, #45464d);
+  background-color: var(--amx-dash-surface, #ffffff);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-cr-btn-secondary-action:hover {
+  color: var(--amx-dash-text, #191c1e);
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+}
+
+/* -------------------------------------------------------------
+   Validation Warning Banner
+   ------------------------------------------------------------- */
+.amx-cr-validation-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background-color: var(--amx-dash-error-bg, #ffdad6);
+  color: var(--amx-dash-error-text, #93000a);
+  border: 1px solid #ffb4ab;
+  box-shadow: 0 1px 3px rgba(186, 26, 26, 0.08);
+}
+
+.amx-cr-val-icon {
+  color: var(--amx-dash-error, #ba1a1a);
+  font-size: 22px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.amx-cr-val-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.amx-cr-val-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--amx-dash-error, #ba1a1a);
+}
+
+.amx-cr-val-desc {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-cr-val-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--amx-dash-text-muted, #45464d);
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.amx-cr-val-close-btn:hover {
+  color: var(--amx-dash-text, #191c1e);
+}
+
+/* -------------------------------------------------------------
+   Main Grid Layout (Left 8 Cols, Right 4 Cols)
+   ------------------------------------------------------------- */
+.amx-cr-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .amx-cr-grid {
+    grid-template-columns: 8fr 4fr;
+  }
+}
+
+.amx-cr-col-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.amx-cr-col-side {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@media (min-width: 1024px) {
+  .amx-cr-col-side {
+    position: sticky;
+    top: 88px;
+  }
+}
+
+/* -------------------------------------------------------------
+   Standard Card Styles
+   ------------------------------------------------------------- */
+.amx-cr-card {
+  background-color: var(--amx-dash-surface, #ffffff);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.amx-cr-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-cr-step-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-cr-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--amx-dash-cyan, #00687a);
+  flex-shrink: 0;
+}
+
+.amx-cr-step-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-cr-step-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+/* -------------------------------------------------------------
+   Step 01: Requisition Classification
+   ------------------------------------------------------------- */
+.amx-cr-type-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+@media (min-width: 640px) {
+  .amx-cr-type-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.amx-cr-type-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  border-radius: 12px;
+  border: 1.5px solid var(--amx-dash-border, #e0e3e5);
+  background-color: var(--amx-dash-surface, #ffffff);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.amx-cr-type-option:hover {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border-color: #bec6e0;
+}
+
+.amx-cr-type-option.selected {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border-color: var(--amx-dash-cyan, #00687a);
+  box-shadow: 0 0 0 1px var(--amx-dash-cyan, #00687a);
+}
+
+.amx-cr-type-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.amx-cr-type-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amx-dash-text-muted, #45464d);
+}
+
+.amx-cr-type-option.selected .amx-cr-type-icon-box {
+  color: var(--amx-dash-cyan, #00687a);
+  background-color: #dae2fd;
+}
+
+.amx-cr-type-check-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--amx-dash-cyan, #00687a);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.amx-cr-type-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+  margin-bottom: 4px;
+}
+
+.amx-cr-type-desc {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--amx-dash-text-muted, #45464d);
+  margin: 0;
+  flex: 1;
+}
+
+.amx-cr-type-tag {
+  margin-top: 14px;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-cr-type-option.selected .amx-cr-type-tag {
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+/* -------------------------------------------------------------
+   Step 02: Item Specifications
+   ------------------------------------------------------------- */
+.amx-cr-policy-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+}
+
+.amx-cr-policy-icon {
+  color: var(--amx-dash-cyan, #00687a);
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.amx-cr-policy-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.amx-cr-policy-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-cr-policy-desc {
+  font-size: 12.5px;
+  color: var(--amx-dash-text-muted, #45464d);
+  line-height: 1.4;
+}
+
+.amx-cr-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+@media (min-width: 640px) {
+  .amx-cr-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.amx-cr-field-col-full {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-cr-field-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-cr-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.amx-cr-required {
+  color: var(--amx-dash-error, #ba1a1a);
+}
+
+.amx-cr-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.amx-cr-input,
+.amx-cr-select,
+.amx-cr-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  color: var(--amx-dash-text, #191c1e);
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.amx-cr-input:focus,
+.amx-cr-select:focus,
+.amx-cr-textarea:focus {
+  outline: none;
+  border-color: var(--amx-dash-cyan, #00687a);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+}
+
+.amx-cr-input-icon {
+  position: absolute;
+  right: 12px;
+  color: var(--amx-dash-text-muted, #76777d);
+  font-size: 18px;
+  pointer-events: none;
+}
+
+.amx-cr-currency-prefix {
+  position: absolute;
+  left: 14px;
+  color: var(--amx-dash-text-muted, #76777d);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.amx-cr-input-with-currency {
+  padding-left: 28px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.amx-cr-field-hint {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+/* Stepper */
+.amx-cr-stepper {
+  display: flex;
+  align-items: center;
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.amx-cr-stepper-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amx-dash-text, #191c1e);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-cr-stepper-btn:hover {
+  background-color: var(--amx-dash-surface-high, #e6e8ea);
+}
+
+.amx-cr-stepper-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-cr-stepper-input:focus {
+  outline: none;
+}
+
+/* Priority Segments */
+.amx-cr-priority-group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.amx-cr-priority-btn {
+  padding: 9px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  color: var(--amx-dash-text, #191c1e);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-cr-priority-btn:hover {
+  background-color: var(--amx-dash-surface-container, #eceef0);
+}
+
+.amx-cr-priority-btn.active {
+  background-color: var(--amx-dash-cyan-bright, #57dffe);
+  color: #003640;
+  border-color: #008aa1;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 104, 122, 0.15);
+}
+
+/* -------------------------------------------------------------
+   Step 03: Operational Context
+   ------------------------------------------------------------- */
+.amx-cr-textarea {
+  resize: vertical;
+  min-height: 96px;
+  line-height: 1.5;
+}
+
+/* -------------------------------------------------------------
+   Step 04: Specifications & Memos
+   ------------------------------------------------------------- */
+.amx-cr-dropzone {
+  border: 1.5px dashed var(--amx-dash-border, #c6c6cd);
+  border-radius: 12px;
+  padding: 24px;
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.amx-cr-dropzone:hover {
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  border-color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-cr-dropzone-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amx-dash-cyan, #00687a);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.amx-cr-dropzone-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-cr-dropzone-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-cr-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.amx-cr-files-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-cr-file-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+}
+
+.amx-cr-file-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.amx-cr-file-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background-color: var(--amx-dash-surface-high, #e6e8ea);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amx-dash-text, #191c1e);
+  flex-shrink: 0;
+}
+
+.amx-cr-file-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.amx-cr-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--amx-dash-text, #191c1e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amx-cr-file-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-cr-file-remove-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--amx-dash-error, #ba1a1a);
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.amx-cr-file-remove-btn:hover {
+  background-color: var(--amx-dash-error-bg, #ffdad6);
+}
+
+/* -------------------------------------------------------------
+   Right Sidebar Cards (Requester Profile & Submission Summary)
+   ------------------------------------------------------------- */
+.amx-cr-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.amx-cr-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: var(--amx-dash-navy-deep, #0f172a);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.amx-cr-profile-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.amx-cr-profile-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amx-cr-profile-role {
+  font-size: 12.5px;
+  color: var(--amx-dash-text-muted, #45464d);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amx-cr-meta-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+}
+
+.amx-cr-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.amx-cr-meta-label {
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-cr-meta-value {
+  font-weight: 600;
+  color: var(--amx-dash-text, #191c1e);
+  text-align: right;
+}
+
+.amx-cr-policy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-cr-policy-note-icon {
+  font-size: 16px;
+  color: var(--amx-dash-cyan, #00687a);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Summary Card */
+.amx-cr-summary-lead {
+  font-size: 13px;
+  color: var(--amx-dash-text-muted, #45464d);
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* -------------------------------------------------------------
+   Bottom Sticky Submission Bar
+   ------------------------------------------------------------- */
+.amx-cr-bottom-bar {
+  background-color: var(--amx-dash-surface, #ffffff);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 12px;
+  padding: 18px 24px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .amx-cr-bottom-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.amx-cr-bottom-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 620px;
+}
+
+.amx-cr-bottom-info-icon {
+  font-size: 18px;
+  color: var(--amx-dash-text-muted, #76777d);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.amx-cr-bottom-info-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--amx-dash-text-muted, #76777d);
+  margin: 0;
+}
+
+.amx-cr-bottom-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .amx-cr-bottom-actions {
+    width: auto;
+    justify-content: flex-end;
+  }
+}
+
+.amx-cr-btn-cancel {
+  flex: 1;
+  padding: 10px 18px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  color: var(--amx-dash-text, #191c1e);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+@media (min-width: 768px) {
+  .amx-cr-btn-cancel {
+    flex: initial;
+  }
+}
+
+.amx-cr-btn-cancel:hover {
+  background-color: var(--amx-dash-surface-high, #e6e8ea);
+}
+
+.amx-cr-btn-submit {
+  flex: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-cyan, #00687a);
+  border: none;
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 104, 122, 0.25);
+  transition: all 0.15s ease;
+}
+
+@media (min-width: 768px) {
+  .amx-cr-btn-submit {
+    flex: initial;
+  }
+}
+
+.amx-cr-btn-submit:hover:not(:disabled) {
+  background-color: #004e5c;
+  box-shadow: 0 4px 10px rgba(0, 104, 122, 0.35);
+}
+
+.amx-cr-btn-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* -------------------------------------------------------------
+   Interactive Confirmation Modal
+   ------------------------------------------------------------- */
+.amx-cr-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.amx-cr-modal-card {
+  background-color: var(--amx-dash-surface, #ffffff);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 14px;
+  padding: 28px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: amxModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes amxModalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.amx-cr-modal-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-cr-modal-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #dae2fd;
+  color: var(--amx-dash-cyan, #00687a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.amx-cr-modal-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--amx-dash-text-muted, #76777d);
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.amx-cr-modal-close-btn:hover {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-cr-modal-lead {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-cr-modal-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-cr-modal-headline {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+  margin: 0;
+}
+
+.amx-cr-modal-desc {
+  font-size: 13.5px;
+  color: var(--amx-dash-text-muted, #45464d);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.amx-cr-modal-details-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+}
+
+.amx-cr-modal-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+}
+
+.amx-cr-modal-detail-label {
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-cr-modal-id {
+  font-weight: 700;
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-cr-modal-status-pill {
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  color: var(--amx-dash-text, #191c1e);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.amx-cr-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.amx-cr-modal-btn-primary {
+  padding: 10px 20px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-cyan, #00687a);
+  border: none;
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-cr-modal-btn-primary:hover {
+  background-color: #004e5c;
+}
+
+/* -------------------------------------------------------------
+   Toast Notification
+   ------------------------------------------------------------- */
+.amx-cr-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background-color: var(--amx-dash-navy-deep, #0f172a);
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  z-index: 1000;
+  animation: amxToastSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes amxToastSlide {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
