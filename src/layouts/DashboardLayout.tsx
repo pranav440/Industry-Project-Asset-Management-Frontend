@@ -1,11 +1,15 @@
 import React from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
+import { type UserRole } from '../auth/session';
 import './DashboardLayout.css';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
   currentNav?: string;
+  role?: UserRole;
+  userName?: string;
+  userRoleSubtitle?: string;
   onNavigate?: (path: string) => void;
   onSignOut?: () => void;
   onSearch?: (query: string) => void;
@@ -20,6 +24,9 @@ interface DashboardLayoutProps {
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   children,
   currentNav = 'Dashboard',
+  role,
+  userName,
+  userRoleSubtitle,
   onNavigate,
   onSignOut,
   onSearch,
@@ -35,6 +42,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       {/* Full-height Sidebar */}
       <Sidebar
         currentNav={currentNav}
+        role={role}
         onNavigate={onNavigate}
         onSignOut={onSignOut}
         onAddAsset={onAddAsset}
@@ -50,6 +58,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           onHelpClick={onHelpClick}
           onProfileClick={onProfileClick}
           searchPlaceholder={searchPlaceholder}
+          role={role}
+          userName={userName}
+          userRoleSubtitle={userRoleSubtitle}
         />
 
         {/* Scrollable Content */}
@@ -62,3 +73,4 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     </div>
   );
 };
+
