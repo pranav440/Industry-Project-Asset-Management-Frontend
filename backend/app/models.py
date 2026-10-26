@@ -1,3 +1,4 @@
+import decimal
 import enum
 from datetime import date, datetime
 
@@ -90,6 +91,12 @@ class Request(Base):
     )
     justification: Mapped[str] = mapped_column(Text)
     processing_guidelines: Mapped[str] = mapped_column(Text)
+    request_source: Mapped[str | None] = mapped_column(String(64), nullable=True, default="Internal", server_default="Internal")
+    date_received: Mapped[date | None] = mapped_column(Date, nullable=True)
+    external_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_info: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    estimated_cost: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    procurement_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -119,6 +126,28 @@ class RequestHistory(Base):
     action: Mapped[str] = mapped_column(String(120))
     performed_by: Mapped[str] = mapped_column(String(160))
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class RequestAttachment(Base):
+    __tablename__ = "request_attachments"
+    __table_args__ = (
+        UniqueConstraint("attachment_id", name="uq_request_attachments_attachment_id"),
+        UniqueConstraint("storage_key", name="uq_request_attachments_storage_key"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    attachment_id: Mapped[str] = mapped_column(String(64), index=True)
+    request_id: Mapped[str] = mapped_column(ForeignKey("requests.request_id"), index=True)
+    original_filename: Mapped[str] = mapped_column(String(255))
+    storage_key: Mapped[str] = mapped_column(String(255), index=True)
+    content_type: Mapped[str] = mapped_column(String(120))
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploader_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
 
 
 class GatePassType(str, enum.Enum):
@@ -434,3 +463,27 @@ class ConsumableIssue(Base):
     request_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     issued_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     remaining_stock: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class AssetValuation(Base):
+    __tablename__ = "asset_valuations"
+    __table_args__ = (
+        UniqueConstraint("valuation_id", name="uq_asset_valuations_valuation_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    valuation_id: Mapped[str] = mapped_column(String(64), index=True)
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.asset_id"), index=True)
+    effective_date: Mapped[date] = mapped_column(Date, nullable=False)
+    previous_value: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    new_recorded_value: Mapped[decimal.Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    formula_used: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, nullable=False)
+    reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_by: Mapped[str] = mapped_column(String(160), nullable=False)
+    updated_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )

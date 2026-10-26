@@ -13,6 +13,22 @@ export interface RequestHistoryApiRecord {
   note: string | null;
 }
 
+export interface RequestAttachmentApiRecord {
+  attachment_id: string;
+  id: string;
+  request_id: string;
+  original_filename: string;
+  name: string;
+  content_type: string;
+  type: string;
+  file_size: number;
+  size: string;
+  uploaded_at: string;
+  uploadDate: string;
+  download_url: string;
+  preview_url: string;
+}
+
 export interface RequestListItemApiRecord {
   request_id: string;
   requester_name: string;
@@ -27,12 +43,19 @@ export interface RequestListItemApiRecord {
   status: RequestStatus;
   justification: string;
   processing_guidelines: string;
+  request_source?: string;
+  date_received?: string | null;
+  external_reference?: string | null;
+  contact_info?: string | null;
+  estimated_cost?: string | null;
+  procurement_reference?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface RequestApiRecord extends RequestListItemApiRecord {
   history: RequestHistoryApiRecord[];
+  attachments: RequestAttachmentApiRecord[];
 }
 
 export interface RequestListResponse {
@@ -45,6 +68,25 @@ export interface RequestListResponse {
 export interface RequestTransitionPayload {
   target_status: RequestStatus;
   operational_note?: string;
+}
+
+export interface ExternalRequestCreatePayload {
+  request_source?: 'External';
+  date_received: string;
+  external_reference?: string;
+  requester_name: string;
+  department?: string;
+  contact_info?: string;
+  requester_email?: string;
+  request_type: RequestType;
+  requested_item: string;
+  category: string;
+  quantity: number;
+  estimated_cost?: string;
+  procurement_reference?: string;
+  priority: RequestPriority;
+  justification: string;
+  processing_guidelines?: string;
 }
 
 export class RequestApiError extends Error {
@@ -120,4 +162,131 @@ export function transitionRequest(
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export function createExternalRequest(
+  payload: ExternalRequestCreatePayload,
+): Promise<RequestApiRecord> {
+  return request<RequestApiRecord>('/api/requests/external', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function uploadRequestAttachment(
+  requestId: string,
+  file: File,
+): Promise<RequestAttachmentApiRecord> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`/api/requests/${encodeURIComponent(requestId)}/attachments`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const body = (await response.json().catch(() => ({}))) as { detail?: string | { msg: string }[] };
+
+  if (!response.ok) {
+    const detail = Array.isArray(body.detail) ? body.detail[0]?.msg : body.detail;
+    throw new RequestApiError(response.status, detail || `Attachment upload failed (${response.status})`);
+  }
+
+  return body as RequestAttachmentApiRecord;
+}
+
+export function listRequestAttachments(requestId: string): Promise<RequestAttachmentApiRecord[]> {
+  return request<RequestAttachmentApiRecord[]>(`/api/requests/${encodeURIComponent(requestId)}/attachments`);
+}
+
+export async function downloadRequestAttachment(
+  requestId: string,
+  attachmentId: string,
+  fallbackFilename?: string,
+): Promise<void> {
+  const token = getToken();
+  const response = await fetch(
+    `/api/requests/${encodeURIComponent(requestId)}/attachments/${encodeURIComponent(attachmentId)}/download`,
+    {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new RequestApiError(response.status, body.detail || `Download failed (${response.status})`);
+  }
+
+  const blob = await response.blob();
+  let filename = fallbackFilename || 'attachment';
+  const disposition = response.headers.get('Content-Disposition');
+  if (disposition) {
+    const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utfMatch && utfMatch[1]) {
+      try {
+        filename = decodeURIComponent(utfMatch[1]);
+      } catch {}
+    } else {
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      if (match && match[1]) {
+        filename = match[1];
+      }
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function previewRequestAttachment(
+  requestId: string,
+  attachmentId: string,
+): Promise<{ blob: Blob; contentType: string; objectUrl: string; isInline: boolean; filename: string }> {
+  const token = getToken();
+  const response = await fetch(
+    `/api/requests/${encodeURIComponent(requestId)}/attachments/${encodeURIComponent(attachmentId)}/preview`,
+    {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new RequestApiError(response.status, body.detail || `Preview failed (${response.status})`);
+  }
+
+  const blob = await response.blob();
+  const contentType = response.headers.get('Content-Type') || blob.type;
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const isInline = disposition.startsWith('inline');
+
+  let filename = 'attachment';
+  const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch && utfMatch[1]) {
+    try {
+      filename = decodeURIComponent(utfMatch[1]);
+    } catch {}
+  } else {
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  return { blob, contentType, objectUrl, isInline, filename };
 }

@@ -1,10 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { AssetStatusBadge } from '../components/AssetStatusBadge';
-import { getAsset, updateAsset, type AssetApiError, type AssetMovementRecord, type MaintenanceHistoryApiRecord, type AuditLogApiRecord } from '../api/assetApi';
+import {
+  getAsset,
+  updateAsset,
+  getAssetValuations,
+  recordAssetValuation,
+  type AssetApiError,
+  type AssetMovementRecord,
+  type MaintenanceHistoryApiRecord,
+  type AuditLogApiRecord,
+  type AssetValuationApiRecord,
+  type AssetValuationSummaryApiRecord,
+} from '../api/assetApi';
 import { type AssetDetailsData, type LifecycleStage, type AuditHistoryRecord, ASSET_DETAILS_MOCK_DATA, DEFAULT_ASSET_DETAILS_DATA } from '../data/assetDetailsData';
-import { getStoredValuations, addStoredValuation, type AssetValuationRecord } from '../data/valuationData';
-import { getUser } from '../auth/session';
 import './AssetDetails.css';
 
 interface AssetDetailsPageProps {
@@ -239,7 +248,11 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
   }, [assetId]);
 
   // Valuation & Depreciation State
-  const [valuationLedger, setValuationLedger] = useState<AssetValuationRecord[]>([]);
+  const [valuationLedger, setValuationLedger] = useState<AssetValuationApiRecord[]>([]);
+  const [valuationSummary, setValuationSummary] = useState<AssetValuationSummaryApiRecord | null>(null);
+  const [isLoadingValuations, setIsLoadingValuations] = useState(false);
+  const [valuationError, setValuationError] = useState<string | null>(null);
+  const [isSubmittingValuation, setIsSubmittingValuation] = useState(false);
   const [isValModalOpen, setIsValModalOpen] = useState(false);
   const [valModalStep, setValModalStep] = useState<'form' | 'review'>('form');
   const [valForm, setValForm] = useState({
@@ -257,9 +270,26 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
     notes?: string;
   }>({});
 
+  const loadValuations = async (targetId: string) => {
+    setIsLoadingValuations(true);
+    setValuationError(null);
+    try {
+      const data = await getAssetValuations(targetId);
+      setValuationLedger(data.items || []);
+      setValuationSummary(data.summary || null);
+    } catch (err: unknown) {
+      console.error('Failed to load asset valuation history', err);
+      setValuationError(err instanceof Error ? err.message : 'Failed to load valuation ledger');
+      setValuationLedger([]);
+      setValuationSummary(null);
+    } finally {
+      setIsLoadingValuations(false);
+    }
+  };
+
   useEffect(() => {
     if (assetId) {
-      setValuationLedger(getStoredValuations(assetId));
+      loadValuations(assetId);
     }
   }, [assetId]);
 
@@ -277,15 +307,22 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
     return `₹${num.toLocaleString('en-IN')}`;
   };
 
-  const originalAcquisitionCost = asset?.acquisition?.totalCost || 'Not recorded';
+  const originalAcquisitionCost =
+    valuationSummary?.originalAcquisitionCost || asset?.acquisition?.totalCost || 'Not recorded';
   const currentRecordedValue =
-    valuationLedger.length > 0
-      ? formatCurrency(valuationLedger[0].newRecordedValue)
-      : (asset?.acquisition?.totalCost || 'Not recorded');
+    valuationSummary?.currentRecordedValue || (
+      valuationLedger.length > 0
+        ? formatCurrency(valuationLedger[0].newRecordedValue)
+        : (asset?.acquisition?.totalCost || 'Not recorded')
+    );
   const lastValuationUpdate =
-    valuationLedger.length > 0
-      ? formatDisplayDate(valuationLedger[0].effectiveDate)
-      : 'Not recorded';
+    valuationSummary?.lastValuationUpdate
+      ? formatDisplayDate(valuationSummary.lastValuationUpdate)
+      : (
+        valuationLedger.length > 0
+          ? formatDisplayDate(valuationLedger[0].effectiveDate)
+          : 'Not recorded'
+      );
   const configuredDepreciationFormula = asset?.acquisition?.configuredDepreciation || 'Not recorded';
 
   const handleOpenValModal = () => {
@@ -318,10 +355,6 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
       errors.newRecordedValue = 'New Recorded Value must be a valid non-negative number';
     }
 
-    if (!valForm.formulaUsed.trim()) {
-      errors.formulaUsed = 'Formula Used is required';
-    }
-
     if (!valForm.notes.trim()) {
       errors.notes = 'Calculation Notes / Justification is required';
     }
@@ -332,29 +365,31 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
     }
   };
 
-  const handleConfirmValuation = () => {
+  const handleConfirmValuation = async () => {
     if (!asset) return;
     const parsedNew = parseCurrencyNumber(valForm.newRecordedValue);
     if (parsedNew === null) return;
 
-    const currentUser = getUser();
-    const updatedBy = currentUser
-      ? `${currentUser.full_name}${currentUser.role ? ` (${currentUser.role})` : ''}`
-      : 'Administrator';
+    setIsSubmittingValuation(true);
+    try {
+      await recordAssetValuation(asset.id, {
+        effectiveDate: valForm.effectiveDate,
+        newRecordedValue: parsedNew,
+        formulaUsed: valForm.formulaUsed.trim() || undefined,
+        notes: valForm.notes.trim(),
+        reference: valForm.reference.trim() || undefined,
+      });
 
-    const newEntry = addStoredValuation(asset.id, {
-      effectiveDate: valForm.effectiveDate,
-      previousValue: valForm.previousValue,
-      newRecordedValue: parsedNew,
-      formulaUsed: valForm.formulaUsed.trim(),
-      notes: valForm.notes.trim(),
-      reference: valForm.reference.trim() || undefined,
-      updatedBy,
-    });
-
-    setValuationLedger((prev) => [newEntry, ...prev]);
-    setIsValModalOpen(false);
-    showToast(`Valuation update of ${formatCurrency(parsedNew)} recorded for ${asset.id}.`);
+      await loadValuations(asset.id);
+      setIsValModalOpen(false);
+      showToast(`Valuation update of ${formatCurrency(parsedNew)} recorded for ${asset.id}.`);
+    } catch (err: unknown) {
+      console.error('Failed to record valuation update', err);
+      const msg = err instanceof Error ? err.message : 'Failed to record valuation update';
+      showToast(`Error: ${msg}`);
+    } finally {
+      setIsSubmittingValuation(false);
+    }
   };
 
   const handleEditSave = async () => {
@@ -841,7 +876,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
               <span className="amx-field-value" id="val-summary-last-update">{lastValuationUpdate}</span>
             </div>
             <div className="amx-field-group">
-              <span className="amx-field-label">Configured Depreciation Formula</span>
+              <span className="amx-field-label">Valuation / Depreciation Method</span>
               <span className="amx-field-value" id="val-summary-formula">{configuredDepreciationFormula}</span>
             </div>
           </div>
@@ -863,7 +898,37 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {valuationLedger.length === 0 ? (
+                  {isLoadingValuations ? (
+                    <tr>
+                      <td colSpan={7} className="amx-table-empty">
+                        <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--amx-dash-text-muted)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '28px', color: '#0891B2', display: 'block', marginBottom: '6px' }}>
+                            hourglass_top
+                          </span>
+                          Loading valuation history from ledger...
+                        </div>
+                      </td>
+                    </tr>
+                  ) : valuationError ? (
+                    <tr>
+                      <td colSpan={7} className="amx-table-empty">
+                        <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--amx-dash-danger, #ef4444)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '28px', display: 'block', marginBottom: '6px' }}>
+                            error
+                          </span>
+                          <div>{valuationError}</div>
+                          <button
+                            type="button"
+                            className="amx-action-btn secondary"
+                            style={{ marginTop: '10px' }}
+                            onClick={() => assetId && loadValuations(assetId)}
+                          >
+                            Retry Loading
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : valuationLedger.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="amx-table-empty">
                         <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--amx-dash-text-muted)' }}>
@@ -882,16 +947,16 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                         <td className="amx-td-mono" style={{ fontWeight: 700, color: 'var(--amx-dash-secondary)' }}>
                           {formatCurrency(val.newRecordedValue)}
                         </td>
-                        <td>{val.formulaUsed}</td>
+                        <td>{val.formulaUsed || '—'}</td>
                         <td className="amx-td-muted">{val.updatedBy || 'Not recorded'}</td>
                         <td className="amx-td-mono" style={{ fontSize: '11.5px', color: 'var(--amx-dash-text-muted)' }}>
-                          {new Date(val.recordedAt).toLocaleString('en-GB', {
+                          {val.recordedAt ? new Date(val.recordedAt).toLocaleString('en-GB', {
                             day: '2-digit',
                             month: 'short',
                             year: 'numeric',
                             hour: '2-digit',
                             minute: '2-digit',
-                          })}
+                          }) : '—'}
                         </td>
                         <td>
                           {val.reference && (
@@ -1378,11 +1443,12 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                     className="amx-action-btn primary"
                     onClick={handleConfirmValuation}
                     id="btn-confirm-record-valuation"
+                    disabled={isSubmittingValuation}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-                      check_circle
+                      {isSubmittingValuation ? 'progress_activity' : 'check_circle'}
                     </span>
-                    <span>Confirm &amp; Record Entry</span>
+                    <span>{isSubmittingValuation ? 'Recording Entry...' : 'Confirm & Record Entry'}</span>
                   </button>
                 </div>
               </div>

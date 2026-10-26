@@ -1,10 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import {
-  addStoredRequest,
+  createExternalRequest,
+  uploadRequestAttachment,
+  RequestApiError,
+  type ExternalRequestCreatePayload,
+} from '../api/requestApi';
+import {
   type RequestType,
   type RequestPriority,
-  type RequestAttachment,
   type RequestItemData,
 } from '../data/requestsData';
 import './AddExternalRequest.css';
@@ -12,6 +16,16 @@ import './AddExternalRequest.css';
 interface AddExternalRequestPageProps {
   onNavigate?: (route: string) => void;
   onSignOut?: () => void;
+}
+
+export interface SelectedAttachment {
+  id: string;
+  file: File;
+  name: string;
+  size: string;
+  status: 'pending' | 'uploading' | 'success' | 'failed';
+  error?: string;
+  uploadedAttachmentId?: string;
 }
 
 interface FormState {
@@ -28,7 +42,6 @@ interface FormState {
   procurementReference: string;
   priority: RequestPriority;
   justification: string;
-  attachments: RequestAttachment[];
 }
 
 interface FormErrors {
@@ -75,8 +88,11 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
     procurementReference: '',
     priority: 'Medium',
     justification: '',
-    attachments: [],
   });
+
+  const [selectedAttachments, setSelectedAttachments] = useState<SelectedAttachment[]>([]);
+  const [createdRequestId, setCreatedRequestId] = useState<string | null>(null);
+  const [uploadErrorMsg, setUploadErrorMsg] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [isDragging, setIsDragging] = useState(false);
@@ -122,25 +138,29 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
 
   const handleFiles = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const newItems: RequestAttachment[] = Array.from(fileList).map((f) => ({
-      id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      name: f.name,
-      size: formatFileSize(f.size),
-      type: f.type || 'document',
-      uploadDate: new Date().toISOString().split('T')[0],
-    }));
+    const newItems: SelectedAttachment[] = Array.from(fileList).map((f) => {
+      const ext = f.name.toLowerCase().slice(f.name.lastIndexOf('.'));
+      const isAllowedExt = ['.pdf', '.png', '.jpg', '.jpeg', '.docx'].includes(ext);
+      const isAllowedSize = f.size <= 15 * 1024 * 1024;
+      return {
+        id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        file: f,
+        name: f.name,
+        size: formatFileSize(f.size),
+        status: !isAllowedExt || !isAllowedSize ? 'failed' : 'pending',
+        error: !isAllowedExt
+          ? 'Unsupported format (allowed: .pdf, .png, .jpg, .jpeg, .docx)'
+          : !isAllowedSize
+          ? 'File exceeds 15 MiB limit'
+          : undefined,
+      };
+    });
 
-    setFormData((prev) => ({
-      ...prev,
-      attachments: [...prev.attachments, ...newItems],
-    }));
+    setSelectedAttachments((prev) => [...prev, ...newItems]);
   };
 
   const handleRemoveAttachment = (id: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      attachments: prev.attachments.filter((item) => item.id !== id),
-    }));
+    setSelectedAttachments((prev) => prev.filter((item) => item.id !== id));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -190,7 +210,7 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
     if (!validateForm()) {
@@ -198,37 +218,116 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
       return;
     }
 
+    const invalidFiles = selectedAttachments.filter(
+      (f) => f.error && f.status === 'failed' && !f.uploadedAttachmentId
+    );
+    if (invalidFiles.length > 0) {
+      showToast(`Please remove invalid files before submitting: ${invalidFiles.map((f) => f.name).join(', ')}`);
+      return;
+    }
+
     setIsSubmitting(true);
+    setUploadErrorMsg(null);
+
+    let currentReqId = createdRequestId;
 
     try {
-      const saved = addStoredRequest({
-        requesterName: formData.requesterName.trim(),
-        department: formData.department.trim() || 'General Operations',
-        contactInfo: formData.contactInfo.trim(),
-        requesterEmail:
-          formData.contactInfo.includes('@')
+      if (!currentReqId) {
+        const email = formData.contactInfo.includes('@')
+          ? formData.contactInfo.trim()
+          : `${formData.requesterName.trim().toLowerCase().replace(/\s+/g, '.')}@external.local`;
+
+        const payload: ExternalRequestCreatePayload = {
+          request_source: 'External',
+          date_received: formData.dateReceived,
+          external_reference: formData.externalReference.trim() || undefined,
+          requester_name: formData.requesterName.trim(),
+          department: formData.department.trim() || undefined,
+          contact_info: formData.contactInfo.trim() || undefined,
+          requester_email: email,
+          request_type: formData.requestType,
+          requested_item: formData.requestedItem.trim(),
+          category: formData.category,
+          quantity: Number(formData.quantity) || 1,
+          estimated_cost: formData.estimatedCost.trim() || undefined,
+          procurement_reference: formData.procurementReference.trim() || undefined,
+          priority: formData.priority,
+          justification: formData.justification.trim(),
+          processing_guidelines: 'External requisition recorded for administrative review.',
+        };
+
+        const res = await createExternalRequest(payload);
+        currentReqId = res.request_id;
+        setCreatedRequestId(currentReqId);
+      }
+
+      // Upload pending/failed attachments
+      const updatedAttachments = [...selectedAttachments];
+      let failedCount = 0;
+
+      for (let i = 0; i < updatedAttachments.length; i++) {
+        const att = updatedAttachments[i];
+        if (att.status === 'success') continue;
+
+        att.status = 'uploading';
+        setSelectedAttachments([...updatedAttachments]);
+
+        try {
+          const uploadRes = await uploadRequestAttachment(currentReqId, att.file);
+          att.status = 'success';
+          att.uploadedAttachmentId = uploadRes.attachment_id;
+          att.error = undefined;
+        } catch (uploadErr: unknown) {
+          att.status = 'failed';
+          att.error =
+            uploadErr instanceof RequestApiError
+              ? uploadErr.message
+              : uploadErr instanceof Error
+              ? uploadErr.message
+              : 'Upload failed';
+          failedCount++;
+        }
+        setSelectedAttachments([...updatedAttachments]);
+      }
+
+      if (failedCount > 0) {
+        setUploadErrorMsg(
+          `Request ${currentReqId} has been created, but ${failedCount} attachment(s) failed to upload. Review the errors below and click "Retry Uploads".`
+        );
+        showToast(`Request created, but ${failedCount} attachment(s) failed to upload.`);
+      } else {
+        setCreatedRequest({
+          id: currentReqId,
+          requesterName: formData.requesterName.trim(),
+          requesterEmail: formData.contactInfo.includes('@')
             ? formData.contactInfo.trim()
             : `${formData.requesterName.trim().toLowerCase().replace(/\s+/g, '.')}@external.local`,
-        requestType: formData.requestType,
-        requestedItem: formData.requestedItem.trim(),
-        category: formData.category,
-        quantity: Number(formData.quantity) || 1,
-        priority: formData.priority,
-        requestDate: formData.dateReceived,
-        dateReceived: formData.dateReceived,
-        externalReference: formData.externalReference.trim() || undefined,
-        estimatedCost: formData.estimatedCost.trim() || undefined,
-        procurementReference: formData.procurementReference.trim() || undefined,
-        justification: formData.justification.trim(),
-        processingGuidelines: 'External requisition recorded for administrative review.',
-        attachments: formData.attachments,
-      });
-
-      setCreatedRequest(saved);
-      showToast('External request recorded successfully');
-    } catch (err) {
-      console.error('Failed to save external request', err);
-      showToast('Failed to record request. Please verify inputs.');
+          department: formData.department.trim() || 'General Operations',
+          requestType: formData.requestType,
+          requestedItem: formData.requestedItem.trim(),
+          category: formData.category,
+          quantity: Number(formData.quantity) || 1,
+          priority: formData.priority,
+          requestDate: formData.dateReceived,
+          dateReceived: formData.dateReceived,
+          externalReference: formData.externalReference.trim() || undefined,
+          estimatedCost: formData.estimatedCost.trim() || undefined,
+          procurementReference: formData.procurementReference.trim() || undefined,
+          status: 'Pending',
+          justification: formData.justification.trim(),
+          history: [],
+        });
+        showToast('External request and all attachments recorded successfully');
+      }
+    } catch (err: unknown) {
+      console.error('Failed to submit external request', err);
+      const msg =
+        err instanceof RequestApiError
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : 'Failed to record external request';
+      showToast(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -249,8 +348,10 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
       procurementReference: '',
       priority: 'Medium',
       justification: '',
-      attachments: [],
     });
+    setSelectedAttachments([]);
+    setCreatedRequestId(null);
+    setUploadErrorMsg(null);
     setErrors({});
     setCreatedRequest(null);
   };
@@ -341,7 +442,15 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
               <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
                 save
               </span>
-              <span>{isSubmitting ? 'Saving...' : 'Save Request'}</span>
+              <span>
+                {isSubmitting
+                  ? createdRequestId
+                    ? 'Uploading...'
+                    : 'Saving...'
+                  : createdRequestId
+                  ? 'Retry Uploads'
+                  : 'Save Request'}
+              </span>
             </button>
           </div>
         </div>
@@ -861,7 +970,7 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
                 </div>
               </div>
               <span className="amx-section-tag">
-                {formData.attachments.length} {formData.attachments.length === 1 ? 'FILE' : 'FILES'} ATTACHED
+                {selectedAttachments.length} {selectedAttachments.length === 1 ? 'FILE' : 'FILES'} ATTACHED
               </span>
             </div>
 
@@ -894,14 +1003,38 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
                 Drag and drop approval files here, or <strong>browse files</strong>
               </p>
               <span className="amx-dropzone-hint">
-                Supported file formats: PDF, PNG, JPG, DOCX (Client-side attachment state)
+                Supported formats: PDF, PNG, JPG, JPEG, DOCX (Max 15 MiB per file)
               </span>
             </div>
+
+            {/* Upload Error Banner if partial failure occurred */}
+            {uploadErrorMsg && (
+              <div
+                style={{
+                  margin: '14px 0',
+                  padding: '12px 16px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid #ef4444',
+                  borderRadius: '6px',
+                  color: '#dc2626',
+                  fontSize: '13.5px',
+                  lineHeight: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                  warning
+                </span>
+                <span>{uploadErrorMsg}</span>
+              </div>
+            )}
 
             {/* Attached Records List */}
             <div className="amx-attached-section">
               <div className="amx-attached-title">Attached Records</div>
-              {formData.attachments.length === 0 ? (
+              {selectedAttachments.length === 0 ? (
                 <div className="amx-no-attachments">
                   <span className="material-symbols-outlined" style={{ fontSize: '26px', color: 'var(--amx-dash-border)', marginBottom: '4px' }} aria-hidden="true">
                     folder_open
@@ -913,31 +1046,60 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
                 </div>
               ) : (
                 <div className="amx-attachments-list">
-                  {formData.attachments.map((file) => (
+                  {selectedAttachments.map((file) => (
                     <div key={file.id} className="amx-attachment-item">
                       <div className="amx-attachment-info-left">
                         <span className="material-symbols-outlined amx-attachment-file-icon" aria-hidden="true">
-                          description
+                          {file.name.endsWith('.pdf')
+                            ? 'picture_as_pdf'
+                            : file.name.match(/\.(png|jpg|jpeg)$/i)
+                            ? 'image'
+                            : 'description'}
                         </span>
                         <div className="amx-attachment-meta">
                           <span className="amx-attachment-name" title={file.name}>
                             {file.name}
                           </span>
                           <span className="amx-attachment-size">
-                            {file.size} • Attached {file.uploadDate}
+                            {file.size}
+                            {file.status === 'uploading' && ' • Uploading to secure server...'}
+                            {file.status === 'success' && ' • Stored securely on server'}
+                            {file.status === 'failed' && ` • Error: ${file.error || 'Upload failed'}`}
                           </span>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="amx-attachment-remove-btn"
-                        onClick={() => handleRemoveAttachment(file.id)}
-                        aria-label={`Remove ${file.name}`}
-                      >
-                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                          close
-                        </span>
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {file.status === 'success' && (
+                          <span
+                            className="material-symbols-outlined"
+                            style={{ fontSize: '20px', color: '#10b981' }}
+                            title="Uploaded and stored securely"
+                          >
+                            check_circle
+                          </span>
+                        )}
+                        {file.status === 'failed' && (
+                          <span
+                            className="material-symbols-outlined"
+                            style={{ fontSize: '20px', color: '#ef4444' }}
+                            title={file.error || 'Upload failed'}
+                          >
+                            error
+                          </span>
+                        )}
+                        {file.status !== 'uploading' && (
+                          <button
+                            type="button"
+                            className="amx-attachment-remove-btn"
+                            onClick={() => handleRemoveAttachment(file.id)}
+                            aria-label={`Remove ${file.name}`}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                              close
+                            </span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -972,7 +1134,15 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
                 <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
                   save
                 </span>
-                <span>{isSubmitting ? 'Saving...' : 'Save Request'}</span>
+                <span>
+                  {isSubmitting
+                    ? createdRequestId
+                      ? 'Uploading...'
+                      : 'Saving...'
+                    : createdRequestId
+                    ? 'Retry Uploads'
+                    : 'Save Request'}
+                </span>
               </button>
             </div>
           </div>

@@ -10,6 +10,7 @@ from app.models import (
     Asset,
     AssetMovement,
     AssetStatus,
+    AssetValuation,
     AuditLog,
     Consumable,
     ConsumableIssue,
@@ -530,3 +531,361 @@ def test_consumable_audit_failure_rolls_back(monkeypatch):
         assert db.query(Consumable).count() == 0
         assert db.query(ConsumableStockMovement).count() == 0
         assert db.query(AuditLog).count() == 0
+
+
+def test_admin_records_valid_valuation_generates_id_and_returns_201():
+    client, session_factory, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload("Valued Laptop")).json()
+    asset_id = created["asset_id"]
+
+    # Record valuation update with client attempting to supply valuation_id
+    payload = {
+        "valuation_id": "SPOOFED-VAL-999",
+        "effective_date": "2026-10-26",
+        "new_recorded_value": 850.50,
+        "formula_used": "Straight Line (10% p.a.)",
+        "notes": "Annual depreciation review",
+        "reference": "DOC-FIN-2026-01",
+    }
+    response = client.post(f"/api/assets/{asset_id}/valuations", json=payload)
+    assert response.status_code == 201
+    val = response.json()
+
+    # Backend generated valuation ID and ignored spoofed ID
+    assert val["valuation_id"].startswith("VAL-")
+    assert val["valuation_id"] != "SPOOFED-VAL-999"
+    assert val["id"] == val["valuation_id"]
+    assert val["asset_id"] == asset_id
+    assert val["assetId"] == asset_id
+    assert val["effective_date"] == "2026-10-26"
+    assert val["effectiveDate"] == "2026-10-26"
+    assert val["previous_value"] == 1000.0  # Initial baseline from total_cost="1000"
+    assert val["previousValue"] == 1000.0
+    assert val["new_recorded_value"] == 850.50
+    assert val["newRecordedValue"] == 850.50
+    assert val["formula_used"] == "Straight Line (10% p.a.)"
+    assert val["notes"] == "Annual depreciation review"
+    assert val["reference"] == "DOC-FIN-2026-01"
+    assert "Admin" in val["updated_by"]
+    assert val["updatedBy"] == val["updated_by"]
+    assert val["recorded_at"] is not None
+    assert val["recordedAt"] is not None
+
+    with session_factory() as db:
+        row = db.query(AssetValuation).filter_by(valuation_id=val["valuation_id"]).one()
+        assert row.asset_id == asset_id
+        assert float(row.new_recorded_value) == 850.50
+        assert float(row.previous_value) == 1000.0
+
+
+def test_previous_value_derived_by_backend_and_cannot_be_spoofed():
+    client, _, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload("Spoof Test Server")).json()
+    asset_id = created["asset_id"]
+
+    # First valuation: client attempts to spoof previous_value to 999999
+    res1 = client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={
+            "effective_date": "2026-10-01",
+            "new_recorded_value": 800.00,
+            "previous_value": 999999.00,
+            "previousValue": 999999.00,
+            "formula_used": "Straight Line",
+            "notes": "First adjustment",
+        },
+    )
+    assert res1.status_code == 201
+    val1 = res1.json()
+    # Spoofed previous value is ignored, derived from total_cost="1000"
+    assert val1["previous_value"] == 1000.0
+    assert val1["new_recorded_value"] == 800.0
+
+    # Second valuation: client attempts to spoof previous_value again
+    res2 = client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={
+            "effective_date": "2026-10-15",
+            "new_recorded_value": 650.00,
+            "previous_value": 444444.00,
+            "notes": "Second adjustment",
+        },
+    )
+    assert res2.status_code == 201
+    val2 = res2.json()
+    # Spoofed previous value is ignored, derived from previous valuation new_recorded_value (800.0)
+    assert val2["previous_value"] == 800.0
+    assert val2["new_recorded_value"] == 650.0
+
+
+def test_valuation_history_retrieval_and_preserves_multiple_entries():
+    client, _, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload("Ledger Laptop")).json()
+    asset_id = created["asset_id"]
+
+    # 1. Empty ledger returns empty list and default summary
+    empty_res = client.get(f"/api/assets/{asset_id}/valuations")
+    assert empty_res.status_code == 200
+    empty_body = empty_res.json()
+    assert empty_body["total"] == 0
+    assert empty_body["items"] == []
+    assert empty_body["summary"]["original_acquisition_cost"] == "₹1,000"
+    assert empty_body["summary"]["current_recorded_value"] == "₹1,000"
+    assert empty_body["summary"]["last_valuation_update"] is None
+
+    # 2. Record 2 entries
+    client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={
+            "effective_date": "2026-08-01",
+            "new_recorded_value": 850,
+            "formula_used": "Straight Line",
+            "notes": "Entry 1",
+            "reference": "REF-1",
+        },
+    )
+    client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={
+            "effective_date": "2026-09-01",
+            "new_recorded_value": 720,
+            "formula_used": "Straight Line",
+            "notes": "Entry 2",
+            "reference": "REF-2",
+        },
+    )
+
+    # 3. Retrieve history - should contain both entries, newest first
+    hist_res = client.get(f"/api/assets/{asset_id}/valuations")
+    assert hist_res.status_code == 200
+    hist_body = hist_res.json()
+    assert hist_body["total"] == 2
+    assert len(hist_body["items"]) == 2
+    # Newest entry first
+    assert hist_body["items"][0]["effective_date"] == "2026-09-01"
+    assert hist_body["items"][0]["new_recorded_value"] == 720.0
+    assert hist_body["items"][1]["effective_date"] == "2026-08-01"
+    assert hist_body["items"][1]["new_recorded_value"] == 850.0
+    # Summary reflects latest state
+    assert hist_body["summary"]["current_recorded_value"] == "₹720"
+    assert hist_body["summary"]["last_valuation_update"] == "2026-09-01"
+    assert hist_body["summary"]["original_acquisition_cost"] == "₹1,000"
+
+
+def test_original_acquisition_cost_remains_unchanged():
+    client, session_factory, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload("Cost Invariance Asset")).json()
+    asset_id = created["asset_id"]
+    original_cost = created["total_cost"]
+
+    # Record valuation
+    client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": 350.00, "notes": "Write-down"},
+    )
+
+    # Check asset details
+    detail = client.get(f"/api/assets/{asset_id}").json()
+    assert detail["total_cost"] == original_cost
+
+    with session_factory() as db:
+        row = db.query(Asset).filter_by(asset_id=asset_id).one()
+        assert row.total_cost == original_cost
+
+
+def test_valuation_missing_asset_returns_404():
+    client, _, _, _ = make_client()
+    assert client.get("/api/assets/AST-DOESNOTEXIST/valuations").status_code == 404
+    assert client.post(
+        "/api/assets/AST-DOESNOTEXIST/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": 500, "notes": "n"},
+    ).status_code == 404
+
+
+def test_valuation_auth_and_permissions():
+    client, _, _, employee = make_client()
+    created = client.post("/api/assets", json=asset_payload("Auth Asset")).json()
+    asset_id = created["asset_id"]
+
+    # Unauthenticated
+    client.app.dependency_overrides.pop(get_current_user)
+    assert client.get(f"/api/assets/{asset_id}/valuations").status_code == 401
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": 500, "notes": "n"},
+    ).status_code == 401
+
+    # Non-admin (Employee)
+    client.app.dependency_overrides[get_current_user] = lambda: employee
+    assert client.get(f"/api/assets/{asset_id}/valuations").status_code == 403
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": 500, "notes": "n"},
+    ).status_code == 403
+
+
+def test_valuation_numeric_and_date_validation():
+    client, _, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload("Validation Asset")).json()
+    asset_id = created["asset_id"]
+
+    # Negative value
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": -100, "notes": "Negative"},
+    ).status_code == 422
+
+    # NaN / Infinity
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": "NaN", "notes": "NaN"},
+    ).status_code == 422
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": "Infinity", "notes": "Inf"},
+    ).status_code == 422
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": "-Infinity", "notes": "-Inf"},
+    ).status_code == 422
+
+    # Malformed numeric input
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": "abc_not_a_number", "notes": "Bad"},
+    ).status_code == 422
+
+    # Invalid date
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "invalid-date", "new_recorded_value": 500, "notes": "Bad Date"},
+    ).status_code == 422
+
+    # Missing notes
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": 500},
+    ).status_code == 422
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": 500, "notes": ""},
+    ).status_code == 422
+
+
+def test_valuation_optional_fields_and_currency_normalization():
+    client, _, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload("Optional Asset")).json()
+    asset_id = created["asset_id"]
+
+    # String with currency symbol and commas should normalize cleanly
+    res = client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={
+            "effectiveDate": "2026-10-26",
+            "newRecordedValue": "₹1,250.75",
+            "notes": "Normalized currency string",
+            # formulaUsed and reference omitted
+        },
+    )
+    assert res.status_code == 201
+    val = res.json()
+    assert val["new_recorded_value"] == 1250.75
+    assert val["formula_used"] is None
+    assert val["reference"] is None
+
+    # Length limits
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": 100, "notes": "x" * 2001},
+    ).status_code == 422
+    assert client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": 100, "notes": "n", "formula_used": "f" * 256},
+    ).status_code == 422
+
+
+def test_valuation_audit_logging():
+    client, session_factory, admin, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload("Audit Valuation Asset")).json()
+    asset_id = created["asset_id"]
+
+    res = client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={
+            "effective_date": "2026-10-26",
+            "new_recorded_value": 900.00,
+            "formula_used": "Reducing Balance",
+            "notes": "Audit verification note",
+            "reference": "AUD-REF-101",
+        },
+    )
+    assert res.status_code == 201
+    val_id = res.json()["valuation_id"]
+
+    with session_factory() as db:
+        audit = db.query(AuditLog).filter_by(action="asset_valuation_recorded", asset_identifier=asset_id).first()
+        assert audit is not None
+        assert audit.actor_user_id == admin.id
+        assert audit.before_state["valuation"] == 1000.0
+        assert audit.after_state["valuation"] == 900.0
+        assert audit.after_state["valuation_id"] == val_id
+        assert audit.metadata_json["formula_used"] == "Reducing Balance"
+        assert audit.metadata_json["reference"] == "AUD-REF-101"
+        assert audit.metadata_json["notes"] == "Audit verification note"
+
+    # Also appears in Asset detail audit_history
+    detail = client.get(f"/api/assets/{asset_id}").json()
+    assert any(a["action"] == "asset_valuation_recorded" for a in detail["audit_history"])
+
+
+def test_valuation_transaction_rollback_on_failure(monkeypatch):
+    client, session_factory, _, _ = make_client(raise_server_exceptions=False)
+    created = client.post("/api/assets", json=asset_payload("Rollback Asset")).json()
+    asset_id = created["asset_id"]
+
+    # Simulate commit failure
+    from sqlalchemy.orm import Session
+    original_commit = Session.commit
+
+    def failing_commit(self):
+        # Fail if committing an AssetValuation
+        if any(isinstance(obj, AssetValuation) for obj in self.new):
+            raise RuntimeError("Simulated DB transaction failure")
+        return original_commit(self)
+
+    monkeypatch.setattr(Session, "commit", failing_commit)
+
+    response = client.post(
+        f"/api/assets/{asset_id}/valuations",
+        json={"effective_date": "2026-10-26", "new_recorded_value": 750, "notes": "Will fail"},
+    )
+    assert response.status_code == 500
+
+    # Ensure no partial rows exist in asset_valuations or audit_logs
+    with session_factory() as db:
+        assert db.query(AssetValuation).filter_by(asset_id=asset_id).count() == 0
+        assert db.query(AuditLog).filter_by(action="asset_valuation_recorded", asset_identifier=asset_id).count() == 0
+
+
+def test_valuation_sequential_locking_and_consistency():
+    client, _, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload("Locking Asset")).json()
+    asset_id = created["asset_id"]
+
+    # Run three sequential valuations
+    values = [900.00, 800.00, 700.00]
+    expected_previous = [1000.00, 900.00, 800.00]
+
+    for val, exp_prev in zip(values, expected_previous, strict=False):
+        res = client.post(
+            f"/api/assets/{asset_id}/valuations",
+            json={"effective_date": "2026-10-26", "new_recorded_value": val, "notes": f"Step {val}"},
+        )
+        assert res.status_code == 201
+        assert res.json()["previous_value"] == exp_prev
+        assert res.json()["new_recorded_value"] == val
+
+    # Verify final ledger has 3 items with exact sequence
+    hist = client.get(f"/api/assets/{asset_id}/valuations").json()
+    assert hist["total"] == 3
+    assert [item["new_recorded_value"] for item in hist["items"]] == [700.00, 800.00, 900.00]

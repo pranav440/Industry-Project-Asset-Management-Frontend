@@ -1,7 +1,9 @@
+import decimal
+import re
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Role = Literal["employee", "host", "admin", "guard", "superadmin"]
 
@@ -168,6 +170,12 @@ class RequestListItemOut(BaseModel):
     status: RequestStatusValue
     justification: str
     processing_guidelines: str
+    request_source: str = "Internal"
+    date_received: date | None = None
+    external_reference: str | None = None
+    contact_info: str | None = None
+    estimated_cost: str | None = None
+    procurement_reference: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -185,8 +193,36 @@ class RequestHistoryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def format_file_size(size_bytes: int) -> str:
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+class RequestAttachmentOut(BaseModel):
+    attachment_id: str
+    id: str
+    request_id: str
+    original_filename: str
+    name: str
+    content_type: str
+    type: str
+    file_size: int
+    size: str
+    uploaded_at: datetime
+    uploadDate: str
+    download_url: str
+    preview_url: str
+
+    model_config = {"from_attributes": True}
+
+
 class RequestDetailOut(RequestListItemOut):
     history: list[RequestHistoryOut] = Field(default_factory=list)
+    attachments: list[RequestAttachmentOut] = Field(default_factory=list)
 
 
 class RequestListResponse(BaseModel):
@@ -203,6 +239,84 @@ class RequestTransitionRequest(BaseModel):
 
 class RequestTransitionOut(RequestDetailOut):
     pass
+
+
+class ExternalRequestCreate(BaseModel):
+    request_source: Literal["External"] = "External"
+    date_received: date
+    external_reference: str | None = Field(default=None, max_length=255)
+    requester_name: str = Field(min_length=1, max_length=160)
+    department: str | None = Field(default=None, max_length=160)
+    contact_info: str | None = Field(default=None, max_length=255)
+    requester_email: str | None = Field(default=None, max_length=255)
+    request_type: RequestTypeValue
+    requested_item: str = Field(min_length=1, max_length=255)
+    category: str = Field(min_length=1, max_length=120)
+    quantity: int = Field(default=1, ge=1)
+    estimated_cost: str | None = Field(default=None, max_length=64)
+    procurement_reference: str | None = Field(default=None, max_length=255)
+    priority: RequestPriorityValue
+    justification: str = Field(min_length=1, max_length=500)
+    processing_guidelines: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("requester_name")
+    @classmethod
+    def validate_requester_name(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Requester name cannot be empty")
+        return s
+
+    @field_validator("requested_item")
+    @classmethod
+    def validate_requested_item(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Requested item cannot be empty")
+        return s
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Category cannot be empty")
+        return s
+
+    @field_validator("justification")
+    @classmethod
+    def validate_justification(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Justification cannot be empty")
+        if len(s) > 500:
+            raise ValueError("Justification must be at most 500 characters")
+        return s
+
+    @field_validator("estimated_cost")
+    @classmethod
+    def validate_estimated_cost(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            return None
+        if cleaned.startswith("₹") or cleaned.startswith("$"):
+            cleaned = cleaned[1:].strip()
+        cleaned_num = cleaned.replace(",", "")
+        lower = cleaned_num.lower()
+        if "nan" in lower or "inf" in lower:
+            raise ValueError("Estimated cost must be a valid finite number")
+        try:
+            d = decimal.Decimal(cleaned_num)
+        except (decimal.InvalidOperation, TypeError):
+            raise ValueError("Estimated cost must be a valid non-negative number")
+        if d.is_nan() or d.is_infinite():
+            raise ValueError("Estimated cost must be a valid finite number")
+        if d < 0:
+            raise ValueError("Estimated cost cannot be negative")
+        return f"{d:.2f}"
+
 
 
 GatePassTypeValue = Literal["Asset Movement", "Returnable", "Non-Returnable", "Maintenance"]
@@ -331,6 +445,112 @@ class MaintenanceHistoryOut(BaseModel):
     vendor: str
     cost: str
     status: Literal["Completed", "Scheduled", "In Progress"]
+
+
+class AssetValuationCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    effective_date: date
+    new_recorded_value: decimal.Decimal
+    formula_used: str | None = Field(default=None, max_length=255)
+    notes: str = Field(min_length=1, max_length=2000)
+    reference: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            mapped = dict(data)
+            if "effectiveDate" in mapped and "effective_date" not in mapped:
+                mapped["effective_date"] = mapped["effectiveDate"]
+            if "newRecordedValue" in mapped and "new_recorded_value" not in mapped:
+                mapped["new_recorded_value"] = mapped["newRecordedValue"]
+            if "formulaUsed" in mapped and "formula_used" not in mapped:
+                mapped["formula_used"] = mapped["formulaUsed"]
+            if "calculation_notes" in mapped and "notes" not in mapped:
+                mapped["notes"] = mapped["calculation_notes"]
+            return mapped
+        return data
+
+    @field_validator("new_recorded_value", mode="before")
+    @classmethod
+    def validate_new_recorded_value(cls, v: Any) -> decimal.Decimal:
+        if v is None:
+            raise ValueError("New recorded value is required")
+        if isinstance(v, (int, float)):
+            import math
+            if math.isnan(v) or math.isinf(v):
+                raise ValueError("New recorded value must be a finite number")
+            if v < 0:
+                raise ValueError("New recorded value cannot be negative")
+            return decimal.Decimal(str(v)).quantize(decimal.Decimal("0.01"))
+        if isinstance(v, decimal.Decimal):
+            if v.is_nan() or v.is_infinite():
+                raise ValueError("New recorded value must be a finite number")
+            if v < 0:
+                raise ValueError("New recorded value cannot be negative")
+            return v.quantize(decimal.Decimal("0.01"))
+        if isinstance(v, str):
+            cleaned = v.strip()
+            if cleaned.lower() in {"nan", "inf", "-inf", "+inf", "infinity", "-infinity"}:
+                raise ValueError("New recorded value must be a finite number")
+            cleaned = re.sub(r"[₹$,\s]", "", cleaned)
+            if not cleaned:
+                raise ValueError("New recorded value cannot be empty")
+            try:
+                val = decimal.Decimal(cleaned)
+            except Exception:
+                raise ValueError("New recorded value must be a valid numeric amount")
+            if val.is_nan() or val.is_infinite():
+                raise ValueError("New recorded value must be a finite number")
+            if val < 0:
+                raise ValueError("New recorded value cannot be negative")
+            return val.quantize(decimal.Decimal("0.01"))
+        raise ValueError("Invalid type for new recorded value")
+
+
+class AssetValuationOut(BaseModel):
+    valuation_id: str
+    id: str
+    asset_id: str
+    assetId: str
+    effective_date: date
+    effectiveDate: str
+    previous_value: float | None
+    previousValue: float | None
+    new_recorded_value: float
+    newRecordedValue: float
+    formula_used: str | None
+    formulaUsed: str | None
+    notes: str
+    reference: str | None
+    updated_by: str
+    updatedBy: str
+    recorded_at: datetime
+    recordedAt: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AssetValuationSummary(BaseModel):
+    asset_id: str
+    assetId: str
+    original_acquisition_cost: str
+    originalAcquisitionCost: str
+    current_recorded_value: str
+    currentRecordedValue: str
+    last_valuation_update: str | None
+    lastValuationUpdate: str | None
+    configured_depreciation_formula: str | None
+    configuredDepreciationFormula: str | None
+
+
+class AssetValuationResponse(BaseModel):
+    summary: AssetValuationSummary
+    items: list[AssetValuationOut]
+    valuations: list[AssetValuationOut]
+    history: list[AssetValuationOut]
+    total: int
 
 
 class ConsumableCreate(BaseModel):

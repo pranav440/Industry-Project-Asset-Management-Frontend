@@ -5,7 +5,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
 
 from app.config import settings
-from app.database import Base, SessionLocal, engine, ensure_consumable_audit_schema
+from app.database import (
+    Base,
+    SessionLocal,
+    engine,
+    ensure_consumable_audit_schema,
+    ensure_asset_valuation_schema,
+    ensure_request_attachment_schema,
+    ensure_request_metadata_schema,
+)
 from app.routers import assets
 from app.routers import auth
 from app.routers import consumables
@@ -20,6 +28,9 @@ from app.seed import seed_demo_assets, seed_development_demo_data, seed_users
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_consumable_audit_schema()
+    ensure_request_metadata_schema()
+    ensure_request_attachment_schema()
+    ensure_asset_valuation_schema()
     db = SessionLocal()
     try:
         seed_users(db)

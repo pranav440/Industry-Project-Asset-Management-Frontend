@@ -1,5 +1,7 @@
 import base64
+import decimal
 import io
+import re
 import uuid
 from datetime import datetime, time
 
@@ -15,6 +17,7 @@ from app.models import (
     AssetMovement,
     AssetMovementStatus,
     AssetStatus,
+    AssetValuation,
     AuditLog,
     Maintenance,
     MaintenanceStatus,
@@ -29,6 +32,10 @@ from app.schemas import (
     AssetTransferOut,
     AssetTransferRequest,
     AssetUpdate,
+    AssetValuationCreate,
+    AssetValuationOut,
+    AssetValuationResponse,
+    AssetValuationSummary,
     AuditLogOut,
     MaintenanceHistoryOut,
     MaintenanceOut,
@@ -401,3 +408,187 @@ def create_maintenance(
     db.commit()
     db.refresh(record)
     return _maintenance_response(record, asset, admin)
+
+
+def _parse_monetary_baseline(total_cost: str | None) -> decimal.Decimal | None:
+    if not total_cost:
+        return None
+    cleaned = re.sub(r"[^\d.]", "", total_cost.strip())
+    if not cleaned:
+        return None
+    try:
+        val = decimal.Decimal(cleaned)
+        if val.is_nan() or val.is_infinite() or val < 0:
+            return None
+        return val.quantize(decimal.Decimal("0.01"))
+    except Exception:
+        return None
+
+
+def _format_currency(value: decimal.Decimal | float | int | str | None) -> str:
+    if value is None:
+        return "Not recorded"
+    if isinstance(value, str):
+        cleaned = re.sub(r"[^\d.]", "", value.strip())
+        if not cleaned:
+            return value.strip() if value.strip() else "Not recorded"
+        try:
+            val_float = float(cleaned)
+        except ValueError:
+            return value.strip()
+    else:
+        val_float = float(value)
+    formatted = f"{val_float:,.2f}".rstrip("0").rstrip(".")
+    return f"₹{formatted}"
+
+
+def _generate_valuation_id(db: Session) -> str:
+    year = datetime.now().year
+    while True:
+        candidate = f"VAL-{year}-{uuid.uuid4().hex[:8].upper()}"
+        if db.scalar(select(AssetValuation.id).where(AssetValuation.valuation_id == candidate)) is None:
+            return candidate
+
+
+def _valuation_out(val: AssetValuation) -> AssetValuationOut:
+    prev_float = float(val.previous_value) if val.previous_value is not None else None
+    new_float = float(val.new_recorded_value)
+    return AssetValuationOut(
+        valuation_id=val.valuation_id,
+        id=val.valuation_id,
+        asset_id=val.asset_id,
+        assetId=val.asset_id,
+        effective_date=val.effective_date,
+        effectiveDate=val.effective_date.isoformat(),
+        previous_value=prev_float,
+        previousValue=prev_float,
+        new_recorded_value=new_float,
+        newRecordedValue=new_float,
+        formula_used=val.formula_used,
+        formulaUsed=val.formula_used,
+        notes=val.notes,
+        reference=val.reference,
+        updated_by=val.updated_by,
+        updatedBy=val.updated_by,
+        recorded_at=val.recorded_at,
+        recordedAt=val.recorded_at.strftime("%Y-%m-%d %H:%M:%S") if val.recorded_at else "",
+    )
+
+
+@router.post("/{asset_id}/valuations", response_model=AssetValuationOut, status_code=status.HTTP_201_CREATED)
+def record_valuation(
+    asset_id: str,
+    body: AssetValuationCreate,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> AssetValuationOut:
+    asset = db.scalar(select(Asset).where(Asset.asset_id == asset_id).with_for_update())
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+
+    latest_valuation = db.scalar(
+        select(AssetValuation)
+        .where(AssetValuation.asset_id == asset.asset_id)
+        .order_by(AssetValuation.recorded_at.desc(), AssetValuation.id.desc())
+        .limit(1)
+    )
+
+    if latest_valuation is not None:
+        previous_value = latest_valuation.new_recorded_value
+    else:
+        previous_value = _parse_monetary_baseline(asset.total_cost)
+
+    valuation_id = _generate_valuation_id(db)
+    user_display = f"{admin.full_name} ({admin.role.value})" if admin.role else admin.full_name
+
+    valuation = AssetValuation(
+        valuation_id=valuation_id,
+        asset_id=asset.asset_id,
+        effective_date=body.effective_date,
+        previous_value=previous_value,
+        new_recorded_value=body.new_recorded_value,
+        formula_used=body.formula_used.strip() if body.formula_used and body.formula_used.strip() else None,
+        notes=body.notes.strip(),
+        reference=body.reference.strip() if body.reference and body.reference.strip() else None,
+        updated_by=user_display,
+        updated_by_user_id=admin.id,
+    )
+
+    audit = AuditLog(
+        action="asset_valuation_recorded",
+        asset_id=asset.id,
+        asset_identifier=asset.asset_id,
+        actor_user_id=admin.id,
+        before_state={
+            "valuation": float(previous_value) if previous_value is not None else None,
+            "recorded_value": str(previous_value) if previous_value is not None else "Not recorded",
+        },
+        after_state={
+            "valuation": float(body.new_recorded_value),
+            "recorded_value": str(body.new_recorded_value),
+            "valuation_id": valuation_id,
+        },
+        metadata_json={
+            "valuation_id": valuation_id,
+            "effective_date": body.effective_date.isoformat(),
+            "formula_used": body.formula_used.strip() if body.formula_used and body.formula_used.strip() else None,
+            "reference": body.reference.strip() if body.reference and body.reference.strip() else None,
+            "notes": body.notes.strip(),
+        },
+    )
+
+    try:
+        db.add_all((valuation, audit))
+        db.commit()
+        db.refresh(valuation)
+    except Exception:
+        db.rollback()
+        raise
+
+    return _valuation_out(valuation)
+
+
+@router.get("/{asset_id}/valuations", response_model=AssetValuationResponse)
+def get_asset_valuations(
+    asset_id: str,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> AssetValuationResponse:
+    asset = db.scalar(select(Asset).where(Asset.asset_id == asset_id))
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+
+    records = db.scalars(
+        select(AssetValuation)
+        .where(AssetValuation.asset_id == asset.asset_id)
+        .order_by(AssetValuation.effective_date.desc(), AssetValuation.recorded_at.desc(), AssetValuation.id.desc())
+    ).all()
+
+    if records:
+        latest = records[0]
+        current_value = _format_currency(latest.new_recorded_value)
+        last_update = latest.effective_date.isoformat()
+    else:
+        current_value = _format_currency(asset.total_cost)
+        last_update = None
+
+    summary = AssetValuationSummary(
+        asset_id=asset.asset_id,
+        assetId=asset.asset_id,
+        original_acquisition_cost=_format_currency(asset.total_cost),
+        originalAcquisitionCost=_format_currency(asset.total_cost),
+        current_recorded_value=current_value,
+        currentRecordedValue=current_value,
+        last_valuation_update=last_update,
+        lastValuationUpdate=last_update,
+        configured_depreciation_formula=asset.depreciation,
+        configuredDepreciationFormula=asset.depreciation,
+    )
+    items = [_valuation_out(r) for r in records]
+    return AssetValuationResponse(
+        summary=summary,
+        items=items,
+        valuations=items,
+        history=items,
+        total=len(items),
+    )

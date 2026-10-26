@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     smtp_from_email: str = ""
     smtp_from_name: str = "AssetMX"
     frontend_url: str = "http://localhost:5173"
+    request_upload_dir: str = str(Path(__file__).resolve().parent.parent / "uploads" / "requests")
 
     @property
     def database_url(self) -> str:

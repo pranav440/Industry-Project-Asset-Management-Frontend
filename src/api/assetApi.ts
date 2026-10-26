@@ -346,3 +346,67 @@ export function updateAsset(assetId: string, payload: Partial<NewAssetPayload> &
     body: JSON.stringify(normalizedPayload),
   });
 }
+
+export interface AssetValuationApiRecord {
+  valuation_id: string;
+  id: string;
+  asset_id: string;
+  assetId: string;
+  effective_date: string;
+  effectiveDate: string;
+  previous_value: number | null;
+  previousValue: number | null;
+  new_recorded_value: number;
+  newRecordedValue: number;
+  formula_used: string | null;
+  formulaUsed: string | null;
+  notes: string;
+  reference: string | null;
+  updated_by: string;
+  updatedBy: string;
+  recorded_at: string;
+  recordedAt: string;
+}
+
+export interface AssetValuationSummaryApiRecord {
+  asset_id: string;
+  assetId: string;
+  original_acquisition_cost: string;
+  originalAcquisitionCost: string;
+  current_recorded_value: string;
+  currentRecordedValue: string;
+  last_valuation_update: string | null;
+  lastValuationUpdate: string | null;
+  configured_depreciation_formula: string | null;
+  configuredDepreciationFormula: string | null;
+}
+
+export interface AssetValuationResponseApiRecord {
+  summary: AssetValuationSummaryApiRecord;
+  items: AssetValuationApiRecord[];
+  valuations: AssetValuationApiRecord[];
+  history: AssetValuationApiRecord[];
+  total: number;
+}
+
+export interface AssetValuationCreatePayload {
+  effectiveDate: string;
+  newRecordedValue: number | string;
+  formulaUsed?: string;
+  notes: string;
+  reference?: string;
+}
+
+export function getAssetValuations(assetId: string): Promise<AssetValuationResponseApiRecord> {
+  return request<AssetValuationResponseApiRecord>(`/api/assets/${encodeURIComponent(assetId)}/valuations`);
+}
+
+export function recordAssetValuation(
+  assetId: string,
+  payload: AssetValuationCreatePayload,
+): Promise<AssetValuationApiRecord> {
+  return request<AssetValuationApiRecord>(`/api/assets/${encodeURIComponent(assetId)}/valuations`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}

@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
-import { getRequest, transitionRequest, type RequestApiError, type RequestStatus } from '../api/requestApi';
 import {
-  getStoredRequests,
-  saveStoredRequests,
+  getRequest,
+  transitionRequest,
+  downloadRequestAttachment,
+  previewRequestAttachment,
+  RequestApiError,
+  type RequestStatus,
+  type RequestAttachmentApiRecord,
+} from '../api/requestApi';
+import {
   type RequestItemData,
   type RequestAttachment,
 } from '../data/requestsData';
@@ -13,6 +19,15 @@ interface RequestDetailsPageProps {
   requestId: string;
   onNavigate?: (route: string) => void;
   onSignOut?: () => void;
+}
+
+interface PreviewState {
+  doc: RequestAttachment | RequestAttachmentApiRecord;
+  objectUrl?: string;
+  contentType?: string;
+  isInline?: boolean;
+  isLoading: boolean;
+  error?: string;
 }
 
 export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
@@ -30,7 +45,7 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
   const [targetState, setTargetState] = useState<RequestStatus>('In Review');
   const [operationalNote, setOperationalNote] = useState('');
   const [isSubmittingTransition, setIsSubmittingTransition] = useState(false);
-  const [previewDoc, setPreviewDoc] = useState<RequestAttachment | null>(null);
+  const [previewState, setPreviewState] = useState<PreviewState | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -40,7 +55,6 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
     getRequest(requestId)
       .then((response) => {
         if (!active) return;
-        const local = getStoredRequests().find((r) => r.id === requestId);
         setRequest({
           id: response.request_id,
           requesterName: response.requester_name,
@@ -55,13 +69,13 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
           status: response.status,
           justification: response.justification,
           processingGuidelines: response.processing_guidelines,
-          requestSource: (response as any).request_source || local?.requestSource,
-          estimatedCost: (response as any).estimated_cost || local?.estimatedCost,
-          procurementReference: (response as any).procurement_reference || local?.procurementReference,
-          attachments: (response as any).attachments || local?.attachments,
-          dateReceived: (response as any).date_received || local?.dateReceived,
-          externalReference: (response as any).external_reference || local?.externalReference,
-          contactInfo: (response as any).contact_info || local?.contactInfo,
+          requestSource: response.request_source,
+          estimatedCost: response.estimated_cost || undefined,
+          procurementReference: response.procurement_reference || undefined,
+          attachments: (response.attachments || []) as any,
+          dateReceived: response.date_received || undefined,
+          externalReference: response.external_reference || undefined,
+          contactInfo: response.contact_info || undefined,
           history: response.history.map((entry) => ({
             id: entry.history_id,
             timestamp: entry.timestamp,
@@ -74,17 +88,24 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
       })
       .catch((error: unknown) => {
         if (!active) return;
-        const local = getStoredRequests().find((r) => r.id === requestId);
-        if (local) {
-          setRequest({
-            ...local,
-            history: local.history || [],
-          });
-          setApiError(null);
-          return;
-        }
         const status = (error as RequestApiError).status;
-        setApiError(status === 401 ? 'Your session has expired. Please sign in again.' : status === 403 ? 'Admin access is required to view this request.' : status === 404 ? 'The selected request could not be found.' : status === 409 ? 'This request status change is not allowed.' : status === 422 ? 'The request data is invalid.' : status && status >= 500 ? 'The request service is temporarily unavailable.' : error instanceof Error ? error.message : 'Unable to load request details.');
+        setApiError(
+          status === 401
+            ? 'Your session has expired. Please sign in again.'
+            : status === 403
+            ? 'Admin access is required to view this request.'
+            : status === 404
+            ? 'The selected request could not be found.'
+            : status === 409
+            ? 'This request status change is not allowed.'
+            : status === 422
+            ? 'The request data is invalid.'
+            : status && status >= 500
+            ? 'The request service is temporarily unavailable.'
+            : error instanceof Error
+            ? error.message
+            : 'Unable to load request details.'
+        );
         setRequest(null);
       })
       .finally(() => active && setIsLoading(false));
@@ -145,35 +166,73 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
     setIsProcessModalOpen(true);
   };
 
-  const handlePreviewDocument = (doc: RequestAttachment) => {
-    setPreviewDoc(doc);
+  const handlePreviewDocument = async (doc: RequestAttachment | RequestAttachmentApiRecord) => {
+    const attId = (doc as any).attachment_id || doc.id;
+    if (previewState?.objectUrl) {
+      URL.revokeObjectURL(previewState.objectUrl);
+    }
+    setPreviewState({ doc, isLoading: true });
+
+    try {
+      const res = await previewRequestAttachment(request.id, attId);
+      if (!res.isInline) {
+        const a = document.createElement('a');
+        a.href = res.objectUrl;
+        a.download = res.filename || doc.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(res.objectUrl);
+        setPreviewState(null);
+        showToast(`Document "${doc.name}" downloaded.`);
+        return;
+      }
+
+      setPreviewState({
+        doc,
+        objectUrl: res.objectUrl,
+        contentType: res.contentType,
+        isInline: true,
+        isLoading: false,
+      });
+    } catch (err: unknown) {
+      const msg =
+        err instanceof RequestApiError
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : 'Failed to preview document';
+      setPreviewState({
+        doc,
+        isLoading: false,
+        error: msg,
+      });
+      showToast(`Preview failed: ${msg}`);
+    }
   };
 
-  const handleDownloadDocument = (doc: RequestAttachment) => {
+  const handleDownloadDocument = async (doc: RequestAttachment | RequestAttachmentApiRecord) => {
+    const attId = (doc as any).attachment_id || doc.id;
     try {
-      const blob = new Blob(
-        [
-          `AssetMX Document Requisition Record\n` +
-            `Document Name: ${doc.name}\n` +
-            `Document Size: ${doc.size}\n` +
-            `Upload Date: ${doc.uploadDate || 'N/A'}\n` +
-            `Associated Request: ${request?.id}\n` +
-            `Status: Client-side verified requisition attachment.\n`
-        ],
-        { type: 'text/plain;charset=utf-8' }
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = doc.name.endsWith('.txt') || doc.name.endsWith('.pdf') ? doc.name : `${doc.name}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      showToast(`Downloading "${doc.name}"...`);
+      await downloadRequestAttachment(request.id, attId, doc.name);
       showToast(`Document "${doc.name}" downloaded.`);
-    } catch {
-      showToast(`Document "${doc.name}" prepared for download.`);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof RequestApiError
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : 'Download failed';
+      showToast(`Download failed: ${msg}`);
     }
+  };
+
+  const handleClosePreview = () => {
+    if (previewState?.objectUrl) {
+      URL.revokeObjectURL(previewState.objectUrl);
+    }
+    setPreviewState(null);
   };
 
   // Execute Status Transition
@@ -202,6 +261,13 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
         status: updated.status,
         justification: updated.justification,
         processingGuidelines: updated.processing_guidelines,
+        requestSource: updated.request_source || prev?.requestSource,
+        dateReceived: updated.date_received || prev?.dateReceived || undefined,
+        externalReference: updated.external_reference || prev?.externalReference || undefined,
+        contactInfo: updated.contact_info || prev?.contactInfo || undefined,
+        estimatedCost: updated.estimated_cost || prev?.estimatedCost || undefined,
+        procurementReference: updated.procurement_reference || prev?.procurementReference || undefined,
+        attachments: (updated.attachments || prev?.attachments || []) as any,
         history: updated.history.map((entry) => ({
           id: entry.history_id,
           timestamp: entry.timestamp,
@@ -215,37 +281,7 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
       setOperationalNote('');
       showToast(`Request ${request.id} successfully updated to "${targetState}".`);
     } catch (error: unknown) {
-      // Local mock state transition fallback
-      const stored = getStoredRequests();
-      const idx = stored.findIndex((r) => r.id === request.id);
-      if (idx !== -1) {
-        const now = new Date();
-        const timestampStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        const newHist = [
-          {
-            id: `EVT-${Date.now().toString().slice(-4)}`,
-            timestamp: timestampStr,
-            stage: targetState,
-            action: `Request status updated to ${targetState}`,
-            performedBy: 'Administrator',
-            note: operationalNote.trim() || undefined,
-          },
-          ...(stored[idx].history || []),
-        ];
-        const updatedRecord: RequestItemData = {
-          ...stored[idx],
-          status: targetState,
-          history: newHist,
-        };
-        stored[idx] = updatedRecord;
-        saveStoredRequests(stored);
-        setRequest(updatedRecord);
-        setIsProcessModalOpen(false);
-        setOperationalNote('');
-        showToast(`Request ${request.id} successfully updated to "${targetState}".`);
-        return;
-      }
-
+      console.error('Failed to update request status', error);
       const status = (error as RequestApiError).status;
       const message = status === 401 ? 'Your session has expired. Please sign in again.' : status === 403 ? 'Admin access is required to update this request.' : status === 404 ? 'The selected request could not be found.' : status === 409 ? 'This request status change is not allowed.' : status === 422 ? 'The transition is invalid. Please review the input and try again.' : status && status >= 500 ? 'The request service is temporarily unavailable.' : error instanceof Error ? error.message : 'Unable to update the request status.';
       showToast(message);
@@ -756,11 +792,11 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
       )}
 
       {/* Document Preview Modal */}
-      {previewDoc && (
-        <div className="amx-modal-backdrop" onClick={() => setPreviewDoc(null)}>
+      {previewState && (
+        <div className="amx-modal-backdrop" onClick={handleClosePreview}>
           <div
             className="amx-modal-dialog"
-            style={{ maxWidth: '540px' }}
+            style={{ maxWidth: '640px', width: '92vw' }}
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -778,7 +814,7 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
               <button
                 type="button"
                 className="amx-modal-close-btn"
-                onClick={() => setPreviewDoc(null)}
+                onClick={handleClosePreview}
                 aria-label="Close preview"
                 id="btn-close-doc-preview"
               >
@@ -789,29 +825,56 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
             <div className="amx-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', backgroundColor: 'var(--amx-dash-bg)', borderRadius: '6px', border: '1px solid var(--amx-dash-border-light)' }}>
                 <span className="material-symbols-outlined" style={{ fontSize: '32px', color: 'var(--amx-dash-secondary)' }}>
-                  {previewDoc.name.endsWith('.pdf') ? 'picture_as_pdf' : previewDoc.name.match(/\.(png|jpg|jpeg)$/i) ? 'image' : 'description'}
+                  {previewState.doc.name.endsWith('.pdf') ? 'picture_as_pdf' : previewState.doc.name.match(/\.(png|jpg|jpeg)$/i) ? 'image' : 'description'}
                 </span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
                   <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--amx-dash-text)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} id="preview-doc-name">
-                    {previewDoc.name}
+                    {previewState.doc.name}
                   </span>
                   <span style={{ fontSize: '12px', color: 'var(--amx-dash-text-muted)', fontFamily: 'JetBrains Mono, monospace' }} id="preview-doc-meta">
-                    {previewDoc.size}{previewDoc.uploadDate ? ` • Recorded on ${previewDoc.uploadDate}` : ''}
+                    {previewState.doc.size}{previewState.doc.uploadDate ? ` • Recorded on ${previewState.doc.uploadDate}` : ''}
                   </span>
                 </div>
               </div>
 
-              <div style={{ padding: '14px', backgroundColor: '#ffffff', border: '1px solid var(--amx-dash-border-light)', borderRadius: '6px', fontSize: '12.5px', color: 'var(--amx-dash-text-muted)', lineHeight: 1.5 }}>
-                <strong style={{ color: 'var(--amx-dash-text)', display: 'block', marginBottom: '4px' }}>Client-Side Requisition Attachment</strong>
-                This document was attached during requisition submission and is recorded in client mock state. In production deployment with active backend integration, file contents are streamed from the secure enterprise document repository.
-              </div>
+              {previewState.isLoading && (
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--amx-dash-text-muted)' }}>
+                  Loading document preview...
+                </div>
+              )}
+
+              {previewState.error && (
+                <div style={{ padding: '16px', backgroundColor: '#fef2f2', border: '1px solid #f87171', borderRadius: '6px', color: '#991b1b', fontSize: '13px' }}>
+                  <strong>Preview error:</strong> {previewState.error}
+                </div>
+              )}
+
+              {previewState.objectUrl && previewState.contentType === 'application/pdf' && (
+                <div style={{ width: '100%', height: '480px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--amx-dash-border-light)' }}>
+                  <iframe
+                    src={previewState.objectUrl}
+                    title={previewState.doc.name}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                  />
+                </div>
+              )}
+
+              {previewState.objectUrl && previewState.contentType?.startsWith('image/') && (
+                <div style={{ textAlign: 'center', maxHeight: '480px', overflow: 'auto', padding: '8px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid var(--amx-dash-border-light)' }}>
+                  <img
+                    src={previewState.objectUrl}
+                    alt={previewState.doc.name}
+                    style={{ maxWidth: '100%', maxHeight: '460px', objectFit: 'contain', borderRadius: '4px' }}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="amx-modal-footer">
               <button
                 type="button"
                 className="amx-btn-secondary"
-                onClick={() => setPreviewDoc(null)}
+                onClick={handleClosePreview}
                 id="btn-dismiss-doc-preview"
               >
                 Close Preview
@@ -821,8 +884,8 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
                 className="amx-btn-primary"
                 id="btn-download-from-preview"
                 onClick={() => {
-                  handleDownloadDocument(previewDoc);
-                  setPreviewDoc(null);
+                  handleDownloadDocument(previewState.doc);
+                  handleClosePreview();
                 }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
