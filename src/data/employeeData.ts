@@ -8,12 +8,31 @@ import { getStoredRequests, addStoredRequest, type RequestItemData } from './req
 
 export interface EmployeeAssignedAsset {
   id: string;
+  legacyId?: string;
   name: string;
+  altName?: string;
   category: string;
+  categoryKey?: 'compute' | 'displays' | 'peripherals' | 'mobile';
   location: string;
   status: string;
+  statusCode?: 'active' | 'maintenance' | 'transit' | 'disposed';
   icon: string;
   verificationStatus: 'Verified' | 'Active';
+  specification?: string;
+  assignedDate?: string;
+  custodianName?: string;
+  custodianEmpId?: string;
+  custodianDepartment?: string;
+  serialNumber?: string;
+  hardwareModel?: string;
+  technicalSpecs?: Array<{ label: string; value: string }>;
+  custodyLog?: Array<{ date: string; time: string; event: string }>;
+  acquisition?: {
+    purchaseDate?: string;
+    warrantyStatus?: string;
+    warrantyCover?: string;
+    totalCost?: string;
+  };
 }
 
 export interface EmployeeConsumptionCategory {
@@ -38,43 +57,155 @@ export interface EmployeeDashboardMetrics {
   consumablesReceived: number;
 }
 
-// Default demonstration assigned assets formally allocated to the employee
+// Default demonstration assigned assets formally allocated to the employee (Marcus Vance)
 export const DEFAULT_EMPLOYEE_ASSETS: EmployeeAssignedAsset[] = [
   {
-    id: 'AST-NC-2026-0012',
-    name: 'Dell Latitude 5430 Laptop',
-    category: 'Hardware • Workstation',
-    location: 'HQ - Floor 4, Dev Pod 4B',
-    status: 'Active / Verified',
+    id: 'AST-2024-0042',
+    legacyId: 'AST-NC-2026-0012',
+    name: 'Apple MacBook Pro 16"',
+    altName: 'Dell Latitude 5430 Laptop',
+    category: 'Laptops & Compute',
+    categoryKey: 'compute',
+    location: 'HQ - Bldg B, Floor 4, Desk B-412',
+    status: 'Active / In Custody',
+    statusCode: 'active',
     icon: 'laptop_mac',
     verificationStatus: 'Verified',
+    specification: 'M3 Max, 36GB Unified Memory, 1TB SSD • Space Black',
+    assignedDate: '12 Jan 2024',
+    custodianName: 'Marcus Vance',
+    custodianEmpId: 'EMP-4092',
+    custodianDepartment: 'Product Design & UX',
+    serialNumber: 'C02G901QMD6T',
+    hardwareModel: 'Model A2991 • Space Black • Released Late 2023',
+    technicalSpecs: [
+      { label: 'Hardware Serial Number', value: 'C02G901QMD6T' },
+      { label: 'SoC / Processor', value: 'Apple M3 Max (14c CPU / 30c GPU)' },
+      { label: 'Memory', value: '36 GB Unified Memory' },
+      { label: 'Internal Storage', value: '1 TB NVMe SSD' },
+      { label: 'Operating System', value: 'macOS Sonoma 14.4 (Managed MDM)' },
+    ],
+    custodyLog: [
+      { date: '12 Jan 2024', time: '09:30 AM', event: 'Formally assigned and handed over to Marcus Vance (Workstation deployment).' },
+      { date: '10 Jan 2024', time: '02:15 PM', event: 'Received into corporate inventory by IT Hardware Operations.' },
+    ],
+    acquisition: {
+      purchaseDate: '10 Jan 2024',
+      warrantyStatus: 'Valid until Jan 2027',
+      warrantyCover: 'AppleCare+ for Enterprise (3 Yrs)',
+      totalCost: '₹3,49,900',
+    },
   },
   {
-    id: 'AST-DS-2025-0489',
-    name: 'Apple Studio Display 27"',
-    category: 'Hardware • Display',
-    location: 'HQ - Floor 4, Dev Pod 4B',
-    status: 'Active / Verified',
-    icon: 'desktop_windows',
+    id: 'AST-2024-0109',
+    legacyId: 'AST-DS-2025-0489',
+    name: 'Dell UltraSharp 32" 4K PremierColor',
+    altName: 'Apple Studio Display 27"',
+    category: 'Displays & Monitors',
+    categoryKey: 'displays',
+    location: 'HQ - Bldg B, Floor 4, Desk B-412',
+    status: 'Active / In Custody',
+    statusCode: 'active',
+    icon: 'monitor',
     verificationStatus: 'Verified',
+    specification: 'U3223QE, IPS Black, 90W USB-C Hub integrated',
+    assignedDate: '15 Mar 2024',
+    custodianName: 'Marcus Vance',
+    custodianEmpId: 'EMP-4092',
+    custodianDepartment: 'Product Design & UX',
+    serialNumber: 'CN-0V2Y89-74261-43M-091A',
+    hardwareModel: 'U3223QE • IPS Black • 90W USB-C Hub',
+    technicalSpecs: [
+      { label: 'Hardware Serial Number', value: 'CN-0V2Y89-74261-43M-091A' },
+      { label: 'Resolution', value: '3840 x 2160 at 60Hz (4K UHD)' },
+      { label: 'Panel Type', value: 'IPS Black Technology, Contrast 2000:1' },
+      { label: 'Connectivity', value: 'USB-C Hub (90W Power Delivery), DisplayPort 1.4, HDMI 2.0' },
+      { label: 'Color Gamut', value: '100% sRGB, 98% DCI-P3, Delta E < 2' },
+    ],
+    custodyLog: [
+      { date: '15 Mar 2024', time: '11:00 AM', event: 'Allocated to Marcus Vance for desk setup B-412.' },
+      { date: '14 Mar 2024', time: '04:30 PM', event: 'Unboxed and color calibrated by IT Operations.' },
+    ],
+    acquisition: {
+      purchaseDate: '14 Mar 2024',
+      warrantyStatus: 'Valid until Mar 2027',
+      warrantyCover: '3-Year Advanced Exchange Service',
+      totalCost: '₹89,500',
+    },
   },
   {
-    id: 'AST-AU-2025-1102',
-    name: 'Jabra Evolve2 65 Headset',
-    category: 'Peripherals • Audio',
-    location: 'HQ - Floor 4, Dev Pod 4B',
-    status: 'Active',
-    icon: 'headphones',
+    id: 'AST-2024-0322',
+    legacyId: 'AST-AU-2025-1102',
+    name: 'Keychron Q1 Pro Mechanical Keyboard',
+    altName: 'Jabra Evolve2 65 Headset',
+    category: 'Peripherals & Input',
+    categoryKey: 'peripherals',
+    location: 'Remote / Home Office',
+    status: 'Active / In Custody',
+    statusCode: 'active',
+    icon: 'keyboard',
     verificationStatus: 'Active',
+    specification: 'QMK Wireless 75% Layout, Red Switches, Carbon Black',
+    assignedDate: '08 Aug 2024',
+    custodianName: 'Marcus Vance',
+    custodianEmpId: 'EMP-4092',
+    custodianDepartment: 'Product Design & UX',
+    serialNumber: 'KC-Q1P-2024-8841',
+    hardwareModel: 'Keychron Q1 Pro (75% ANSI QMK/VIA)',
+    technicalSpecs: [
+      { label: 'Hardware Serial Number', value: 'KC-Q1P-2024-8841' },
+      { label: 'Connectivity', value: 'Bluetooth 5.1 & Type-C Wired' },
+      { label: 'Switch Type', value: 'K Pro Red Mechanical (Hot-swappable)' },
+      { label: 'Body Material', value: 'Full CNC machined 6063 aluminum' },
+      { label: 'Battery Capacity', value: '4000mAh Rechargeable Li-polymer' },
+    ],
+    custodyLog: [
+      { date: '08 Aug 2024', time: '02:00 PM', event: 'Issued for approved hybrid ergonomic workstation policy.' },
+      { date: '05 Aug 2024', time: '01:15 PM', event: 'Received from vendor and inventoried.' },
+    ],
+    acquisition: {
+      purchaseDate: '05 Aug 2024',
+      warrantyStatus: 'Valid until Aug 2025',
+      warrantyCover: '1-Year Manufacturer Warranty',
+      totalCost: '₹18,900',
+    },
   },
   {
-    id: 'AST-SC-2024-0095',
-    name: 'YubiKey 5C NFC Security Key',
-    category: 'Security • 2FA Hardware',
-    location: 'Assigned to Custodian',
-    status: 'Active',
-    icon: 'vpn_key',
+    id: 'AST-2023-0881',
+    legacyId: 'AST-SC-2024-0095',
+    name: 'Apple iPad Pro 12.9"',
+    altName: 'YubiKey 5C NFC Security Key',
+    category: 'Mobile Devices',
+    categoryKey: 'mobile',
+    location: 'HQ - IT Service Lab (B-102)',
+    status: 'In Maintenance',
+    statusCode: 'maintenance',
+    icon: 'tablet_mac',
     verificationStatus: 'Active',
+    specification: '6th Gen, Wi-Fi 256GB Space Gray • Liquid Retina XDR',
+    assignedDate: '20 Nov 2024',
+    custodianName: 'Marcus Vance',
+    custodianEmpId: 'EMP-4092',
+    custodianDepartment: 'Product Design & UX',
+    serialNumber: 'DMPXQ29VHP50',
+    hardwareModel: 'Model A2436 • Space Gray • Wi-Fi 256GB',
+    technicalSpecs: [
+      { label: 'Hardware Serial Number', value: 'DMPXQ29VHP50' },
+      { label: 'Chip', value: 'Apple M2 (8-core CPU / 10-core GPU / 16-core Neural Engine)' },
+      { label: 'Display', value: '12.9-inch Liquid Retina XDR with ProMotion 120Hz' },
+      { label: 'Storage', value: '256 GB High-speed Flash' },
+      { label: 'Service Ticket', value: 'TKT-IT-2026-4491 (Battery diagnostic & thermal servicing)' },
+    ],
+    custodyLog: [
+      { date: '20 Nov 2024', time: '10:15 AM', event: 'Handed over to IT Service Lab (B-102) for battery diagnostic inspection.' },
+      { date: '15 Jan 2024', time: '09:00 AM', event: 'Initially issued to Marcus Vance for tablet UX testing.' },
+    ],
+    acquisition: {
+      purchaseDate: '15 Jan 2024',
+      warrantyStatus: 'Active (Covered under Enterprise Support)',
+      warrantyCover: 'AppleCare+ for Enterprise',
+      totalCost: '₹1,12,900',
+    },
   },
 ];
 
@@ -127,6 +258,20 @@ export const SEED_EMPLOYEE_REQUESTS: RequestItemData[] = [
     requestDate: '2026-02-24',
     status: 'In Review',
     justification: 'High-resolution color-accurate display required for enterprise UI design system overhaul.',
+    attachments: [
+      {
+        id: 'att-841-1',
+        name: 'Monitor_Requirements_Justification.pdf',
+        size: '1.2 MB',
+        uploadDate: '2026-02-24',
+      },
+      {
+        id: 'att-841-2',
+        name: 'Workstation_Spec_Sheet.pdf',
+        size: '840 KB',
+        uploadDate: '2026-02-24',
+      },
+    ],
     history: [
       {
         id: 'EVT-841-1',

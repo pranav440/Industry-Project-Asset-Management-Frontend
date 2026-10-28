@@ -227,7 +227,7 @@ export const EmployeeCreateRequestPage: React.FC<EmployeeCreateRequestPageProps>
 
   const handleViewInMyRequests = () => {
     setSubmittedRequest(null);
-    onNavigate?.('dashboard');
+    onNavigate?.('my-requests');
   };
 
   const currentCategories =

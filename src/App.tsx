@@ -24,6 +24,9 @@ import MaintenanceReportPage from './pages/MaintenanceReport';
 import DisposalReportPage from './pages/DisposalReport';
 import EmployeeDashboardPage from './pages/EmployeeDashboard';
 import EmployeeCreateRequestPage from './pages/EmployeeCreateRequest';
+import EmployeeMyRequestsPage from './pages/EmployeeMyRequests';
+import EmployeeRequestDetailsPage from './pages/EmployeeRequestDetails';
+import EmployeeMyAssignedAssetsPage from './pages/EmployeeMyAssignedAssets';
 import { clearSession, getToken, getTokenExpiry, getUser, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -33,6 +36,9 @@ type Route =
   | 'forgot-password'
   | 'dashboard'
   | 'create-request'
+  | 'my-requests'
+  | 'my-requests-details'
+  | 'my-assigned-assets'
   | 'assets'
   | 'asset-details'
   | 'asset-transfer'
@@ -62,6 +68,19 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
     }
     if (path === '/create-request' || path === '/create-request/') {
       return { name: 'create-request' };
+    }
+    if (path.startsWith('/my-requests/')) {
+      const rest = path.slice('/my-requests/'.length).replace(/^details\//, '').replace(/\/$/, '');
+      if (rest) {
+        return { name: 'my-requests-details', requestId: decodeURIComponent(rest) };
+      }
+      return { name: 'my-requests' };
+    }
+    if (path === '/my-requests' || path === '/my-requests/') {
+      return { name: 'my-requests' };
+    }
+    if (path === '/my-assigned-assets' || path === '/my-assigned-assets/') {
+      return { name: 'my-assigned-assets' };
     }
     // Reports Routes
     if (path === '/reports/utilization' || path === '/reports/utilization/') {
@@ -241,6 +260,10 @@ export default function App() {
         user?.role === 'employee' &&
         route !== 'dashboard' &&
         route !== 'create-request' &&
+        route !== 'my-requests' &&
+        route !== 'my-requests-details' &&
+        route !== 'my-assigned-assets' &&
+        route !== 'request-details' &&
         route !== 'login' &&
         route !== 'forgot-password'
       ) {
@@ -256,6 +279,15 @@ export default function App() {
         navigate('/dashboard');
       } else if (subRoute === 'create-request') {
         navigate('/create-request');
+      } else if (subRoute === 'my-requests') {
+        navigate('/my-requests');
+      } else if (subRoute === 'my-assigned-assets') {
+        navigate('/my-assigned-assets');
+      } else if (subRoute.startsWith('my-requests/')) {
+        navigate(`/${subRoute}`);
+      } else if (subRoute.startsWith('requests/')) {
+        const id = subRoute.slice('requests/'.length);
+        navigate(`/my-requests/${id}`);
       } else if (subRoute === 'signout' || subRoute === 'login') {
         signOut();
       } else {
@@ -409,6 +441,15 @@ export default function App() {
 
   // Request Details Route
   if (route === 'request-details' && getToken()) {
+    if (isEmployee) {
+      return (
+        <EmployeeRequestDetailsPage
+          requestId={routeInfo.requestId || ''}
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
     return (
       <RequestDetailsPage
         requestId={routeInfo.requestId || 'REQ-2026-0041'}
@@ -535,6 +576,37 @@ export default function App() {
   if (route === 'create-request' && getToken()) {
     return (
       <EmployeeCreateRequestPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // Employee My Requests Route
+  if (route === 'my-requests' && getToken()) {
+    return (
+      <EmployeeMyRequestsPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // Employee Request Details Route
+  if (route === 'my-requests-details' && getToken()) {
+    return (
+      <EmployeeRequestDetailsPage
+        requestId={routeInfo.requestId || ''}
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // Employee My Assigned Assets Route
+  if (route === 'my-assigned-assets' && getToken()) {
+    return (
+      <EmployeeMyAssignedAssetsPage
         onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />

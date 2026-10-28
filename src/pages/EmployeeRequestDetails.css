@@ -1,0 +1,1041 @@
+/* =====================================================================
+   AssetMX — Employee Request Details Stylesheet
+   Design Token Compliant & Responsive (Desktop, Laptop, Tablet)
+   ===================================================================== */
+
+.amx-erd-page {
+  padding: 24px 32px 48px 32px;
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: calc(100vh - 64px);
+  background-color: var(--amx-dash-bg, #f7f9fb);
+}
+
+@media (max-width: 768px) {
+  .amx-erd-page {
+    padding: 16px;
+    gap: 16px;
+  }
+}
+
+/* -------------------------------------------------------------
+   Header / Breadcrumb / Actions Row
+   ------------------------------------------------------------- */
+.amx-erd-header-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .amx-erd-header-wrap {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.amx-erd-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.amx-erd-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-erd-crumb-link {
+  color: var(--amx-dash-text-muted, #76777d);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.amx-erd-crumb-link:hover {
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-erd-crumb-sep {
+  color: var(--amx-dash-border, #c6c6cd);
+}
+
+.amx-erd-crumb-current {
+  color: var(--amx-dash-cyan, #00687a);
+  font-weight: 700;
+}
+
+.amx-erd-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--amx-dash-text-muted, #45464d);
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.amx-erd-back-link:hover {
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-erd-back-link .material-symbols-outlined {
+  transition: transform 0.15s ease;
+}
+
+.amx-erd-back-link:hover .material-symbols-outlined {
+  transform: translateX(-3px);
+}
+
+.amx-erd-readonly-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amx-dash-text-muted, #45464d);
+}
+
+/* -------------------------------------------------------------
+   Headline Banner Card
+   ------------------------------------------------------------- */
+.amx-erd-headline-banner {
+  background-color: var(--amx-dash-surface, #ffffff);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 14px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .amx-erd-headline-banner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.amx-erd-headline-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.amx-erd-headline-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background-color: rgba(0, 104, 122, 0.1);
+  color: var(--amx-dash-cyan, #00687a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.amx-erd-headline-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amx-erd-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.amx-erd-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.amx-erd-id-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  color: var(--amx-dash-text, #191c1e);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+}
+
+.amx-erd-item-summary {
+  font-size: 13.5px;
+  color: var(--amx-dash-text-muted, #76777d);
+  margin: 0;
+}
+
+.amx-erd-status-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.amx-erd-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.amx-erd-status-pill.in-review {
+  background-color: rgba(6, 182, 212, 0.14);
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-erd-status-pill.pending {
+  background-color: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
+.amx-erd-status-pill.fulfilled {
+  background-color: rgba(16, 124, 65, 0.14);
+  color: #047857;
+}
+
+.amx-erd-status-pill.rejected {
+  background-color: rgba(186, 26, 26, 0.14);
+  color: var(--amx-dash-error, #ba1a1a);
+}
+
+.amx-erd-priority-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amx-dash-text-muted, #45464d);
+}
+
+.amx-erd-priority-pill.high {
+  background-color: rgba(186, 26, 26, 0.1);
+  color: var(--amx-dash-error, #ba1a1a);
+  border-color: rgba(186, 26, 26, 0.2);
+}
+
+.amx-erd-priority-pill.urgent {
+  background-color: rgba(186, 26, 26, 0.15);
+  color: var(--amx-dash-error, #ba1a1a);
+  border-color: var(--amx-dash-error, #ba1a1a);
+  font-weight: 700;
+}
+
+/* -------------------------------------------------------------
+   Contextual Notice Banner
+   ------------------------------------------------------------- */
+.amx-erd-notice-banner {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.amx-erd-notice-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-erd-notice-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.amx-erd-notice-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+  margin: 0;
+}
+
+.amx-erd-notice-desc {
+  font-size: 12.5px;
+  color: var(--amx-dash-text-muted, #45464d);
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* -------------------------------------------------------------
+   Main Grid Layout (8 Cols + 4 Cols)
+   ------------------------------------------------------------- */
+.amx-erd-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+@media (min-width: 1024px) {
+  .amx-erd-grid {
+    grid-template-columns: 8fr 4fr;
+  }
+}
+
+.amx-erd-col-main,
+.amx-erd-col-side {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* -------------------------------------------------------------
+   Card Common Architecture
+   ------------------------------------------------------------- */
+.amx-erd-card {
+  background-color: var(--amx-dash-surface, #ffffff);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 14px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.amx-erd-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--amx-dash-surface-container, #eceef0);
+  padding-bottom: 12px;
+}
+
+.amx-erd-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-erd-card-icon {
+  font-size: 22px;
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-erd-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+  margin: 0;
+}
+
+.amx-erd-card-header-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+/* -------------------------------------------------------------
+   Card 1: Request Overview Details
+   ------------------------------------------------------------- */
+.amx-erd-bento-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .amx-erd-bento-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.amx-erd-bento-cell {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amx-erd-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-erd-bento-val {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-erd-bento-val.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+}
+
+/* Item Highlight Box */
+.amx-erd-item-spec-box {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.amx-erd-item-spec-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-erd-item-spec-oem {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-erd-item-main-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.amx-erd-item-spec-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-surface-high, #e6e8ea);
+  color: var(--amx-dash-text, #191c1e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.amx-erd-item-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.amx-erd-item-name-bold {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amx-erd-item-desc-muted {
+  font-size: 12.5px;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+/* Schedule Milestones */
+.amx-erd-milestones-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .amx-erd-milestones-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.amx-erd-milestone-cell {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amx-erd-milestone-value-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-erd-milestone-subtext {
+  font-size: 11.5px;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+/* Business Justification */
+.amx-erd-justification-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-erd-justification-box {
+  background-color: var(--amx-dash-surface-high, #e6e8ea);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.amx-erd-quote-icon {
+  font-size: 20px;
+  color: var(--amx-dash-cyan, #00687a);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.amx-erd-justification-text {
+  font-size: 13.5px;
+  font-style: italic;
+  color: var(--amx-dash-text, #191c1e);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* -------------------------------------------------------------
+   Card 2: Review & Fulfillment Information
+   ------------------------------------------------------------- */
+.amx-erd-two-col-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .amx-erd-two-col-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.amx-erd-reviewer-cell {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-erd-reviewer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-erd-reviewer-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--amx-dash-surface-high, #e6e8ea);
+  color: var(--amx-dash-text-muted, #45464d);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.amx-erd-reviewer-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-erd-remarks-box {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amx-erd-remarks-text {
+  font-size: 13px;
+  color: var(--amx-dash-text-muted, #45464d);
+  font-style: italic;
+  margin: 0;
+}
+
+/* -------------------------------------------------------------
+   Card 3: Request History Timeline
+   ------------------------------------------------------------- */
+.amx-erd-timeline-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-left: 12px;
+}
+
+.amx-erd-timeline-line {
+  position: absolute;
+  left: 23px;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  background-color: var(--amx-dash-surface-container, #eceef0);
+}
+
+.amx-erd-timeline-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  z-index: 1;
+}
+
+.amx-erd-timeline-node {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: var(--amx-dash-surface-high, #e6e8ea);
+  color: var(--amx-dash-text, #191c1e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.amx-erd-timeline-node.active {
+  background-color: rgba(0, 104, 122, 0.15);
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-erd-timeline-card {
+  flex: 1;
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amx-erd-timeline-top {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@media (min-width: 640px) {
+  .amx-erd-timeline-top {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.amx-erd-timeline-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-erd-timeline-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-erd-timeline-action {
+  font-size: 12.5px;
+  color: var(--amx-dash-text-muted, #45464d);
+  margin: 0;
+}
+
+/* -------------------------------------------------------------
+   Right Column Cards: Requester, Documents, Support
+   ------------------------------------------------------------- */
+.amx-erd-requester-profile {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.amx-erd-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: var(--amx-dash-cyan, #00687a);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.amx-erd-requester-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.amx-erd-requester-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-erd-requester-title {
+  font-size: 12px;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-erd-requester-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--amx-dash-cyan, #00687a);
+}
+
+.amx-erd-spec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.amx-erd-spec-item {
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amx-erd-spec-item.row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-erd-spec-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+/* Supporting Documents */
+.amx-erd-docs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.amx-erd-doc-card {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.amx-erd-doc-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.amx-erd-doc-icon-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background-color: rgba(186, 26, 26, 0.12);
+  color: var(--amx-dash-error, #ba1a1a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.amx-erd-doc-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.amx-erd-doc-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--amx-dash-text, #191c1e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amx-erd-doc-sub {
+  font-size: 11px;
+  color: var(--amx-dash-text-muted, #76777d);
+}
+
+.amx-erd-doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.amx-erd-doc-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.amx-erd-doc-btn.secondary {
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  border-color: var(--amx-dash-border, #e0e3e5);
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-erd-doc-btn.secondary:hover {
+  background-color: var(--amx-dash-surface-high, #e6e8ea);
+}
+
+.amx-erd-doc-btn.primary {
+  background-color: var(--amx-dash-cyan, #00687a);
+  color: #ffffff;
+}
+
+.amx-erd-doc-btn.primary:hover {
+  background-color: #005565;
+}
+
+/* Empty Documents Box */
+.amx-erd-empty-docs {
+  background-color: var(--amx-dash-surface-low, #f2f4f6);
+  border-radius: 10px;
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+}
+
+.amx-erd-empty-docs-desc {
+  font-size: 12.5px;
+  color: var(--amx-dash-text-muted, #76777d);
+  margin: 0;
+}
+
+/* Support Card */
+.amx-erd-card.support {
+  background-color: var(--amx-dash-surface-container, #eceef0);
+  border-color: #d1d5db;
+}
+
+.amx-erd-support-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+}
+
+.amx-erd-support-desc {
+  font-size: 12.5px;
+  color: var(--amx-dash-text-muted, #45464d);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.amx-erd-support-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.amx-erd-support-link {
+  color: var(--amx-dash-cyan, #00687a);
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.amx-erd-support-link:hover {
+  text-decoration: underline;
+}
+
+/* -------------------------------------------------------------
+   Error / Not Found State
+   ------------------------------------------------------------- */
+.amx-erd-error-container {
+  background-color: var(--amx-dash-surface, #ffffff);
+  border: 1px solid var(--amx-dash-border, #e0e3e5);
+  border-radius: 14px;
+  padding: 48px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  max-width: 540px;
+  margin: 40px auto;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+}
+
+.amx-erd-error-icon-wrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: rgba(186, 26, 26, 0.1);
+  color: var(--amx-dash-error, #ba1a1a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.amx-erd-error-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--amx-dash-text, #191c1e);
+  margin: 0;
+}
+
+.amx-erd-error-desc {
+  font-size: 13.5px;
+  color: var(--amx-dash-text-muted, #76777d);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.amx-erd-btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  background-color: var(--amx-dash-cyan, #00687a);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.amx-erd-btn-back:hover {
+  background-color: #005565;
+}
+
+/* -------------------------------------------------------------
+   Toast Alert
+   ------------------------------------------------------------- */
+.amx-erd-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  background-color: var(--amx-dash-text, #191c1e);
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: amxErdSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes amxErdSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+

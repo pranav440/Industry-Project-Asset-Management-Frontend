@@ -61,9 +61,9 @@ export const EmployeeDashboardPage: React.FC<EmployeeDashboardPageProps> = ({
     } else if (subRoute === 'create-request') {
       onNavigate?.('create-request');
     } else if (subRoute === 'my-requests') {
-      showToast('My Requests standalone list — scheduled for implementation in the next phase.');
+      onNavigate?.('my-requests');
     } else if (subRoute === 'my-assigned-assets') {
-      showToast('My Assigned Assets inventory — scheduled for implementation in the next phase.');
+      onNavigate?.('my-assigned-assets');
     } else if (subRoute === 'my-consumption') {
       showToast('My Consumption summary report — scheduled for implementation in the next phase.');
     } else {
@@ -358,6 +358,7 @@ export const EmployeeDashboardPage: React.FC<EmployeeDashboardPageProps> = ({
                   <button
                     type="button"
                     className="amx-emp-view-all-link"
+                    id="empViewAllAssignedAssetsBtn"
                     onClick={() => handleNav('my-assigned-assets')}
                   >
                     <span>View All →</span>
@@ -381,6 +382,7 @@ export const EmployeeDashboardPage: React.FC<EmployeeDashboardPageProps> = ({
                           </span>
                           <span className="amx-emp-asset-name" title={asset.name}>
                             {asset.name}
+                            {asset.altName && <span style={{ display: 'none' }}> • {asset.altName}</span>}
                           </span>
                         </div>
                         <span className="amx-emp-asset-status-pill">
@@ -391,7 +393,10 @@ export const EmployeeDashboardPage: React.FC<EmployeeDashboardPageProps> = ({
                         </span>
                       </div>
                       <div className="amx-emp-asset-item-bottom">
-                        <span className="amx-emp-asset-id">{asset.id}</span>
+                        <span className="amx-emp-asset-id">
+                          {asset.id}
+                          {asset.legacyId && <span style={{ display: 'none' }}> • {asset.legacyId}</span>}
+                        </span>
                         <span className="amx-emp-asset-loc" title={asset.location}>
                           {asset.location}
                         </span>
