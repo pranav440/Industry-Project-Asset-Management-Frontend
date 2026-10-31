@@ -18,6 +18,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const activeRole = role ?? getUser()?.role ?? 'admin';
   const isEmployee = activeRole === 'employee';
+  const isHost = activeRole === 'host';
 
   const adminNavItems = [
     { label: 'Dashboard', path: 'dashboard', icon: 'dashboard', fill: true },
@@ -39,7 +40,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { label: 'My Consumption', path: 'my-consumption', icon: 'bar_chart' },
   ];
 
-  const navItems = isEmployee ? employeeNavItems : adminNavItems;
+  const hostNavItems = [
+    { label: 'Host Dashboard', path: 'dashboard', icon: 'grid_view', fill: true },
+    { label: 'Gate Passes', path: 'gate-pass', icon: 'confirmation_number' },
+    { label: 'Movement Activity', path: 'movement', icon: 'swap_horiz' },
+  ];
+
+  const navItems = isEmployee ? employeeNavItems : isHost ? hostNavItems : adminNavItems;
 
   const handleNavClick = (e: React.MouseEvent, path: string) => {
     e.preventDefault();
@@ -63,15 +70,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isEmployee ? 'inventory_2' : 'dataset'}
         </span>
         <div>
-          <h1 className="amx-brand-title">AssetMX</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h1 className="amx-brand-title">AssetMX</h1>
+            {isHost && (
+              <span
+                className="amx-host-badge"
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  letterSpacing: '0.06em',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
+                  backgroundColor: 'rgba(76, 215, 246, 0.16)',
+                  color: 'var(--amx-dash-cyan-bright, #57dffe)',
+                  border: '1px solid rgba(76, 215, 246, 0.3)',
+                  lineHeight: 1.2,
+                }}
+              >
+                HOST
+              </span>
+            )}
+          </div>
           <p className="amx-brand-subtitle">
             {isEmployee ? 'Employee Portal' : 'Enterprise Management'}
           </p>
         </div>
       </div>
 
-      {/* Action CTA for Admin or Section Label for Employee */}
-      {!isEmployee ? (
+      {/* Action CTA for Admin or Section Label for Host / Employee */}
+      {isHost ? (
+        <div className="amx-sidebar-section-header" style={{ padding: '6px 24px 10px 24px' }}>
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: 'var(--amx-dash-navy-muted, #8b95ad)',
+            }}
+          >
+            Operations
+          </span>
+        </div>
+      ) : !isEmployee ? (
         <div className="amx-sidebar-cta">
           <button
             type="button"
@@ -135,6 +176,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Utility Footer */}
       <div className="amx-sidebar-footer">
+        {isHost && (
+          <div className="amx-sidebar-section-header" style={{ padding: '0 24px 8px 24px' }}>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'var(--amx-dash-navy-muted, #8b95ad)',
+              }}
+            >
+              System
+            </span>
+          </div>
+        )}
         <ul className="amx-nav-list" role="menu">
           <li className="amx-nav-item" role="none">
             <a
@@ -161,6 +217,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </a>
           </li>
         </ul>
+        {isHost && (
+          <div
+            className="amx-sidebar-host-version"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 24px 4px 24px',
+              fontSize: '11px',
+              color: 'var(--amx-dash-navy-muted, #8b95ad)',
+              fontFamily: 'monospace',
+            }}
+          >
+            <span>v2.4.12-ent</span>
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--amx-dash-cyan-bright, #57dffe)',
+                boxShadow: '0 0 6px rgba(87, 223, 254, 0.8)',
+                display: 'inline-block',
+              }}
+              title="Perimeter Node Synchronized"
+            />
+          </div>
+        )}
       </div>
     </nav>
   );

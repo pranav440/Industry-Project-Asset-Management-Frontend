@@ -19,7 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNotificationsClick,
   onHelpClick,
   onProfileClick,
-  searchPlaceholder = 'Search assets, requests...',
+  searchPlaceholder,
   userName,
   userRoleSubtitle,
   role,
@@ -27,8 +27,27 @@ export const Header: React.FC<HeaderProps> = ({
   const [internalVal, setInternalVal] = useState(searchValue ?? '');
   const currentUser = getUser();
   const resolvedRole = role ?? currentUser?.role ?? 'admin';
-  const resolvedName = userName ?? (resolvedRole === 'employee' ? (currentUser?.full_name || 'Marcus Vance') : currentUser?.full_name);
-  const resolvedSubtitle = userRoleSubtitle ?? (resolvedRole === 'employee' ? 'Product Design (Employee)' : 'Administrator (Admin)');
+  const resolvedName = userName ?? (
+    resolvedRole === 'employee'
+      ? (currentUser?.full_name || 'Marcus Vance')
+      : resolvedRole === 'host'
+      ? (currentUser?.full_name || 'Sarah Jenkins')
+      : currentUser?.full_name
+  );
+  const resolvedSubtitle = userRoleSubtitle ?? (
+    resolvedRole === 'employee'
+      ? 'Product Design (Employee)'
+      : resolvedRole === 'host'
+      ? 'Host Security Officer'
+      : 'Administrator (Admin)'
+  );
+  const resolvedPlaceholder = searchPlaceholder ?? (
+    resolvedRole === 'host'
+      ? 'Search gate passes, assets, movement...'
+      : resolvedRole === 'employee'
+      ? 'Search my requests, assets...'
+      : 'Search assets, requests...'
+  );
 
   useEffect(() => {
     if (searchValue !== undefined) {
@@ -54,10 +73,10 @@ export const Header: React.FC<HeaderProps> = ({
         <input
           type="search"
           className="amx-search-input"
-          placeholder={searchPlaceholder}
+          placeholder={resolvedPlaceholder}
           value={internalVal}
           onChange={handleChange}
-          aria-label={searchPlaceholder}
+          aria-label={resolvedPlaceholder}
         />
       </div>
 
@@ -123,14 +142,28 @@ export const Header: React.FC<HeaderProps> = ({
           aria-label="User Profile menu"
           onClick={onProfileClick}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onProfileClick?.(); }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#131b2e',
+            color: '#acedff',
+            fontWeight: 700,
+            fontSize: '13px',
+            overflow: 'hidden',
+          }}
         >
-          <img
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_gJW4-CiPC6EvQEY0S7_1SjwP3YwK8dtCA94bMz6dNHkDEJvQQXGRnVBF6vaL-qVwSdQn1hmhw_OkKiEMTxo-2zPwn8E0U-d1KXH9wsXNkN_xhPX4c-CnzrwSanbjSh4U2QysBM8wosable9WgGubS-OS0fgNgQwgirHge94FKuGZfwVx4-KtZC7Uy8-VhEajhmCA_jOaXSK3hoU1S-PUHIbbeY0MMyx-Sm5Pb25C_eqf01L-IJgMmw"
-            alt="User profile avatar"
-            onError={(e) => {
-              (e.currentTarget as HTMLElement).style.display = 'none';
-            }}
-          />
+          {resolvedRole === 'host' ? (
+            <span style={{ letterSpacing: '0.04em' }}>SJ</span>
+          ) : (
+            <img
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_gJW4-CiPC6EvQEY0S7_1SjwP3YwK8dtCA94bMz6dNHkDEJvQQXGRnVBF6vaL-qVwSdQn1hmhw_OkKiEMTxo-2zPwn8E0U-d1KXH9wsXNkN_xhPX4c-CnzrwSanbjSh4U2QysBM8wosable9WgGubS-OS0fgNgQwgirHge94FKuGZfwVx4-KtZC7Uy8-VhEajhmCA_jOaXSK3hoU1S-PUHIbbeY0MMyx-Sm5Pb25C_eqf01L-IJgMmw"
+              alt="User profile avatar"
+              onError={(e) => {
+                (e.currentTarget as HTMLElement).style.display = 'none';
+              }}
+            />
+          )}
         </div>
       </div>
     </header>

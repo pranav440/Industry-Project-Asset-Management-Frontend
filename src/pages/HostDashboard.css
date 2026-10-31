@@ -1,0 +1,1245 @@
+/* =====================================================================
+   AssetMX Host Dashboard Stylesheet
+   Matches approved Stitch screenshot with pixel fidelity
+   ===================================================================== */
+
+.amx-host-dash-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 4px 8px 32px 8px;
+  color: var(--amx-dash-text, #191c1e);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-sizing: border-box;
+}
+
+/* -------------------------------------------------------------
+   Header / Title Bar
+   ------------------------------------------------------------- */
+.amx-host-title-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 4px;
+}
+
+.amx-host-title-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-host-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.amx-host-headline {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--amx-dash-text, #191c1e);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.amx-host-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background-color: rgba(76, 215, 246, 0.16);
+  color: #00687a;
+  border: 1px solid rgba(76, 215, 246, 0.35);
+  line-height: 1;
+}
+
+.amx-host-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #00a896;
+  box-shadow: 0 0 6px rgba(0, 168, 150, 0.7);
+  display: inline-block;
+}
+
+.amx-host-subtitle {
+  font-size: 13.5px;
+  color: var(--amx-dash-text-muted, #5f6368);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.amx-host-title-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.amx-host-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: #eef2f6;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.amx-host-chip .material-symbols-outlined {
+  font-size: 16px !important;
+  color: #00687a;
+}
+
+/* -------------------------------------------------------------
+   KPI Summary Cards Grid (4 Columns)
+   ------------------------------------------------------------- */
+.amx-host-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.amx-host-kpi-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+  min-height: 124px;
+  box-sizing: border-box;
+}
+
+.amx-host-kpi-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.amx-host-kpi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.amx-host-kpi-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin: 0;
+}
+
+.amx-host-kpi-icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f0f9ff;
+  color: #0284c7;
+  position: relative;
+}
+
+.amx-host-kpi-icon-wrap.alert-accent {
+  background-color: #fff1f2;
+  color: #e11d48;
+}
+
+.amx-host-kpi-icon-wrap.warning-accent {
+  background-color: #f8fafc;
+  color: #475569;
+}
+
+.amx-host-kpi-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #e11d48;
+}
+
+.amx-host-kpi-icon-wrap .material-symbols-outlined {
+  font-size: 18px !important;
+}
+
+.amx-host-kpi-body {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.amx-host-kpi-value {
+  font-size: 32px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.amx-host-kpi-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  line-height: 1.3;
+}
+
+.amx-host-kpi-pill.live {
+  background-color: #e0f2fe;
+  color: #0284c7;
+}
+
+.amx-host-kpi-pill.priority {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.amx-host-kpi-pill.trend-up {
+  background-color: #ecfdf5;
+  color: #059669;
+}
+
+.amx-host-kpi-pill.review {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.amx-host-kpi-footer {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.3;
+}
+
+/* -------------------------------------------------------------
+   Main Content Layout (Two Rows: Upper 2 Columns, Lower 2 Columns)
+   ------------------------------------------------------------- */
+.amx-host-section-row {
+  display: grid;
+  grid-template-columns: 68% calc(32% - 16px);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.amx-host-section-row.equal-split {
+  grid-template-columns: calc(56% - 8px) calc(44% - 8px);
+}
+
+.amx-host-panel {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+.amx-host-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.amx-host-panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.amx-host-panel-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.amx-host-count-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.amx-host-count-badge.action-badge {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.amx-host-panel-subtitle {
+  font-size: 12px;
+  color: #64748b;
+  margin: 2px 0 0 0;
+}
+
+.amx-host-panel-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Filter Tabs */
+.amx-host-tabs {
+  display: flex;
+  align-items: center;
+  background-color: #f1f5f9;
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.amx-host-tab-btn {
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.amx-host-tab-btn:hover {
+  color: #0f172a;
+}
+
+.amx-host-tab-btn.active {
+  background-color: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.amx-host-header-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0284c7;
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.amx-host-header-link:hover {
+  text-decoration: underline;
+}
+
+/* -------------------------------------------------------------
+   Gate Pass Activity Table
+   ------------------------------------------------------------- */
+.amx-host-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.amx-host-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.amx-host-table thead {
+  background-color: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.amx-host-table th {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.amx-host-table tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.12s ease;
+  cursor: pointer;
+}
+
+.amx-host-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.amx-host-table td {
+  padding: 12px 14px;
+  vertical-align: middle;
+  color: #1e293b;
+}
+
+.amx-host-pass-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 12.5px;
+}
+
+.amx-host-type-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  line-height: 1.2;
+}
+
+.amx-host-type-pill.returnable {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.amx-host-type-pill.non-returnable {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.amx-host-type-pill.maint-dispatch {
+  background-color: #ede9fe;
+  color: #6d28d9;
+}
+
+.amx-host-type-pill.transfer {
+  background-color: #e0f7fa;
+  color: #00687a;
+}
+
+.amx-host-asset-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.amx-host-asset-name {
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.amx-host-asset-sn {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #64748b;
+}
+
+.amx-host-requester-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.amx-host-requester-name {
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.amx-host-requester-dept {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.amx-host-schedule-text {
+  font-size: 12px;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.amx-host-status-badge-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  line-height: 1.2;
+}
+
+.amx-host-status-badge-cell.in-progress {
+  background-color: #e2e8f0;
+  color: #334155;
+}
+
+.amx-host-status-badge-cell.approved {
+  background-color: #ecfdf5;
+  color: #047857;
+}
+
+.amx-host-status-badge-cell.escalated {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.amx-host-status-badge-cell.pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.amx-host-status-dot-cell {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.amx-host-status-badge-cell.in-progress .amx-host-status-dot-cell {
+  background-color: #64748b;
+}
+
+.amx-host-status-badge-cell.approved .amx-host-status-dot-cell {
+  background-color: #10b981;
+}
+
+.amx-host-status-badge-cell.escalated .amx-host-status-dot-cell {
+  background-color: #ef4444;
+}
+
+.amx-host-status-badge-cell.pending .amx-host-status-dot-cell {
+  background-color: #f59e0b;
+}
+
+/* Pagination Footer */
+.amx-host-table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 4px;
+}
+
+.amx-host-records-count {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.amx-host-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-host-page-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.amx-host-page-nav-btn {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #475569;
+  transition: all 0.12s ease;
+}
+
+.amx-host-page-nav-btn:hover:not(:disabled) {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.amx-host-page-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.amx-host-page-nav-btn .material-symbols-outlined {
+  font-size: 18px !important;
+}
+
+/* -------------------------------------------------------------
+   Movement Overview (Right Top Panel)
+   ------------------------------------------------------------- */
+.amx-host-movement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.amx-host-movement-item {
+  background-color: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.amx-host-movement-item:hover {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.amx-host-movement-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-host-movement-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.amx-host-movement-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+
+.amx-host-movement-pill.in-transit {
+  background-color: #e0f2fe;
+  color: #0284c7;
+}
+
+.amx-host-movement-pill.clearance {
+  background-color: #e0f7fa;
+  color: #00687a;
+}
+
+.amx-host-movement-pill.checkin {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.amx-host-movement-asset {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.amx-host-movement-route {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #475569;
+}
+
+.amx-host-movement-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #64748b;
+  padding-top: 2px;
+}
+
+/* -------------------------------------------------------------
+   Pending Host Actions (Lower Left Panel)
+   ------------------------------------------------------------- */
+.amx-host-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.amx-host-action-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  transition: all 0.15s ease;
+}
+
+.amx-host-action-card:hover {
+  border-color: #cbd5e1;
+  background-color: #fafbfc;
+}
+
+.amx-host-action-card-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex: 1;
+}
+
+.amx-host-action-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background-color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #334155;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.amx-host-action-icon-box .material-symbols-outlined {
+  font-size: 20px !important;
+}
+
+.amx-host-action-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.amx-host-action-title-row {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.amx-host-action-requester {
+  font-size: 12px;
+  color: #475569;
+}
+
+.amx-host-action-prompt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b91c1c;
+  margin-top: 2px;
+}
+
+.amx-host-action-prompt.subtle-prompt {
+  color: #475569;
+  font-weight: 500;
+}
+
+.amx-host-action-prompt .material-symbols-outlined {
+  font-size: 16px !important;
+}
+
+.amx-host-action-btn-primary {
+  background-color: #0f172a;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s ease;
+}
+
+.amx-host-action-btn-primary:hover {
+  background-color: #1e293b;
+  transform: translateY(-1px);
+}
+
+.amx-host-action-btn-secondary {
+  background-color: #f8fafc;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s ease;
+}
+
+.amx-host-action-btn-secondary:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.amx-host-action-footer-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: #64748b;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.amx-host-action-footer-note .material-symbols-outlined {
+  font-size: 16px !important;
+  color: #0284c7;
+}
+
+/* -------------------------------------------------------------
+   Operational Alerts (Lower Right Panel)
+   ------------------------------------------------------------- */
+.amx-host-alerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex: 1;
+}
+
+.amx-host-alert-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.amx-host-alert-item.critical-alert {
+  border-left: 3px solid #ba1a1a;
+  background-color: #fffbfa;
+}
+
+.amx-host-alert-item.info-alert {
+  border-left: 3px solid #00687a;
+  background-color: #fbfdfe;
+}
+
+.amx-host-alert-item.warning-alert {
+  border-left: 3px solid #e06d53;
+  background-color: #fffcfb;
+}
+
+.amx-host-alert-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-host-alert-header-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.amx-host-alert-header-row .material-symbols-outlined {
+  font-size: 16px !important;
+}
+
+.amx-host-alert-item.critical-alert .amx-host-alert-header-row .material-symbols-outlined {
+  color: #ba1a1a;
+}
+
+.amx-host-alert-item.info-alert .amx-host-alert-header-row .material-symbols-outlined {
+  color: #00687a;
+}
+
+.amx-host-alert-item.warning-alert .amx-host-alert-header-row .material-symbols-outlined {
+  color: #e06d53;
+}
+
+.amx-host-alert-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.amx-host-alert-desc {
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.amx-host-alert-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #64748b;
+  padding-top: 2px;
+}
+
+.amx-host-alerts-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: #64748b;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.amx-host-escalation-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: #0284c7;
+  text-decoration: none;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.amx-host-escalation-link:hover {
+  text-decoration: underline;
+}
+
+/* -------------------------------------------------------------
+   Inspection / Verification Drawer
+   ------------------------------------------------------------- */
+.amx-host-drawer-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(19, 27, 46, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 999;
+  display: flex;
+  justify-content: flex-end;
+  animation: amxHostFadeIn 0.2s ease-out;
+}
+
+.amx-host-drawer {
+  width: 480px;
+  max-width: 90vw;
+  height: 100vh;
+  background-color: #ffffff;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  animation: amxHostSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.amx-host-drawer-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #f8fafc;
+}
+
+.amx-host-drawer-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.amx-host-drawer-close {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.amx-host-drawer-close:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.amx-host-drawer-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.amx-host-drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.amx-host-drawer-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin: 0;
+}
+
+.amx-host-drawer-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  background-color: #f8fafc;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #edf2f7;
+}
+
+.amx-host-drawer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.amx-host-drawer-field-label {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.amx-host-drawer-field-val {
+  font-size: 12.5px;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.amx-host-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.amx-host-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+}
+
+.amx-host-check-item input[type='checkbox'] {
+  margin-top: 3px;
+  accent-color: #00687a;
+  width: 16px;
+  height: 16px;
+}
+
+.amx-host-check-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.amx-host-check-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.amx-host-check-sub {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.amx-host-drawer-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  background-color: #f8fafc;
+}
+
+/* -------------------------------------------------------------
+   Modal Backdrop
+   ------------------------------------------------------------- */
+.amx-host-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(19, 27, 46, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: amxHostFadeIn 0.2s ease-out;
+}
+
+.amx-host-modal {
+  width: 540px;
+  max-width: 95vw;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: amxHostPopIn 0.2s ease-out;
+}
+
+.amx-host-modal-header {
+  padding: 18px 22px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #f8fafc;
+}
+
+.amx-host-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.amx-host-modal-body {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.amx-host-modal-footer {
+  padding: 14px 22px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  background-color: #f8fafc;
+}
+
+/* Toast */
+.amx-host-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background-color: #0f172a;
+  color: #ffffff;
+  padding: 12px 18px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 1050;
+  animation: amxHostSlideUp 0.2s ease-out;
+}
+
+.amx-host-toast .material-symbols-outlined {
+  color: var(--amx-dash-cyan-bright, #57dffe);
+  font-size: 18px !important;
+}
+
+/* Animations */
+@keyframes amxHostFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes amxHostSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes amxHostPopIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes amxHostSlideUp {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* -------------------------------------------------------------
+   Responsive Breakpoints
+   ------------------------------------------------------------- */
+@media (max-width: 1200px) {
+  .amx-host-section-row,
+  .amx-host-section-row.equal-split {
+    grid-template-columns: 1fr;
+  }
+  .amx-host-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .amx-host-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .amx-host-title-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .amx-host-title-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .amx-host-action-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .amx-host-action-card-left {
+    width: 100%;
+  }
+}
+

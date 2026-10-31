@@ -28,6 +28,7 @@ import EmployeeMyRequestsPage from './pages/EmployeeMyRequests';
 import EmployeeRequestDetailsPage from './pages/EmployeeRequestDetails';
 import EmployeeMyAssignedAssetsPage from './pages/EmployeeMyAssignedAssets';
 import { EmployeeMyConsumptionPage } from './pages/EmployeeMyConsumption';
+import { HostDashboardPage } from './pages/HostDashboard';
 import { clearSession, getToken, getTokenExpiry, getUser, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -566,6 +567,15 @@ export default function App() {
     if (isEmployee) {
       return (
         <EmployeeDashboardPage
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
+
+    if (currentUser?.role === 'host') {
+      return (
+        <HostDashboardPage
           onNavigate={handleSubRouteNav}
           onSignOut={signOut}
         />
