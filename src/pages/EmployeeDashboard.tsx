@@ -65,7 +65,7 @@ export const EmployeeDashboardPage: React.FC<EmployeeDashboardPageProps> = ({
     } else if (subRoute === 'my-assigned-assets') {
       onNavigate?.('my-assigned-assets');
     } else if (subRoute === 'my-consumption') {
-      showToast('My Consumption summary report — scheduled for implementation in the next phase.');
+      onNavigate?.('my-consumption');
     } else {
       showToast(`${subRoute.charAt(0).toUpperCase() + subRoute.slice(1)} — Employee self-service.`);
     }
@@ -436,6 +436,7 @@ export const EmployeeDashboardPage: React.FC<EmployeeDashboardPageProps> = ({
                   <button
                     type="button"
                     className="amx-emp-view-all-link"
+                    id="empViewConsumptionSummaryBtn"
                     onClick={() => handleNav('my-consumption')}
                   >
                     <span>View Summary →</span>

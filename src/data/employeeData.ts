@@ -209,33 +209,42 @@ export const DEFAULT_EMPLOYEE_ASSETS: EmployeeAssignedAsset[] = [
   },
 ];
 
-// Default demonstration consumption records for the current monthly cycle
+// Default demonstration consumption records for the current monthly cycle (dynamically computed from verified issuance records)
 export const DEFAULT_EMPLOYEE_CONSUMPTION: EmployeeConsumptionSummary = {
   period: 'This Month',
-  cycleReference: 'REC-2026-M2',
+  cycleReference: 'REC-2026-M10',
+  totalIssued: 0,
+  activeCategoriesCount: 0,
+  categories: [],
+};
+
+// All-Time historical cumulative consumption summary across all qualifying fulfilled records (18 Units across 4 Categories)
+export const ALL_TIME_EMPLOYEE_CONSUMPTION: EmployeeConsumptionSummary = {
+  period: 'All Time',
+  cycleReference: 'REC-2026-ALL',
   totalIssued: 18,
   activeCategoriesCount: 4,
   categories: [
     {
-      name: 'Office & Printing Supplies',
+      name: 'Cables & Adapters',
       units: 8,
       percentage: 44.4,
       color: '#00687a',
     },
     {
-      name: 'IT Cables & Adapters',
+      name: 'Desk Ergonomics',
       units: 4,
       percentage: 22.2,
       color: '#4cd7f6',
     },
     {
-      name: 'Cleaning & Sanitization',
+      name: 'Office & Stationery',
       units: 4,
       percentage: 22.2,
       color: '#57dffe',
     },
     {
-      name: 'Pantry & Refreshments',
+      name: 'Device Cleaning & Care',
       units: 2,
       percentage: 11.1,
       color: '#8b95ad',
@@ -538,24 +547,436 @@ export function getScopedEmployeeAssets(user: AuthUser | null): EmployeeAssigned
 }
 
 /**
- * Get consumption summary scoped to the authenticated employee
+ * Itemized consumable issuance record formally issued to an employee
  */
-export function getScopedEmployeeConsumption(user: AuthUser | null): EmployeeConsumptionSummary | null {
-  if (!user) return null;
+export interface EmployeeConsumableIssuanceRecord {
+  id: string; // e.g. 'ISS-2026-119'
+  itemName: string;
+  specification: string;
+  category: string;
+  categoryKey: string;
+  quantityIssued: number;
+  fulfillmentDate: string; // display string e.g. '18 Feb 2026'
+  rawDate: string; // ISO date string e.g. '2026-02-18'
+  relatedRequestId: string;
+  status: string; // 'Fulfilled / Issued'
+  reference: string;
+  icon: string;
+  isCurrentMonth: boolean;
+}
+
+// Verified demonstration consumable issuance records for Marcus Vance (EMP-4092)
+export const DEFAULT_EMPLOYEE_ISSUANCES: EmployeeConsumableIssuanceRecord[] = [
+  {
+    id: 'ISS-2026-119',
+    itemName: 'USB-C to DisplayPort 1.4 Cable (2m)',
+    specification: '8K@60Hz, Braided Space Gray',
+    category: 'Cables & Adapters',
+    categoryKey: 'cables',
+    quantityIssued: 4,
+    fulfillmentDate: '18 Feb 2026',
+    rawDate: '2026-02-18',
+    relatedRequestId: 'REQ-2026-0814',
+    status: 'Fulfilled / Issued',
+    reference: 'ISS-2026-119',
+    icon: 'cable',
+    isCurrentMonth: false,
+  },
+  {
+    id: 'ISS-2026-094',
+    itemName: 'Memory Foam Ergonomic Wrist Rest',
+    specification: 'Full-size keyboard wrist support, anti-slip',
+    category: 'Desk Ergonomics',
+    categoryKey: 'ergonomics',
+    quantityIssued: 2,
+    fulfillmentDate: '04 Feb 2026',
+    rawDate: '2026-02-04',
+    relatedRequestId: 'REQ-2026-0742',
+    status: 'Fulfilled / Issued',
+    reference: 'ISS-2026-094',
+    icon: 'pan_tool',
+    isCurrentMonth: false,
+  },
+  {
+    id: 'ISS-2026-052',
+    itemName: 'Microfiber Screen Cleaning Kit & Solution',
+    specification: '250ml spray + 2x dual-density cloths',
+    category: 'Device Cleaning & Care',
+    categoryKey: 'cleaning',
+    quantityIssued: 2,
+    fulfillmentDate: '15 Jan 2026',
+    rawDate: '2026-01-15',
+    relatedRequestId: 'REQ-2026-0612',
+    status: 'Fulfilled / Issued',
+    reference: 'ISS-2026-052',
+    icon: 'cleaning_services',
+    isCurrentMonth: false,
+  },
+  {
+    id: 'ISS-2025-881',
+    itemName: 'Thunderbolt 4 Passive Cable (0.8m)',
+    specification: '40Gbps, 100W PD certified',
+    category: 'Cables & Adapters',
+    categoryKey: 'cables',
+    quantityIssued: 4,
+    fulfillmentDate: '12 Dec 2025',
+    rawDate: '2025-12-12',
+    relatedRequestId: 'REQ-2025-4921',
+    status: 'Fulfilled / Issued',
+    reference: 'ISS-2025-881',
+    icon: 'bolt',
+    isCurrentMonth: false,
+  },
+  {
+    id: 'ISS-2025-712',
+    itemName: 'Notebook & Fineliner Drafting Pen Pack',
+    specification: 'A5 Dot-Grid Hardcover + 3x 0.5mm pens',
+    category: 'Office & Stationery',
+    categoryKey: 'stationery',
+    quantityIssued: 4,
+    fulfillmentDate: '10 Nov 2025',
+    rawDate: '2025-11-10',
+    relatedRequestId: 'REQ-2025-4289',
+    status: 'Fulfilled / Issued',
+    reference: 'ISS-2025-712',
+    icon: 'edit_note',
+    isCurrentMonth: false,
+  },
+  {
+    id: 'ISS-2025-512',
+    itemName: 'Ergonomic Vertical Mouse Pad with Gel Rest',
+    specification: 'Lycra fabric, non-skid base',
+    category: 'Desk Ergonomics',
+    categoryKey: 'ergonomics',
+    quantityIssued: 2,
+    fulfillmentDate: '14 Aug 2025',
+    rawDate: '2025-08-14',
+    relatedRequestId: 'REQ-2025-3810',
+    status: 'Fulfilled / Issued',
+    reference: 'ISS-2025-512',
+    icon: 'mouse',
+    isCurrentMonth: false,
+  },
+];
+
+// Historical request records backing the fulfilled consumable issuances
+export const HISTORICAL_EMPLOYEE_CONSUMABLE_REQUESTS: RequestItemData[] = [
+  {
+    id: 'REQ-2026-0814',
+    requesterName: 'Marcus Vance',
+    requesterEmail: 'employee@assetmx.local',
+    department: 'Product Design',
+    requestType: 'Consumable Request',
+    requestedItem: 'USB-C to DisplayPort 1.4 Cable (2m)',
+    category: 'Cables & Adapters',
+    quantity: 4,
+    priority: 'Medium',
+    requestDate: '2026-02-14',
+    status: 'Fulfilled',
+    justification: 'Display connectivity for workstation multi-monitor setup.',
+    history: [
+      {
+        id: 'EVT-814-1',
+        timestamp: '2026-02-18 11:30',
+        stage: 'Fulfilled',
+        action: 'Disbursed from Central Store (ISS-2026-119)',
+        performedBy: 'Hardware Operations',
+      },
+      {
+        id: 'EVT-814-2',
+        timestamp: '2026-02-14 10:00',
+        stage: 'Pending',
+        action: 'Request submitted',
+        performedBy: 'Marcus Vance',
+      },
+    ],
+  },
+  {
+    id: 'REQ-2026-0742',
+    requesterName: 'Marcus Vance',
+    requesterEmail: 'employee@assetmx.local',
+    department: 'Product Design',
+    requestType: 'Consumable Request',
+    requestedItem: 'Memory Foam Ergonomic Wrist Rest',
+    category: 'Desk Ergonomics',
+    quantity: 2,
+    priority: 'Low',
+    requestDate: '2026-02-01',
+    status: 'Fulfilled',
+    justification: 'Wrist support ergonomics for prolonged design sessions.',
+    history: [
+      {
+        id: 'EVT-742-1',
+        timestamp: '2026-02-04 14:15',
+        stage: 'Fulfilled',
+        action: 'Disbursed from Office Supplies (ISS-2026-094)',
+        performedBy: 'Facilities Lead',
+      },
+      {
+        id: 'EVT-742-2',
+        timestamp: '2026-02-01 09:30',
+        stage: 'Pending',
+        action: 'Request submitted',
+        performedBy: 'Marcus Vance',
+      },
+    ],
+  },
+  {
+    id: 'REQ-2026-0612',
+    requesterName: 'Marcus Vance',
+    requesterEmail: 'employee@assetmx.local',
+    department: 'Product Design',
+    requestType: 'Consumable Request',
+    requestedItem: 'Microfiber Screen Cleaning Kit & Solution',
+    category: 'Device Cleaning & Care',
+    quantity: 2,
+    priority: 'Low',
+    requestDate: '2026-01-12',
+    status: 'Fulfilled',
+    justification: 'Hardware screen maintenance for Studio Displays and laptops.',
+    history: [
+      {
+        id: 'EVT-612-1',
+        timestamp: '2026-01-15 16:00',
+        stage: 'Fulfilled',
+        action: 'Disbursed from Inventory (ISS-2026-052)',
+        performedBy: 'IT Support Tech',
+      },
+      {
+        id: 'EVT-612-2',
+        timestamp: '2026-01-12 11:00',
+        stage: 'Pending',
+        action: 'Request submitted',
+        performedBy: 'Marcus Vance',
+      },
+    ],
+  },
+  {
+    id: 'REQ-2025-4921',
+    requesterName: 'Marcus Vance',
+    requesterEmail: 'employee@assetmx.local',
+    department: 'Product Design',
+    requestType: 'Consumable Request',
+    requestedItem: 'Thunderbolt 4 Passive Cable (0.8m)',
+    category: 'Cables & Adapters',
+    quantity: 4,
+    priority: 'Medium',
+    requestDate: '2025-12-08',
+    status: 'Fulfilled',
+    justification: 'High-speed data transfer cables for storage dock interconnection.',
+    history: [
+      {
+        id: 'EVT-4921-1',
+        timestamp: '2025-12-12 10:45',
+        stage: 'Fulfilled',
+        action: 'Disbursed from Central Store (ISS-2025-881)',
+        performedBy: 'Hardware Operations',
+      },
+      {
+        id: 'EVT-4921-2',
+        timestamp: '2025-12-08 14:00',
+        stage: 'Pending',
+        action: 'Request submitted',
+        performedBy: 'Marcus Vance',
+      },
+    ],
+  },
+  {
+    id: 'REQ-2025-4289',
+    requesterName: 'Marcus Vance',
+    requesterEmail: 'employee@assetmx.local',
+    department: 'Product Design',
+    requestType: 'Consumable Request',
+    requestedItem: 'Notebook & Fineliner Drafting Pen Pack',
+    category: 'Office & Stationery',
+    quantity: 4,
+    priority: 'Low',
+    requestDate: '2025-11-06',
+    status: 'Fulfilled',
+    justification: 'UX sketching and wireframing drafting materials.',
+    history: [
+      {
+        id: 'EVT-4289-1',
+        timestamp: '2025-11-10 13:20',
+        stage: 'Fulfilled',
+        action: 'Disbursed from Office Supplies (ISS-2025-712)',
+        performedBy: 'Office Admin',
+      },
+      {
+        id: 'EVT-4289-2',
+        timestamp: '2025-11-06 10:15',
+        stage: 'Pending',
+        action: 'Request submitted',
+        performedBy: 'Marcus Vance',
+      },
+    ],
+  },
+  {
+    id: 'REQ-2025-3810',
+    requesterName: 'Marcus Vance',
+    requesterEmail: 'employee@assetmx.local',
+    department: 'Product Design',
+    requestType: 'Consumable Request',
+    requestedItem: 'Ergonomic Vertical Mouse Pad with Gel Rest',
+    category: 'Desk Ergonomics',
+    quantity: 2,
+    priority: 'Low',
+    requestDate: '2025-08-10',
+    status: 'Fulfilled',
+    justification: 'Desk ergonomics replacement pad for office desk.',
+    history: [
+      {
+        id: 'EVT-3810-1',
+        timestamp: '2025-08-14 15:00',
+        stage: 'Fulfilled',
+        action: 'Disbursed from Inventory (ISS-2025-512)',
+        performedBy: 'Facilities Lead',
+      },
+      {
+        id: 'EVT-3810-2',
+        timestamp: '2025-08-10 09:00',
+        stage: 'Pending',
+        action: 'Request submitted',
+        performedBy: 'Marcus Vance',
+      },
+    ],
+  },
+];
+
+/**
+ * Helper to determine if an ISO date string (YYYY-MM-DD) falls in the current application calendar month
+ */
+export function isDateInCurrentMonth(rawDate: string, referenceDate: Date = new Date()): boolean {
+  if (!rawDate) return false;
+  const parts = rawDate.split('-');
+  if (parts.length < 2) return false;
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  return year === referenceDate.getFullYear() && month === (referenceDate.getMonth() + 1);
+}
+
+/**
+ * Get verified consumable issuance records scoped to the authenticated employee
+ */
+export function getScopedEmployeeIssuanceRecords(user: AuthUser | null, referenceDate: Date = new Date()): EmployeeConsumableIssuanceRecord[] {
+  if (!user) return [];
 
   const email = (user.email || '').toLowerCase().trim();
   const name = (user.full_name || '').toLowerCase().trim();
 
-  // Demo employee receives the verified monthly consumption breakdown
+  // Demo employee Marcus Vance receives the verified demonstration issuance records
   if (
     email === 'employee@assetmx.local' ||
     email === 'm.vance@assetmx.local' ||
     name === 'employee' ||
     name.includes('marcus')
   ) {
-    return DEFAULT_EMPLOYEE_CONSUMPTION;
+    return DEFAULT_EMPLOYEE_ISSUANCES.map((rec) => ({
+      ...rec,
+      isCurrentMonth: isDateInCurrentMonth(rec.rawDate, referenceDate),
+    }));
   }
 
-  // Any other employee receives an honest empty state
-  return null;
+  // Any other employee with no issued consumables receives an honest empty state
+  return [];
+}
+
+/**
+ * Retrieve a historical consumable request by ID scoped to the authenticated employee
+ */
+export function getScopedEmployeeHistoricalRequest(user: AuthUser | null, requestId: string): RequestItemData | undefined {
+  if (!user || !requestId) return undefined;
+
+  const email = (user.email || '').toLowerCase().trim();
+  const name = (user.full_name || '').toLowerCase().trim();
+
+  // Demo employee Marcus Vance is authorized to view their historical consumable requests
+  if (
+    email === 'employee@assetmx.local' ||
+    email === 'm.vance@assetmx.local' ||
+    name === 'employee' ||
+    name.includes('marcus')
+  ) {
+    const cleanId = requestId.trim().toLowerCase();
+    return HISTORICAL_EMPLOYEE_CONSUMABLE_REQUESTS.find(
+      (r) => r.id.trim().toLowerCase() === cleanId
+    );
+  }
+
+  return undefined;
+}
+
+/**
+ * Get consumption summary scoped to the authenticated employee and reporting period.
+ * Reconciles strictly with the underlying verified issuance records.
+ */
+export function getScopedEmployeeConsumption(
+  user: AuthUser | null,
+  period: 'This Month' | 'All Time' = 'This Month',
+  referenceDate: Date = new Date()
+): EmployeeConsumptionSummary | null {
+  if (!user) return null;
+
+  const email = (user.email || '').toLowerCase().trim();
+  const name = (user.full_name || '').toLowerCase().trim();
+
+  // Demo employee receives the verified monthly consumption breakdown
+  const isAuthorized =
+    email === 'employee@assetmx.local' ||
+    email === 'm.vance@assetmx.local' ||
+    name === 'employee' ||
+    name.includes('marcus');
+
+  if (!isAuthorized) {
+    return null;
+  }
+
+  const issuances = getScopedEmployeeIssuanceRecords(user, referenceDate);
+  if (issuances.length === 0) return null;
+
+  const targetRecords = period === 'This Month'
+    ? issuances.filter((r) => isDateInCurrentMonth(r.rawDate, referenceDate))
+    : issuances;
+
+  const totalIssued = targetRecords.reduce((sum, r) => sum + r.quantityIssued, 0);
+
+  // Group by category using actual category from issuance records
+  const catMap = new Map<string, { name: string; key: string; units: number }>();
+  targetRecords.forEach((r) => {
+    const existing = catMap.get(r.category);
+    if (existing) {
+      existing.units += r.quantityIssued;
+    } else {
+      catMap.set(r.category, { name: r.category, key: r.categoryKey, units: r.quantityIssued });
+    }
+  });
+
+  const categoryColors: Record<string, string> = {
+    cables: '#00687a',
+    ergonomics: '#4cd7f6',
+    stationery: '#57dffe',
+    cleaning: '#8b95ad',
+  };
+
+  const categories = Array.from(catMap.values())
+    .map((c) => ({
+      name: c.name,
+      units: c.units,
+      percentage: totalIssued > 0 ? Math.round((c.units / totalIssued) * 1000) / 10 : 0,
+      color: categoryColors[c.key] || '#00687a',
+    }))
+    .sort((a, b) => b.units - a.units);
+
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const currentMonthName = monthNames[referenceDate.getMonth()];
+  const currentYear = referenceDate.getFullYear();
+  const cycleRef = `REC-${currentYear}-M${referenceDate.getMonth() + 1}`;
+
+  return {
+    period: period === 'This Month' ? 'This Month' : `${currentMonthName} ${currentYear}`,
+    cycleReference: cycleRef,
+    totalIssued,
+    activeCategoriesCount: categories.length,
+    categories,
+  };
 }

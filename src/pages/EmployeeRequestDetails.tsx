@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { getUser } from '../auth/session';
-import { getScopedEmployeeRequests } from '../data/employeeData';
+import { getScopedEmployeeRequests, getScopedEmployeeHistoricalRequest } from '../data/employeeData';
 import type { RequestItemData } from '../data/requestsData';
 import './EmployeeRequestDetails.css';
 
@@ -31,8 +31,10 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
   const request: RequestItemData | undefined = useMemo(() => {
     if (!requestId) return undefined;
     const cleanId = decodeURIComponent(requestId).trim().toLowerCase();
-    return scopedRequests.find((r) => r.id.trim().toLowerCase() === cleanId);
-  }, [scopedRequests, requestId]);
+    const found = scopedRequests.find((r) => r.id.trim().toLowerCase() === cleanId);
+    if (found) return found;
+    return getScopedEmployeeHistoricalRequest(currentUser, cleanId);
+  }, [scopedRequests, requestId, currentUser]);
 
   const userDisplayName = currentUser?.full_name || request?.requesterName || 'Marcus Vance';
   const userInitials = userDisplayName

@@ -27,6 +27,7 @@ import EmployeeCreateRequestPage from './pages/EmployeeCreateRequest';
 import EmployeeMyRequestsPage from './pages/EmployeeMyRequests';
 import EmployeeRequestDetailsPage from './pages/EmployeeRequestDetails';
 import EmployeeMyAssignedAssetsPage from './pages/EmployeeMyAssignedAssets';
+import { EmployeeMyConsumptionPage } from './pages/EmployeeMyConsumption';
 import { clearSession, getToken, getTokenExpiry, getUser, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -39,6 +40,7 @@ type Route =
   | 'my-requests'
   | 'my-requests-details'
   | 'my-assigned-assets'
+  | 'my-consumption'
   | 'assets'
   | 'asset-details'
   | 'asset-transfer'
@@ -81,6 +83,9 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
     }
     if (path === '/my-assigned-assets' || path === '/my-assigned-assets/') {
       return { name: 'my-assigned-assets' };
+    }
+    if (path === '/my-consumption' || path === '/my-consumption/') {
+      return { name: 'my-consumption' };
     }
     // Reports Routes
     if (path === '/reports/utilization' || path === '/reports/utilization/') {
@@ -263,6 +268,7 @@ export default function App() {
         route !== 'my-requests' &&
         route !== 'my-requests-details' &&
         route !== 'my-assigned-assets' &&
+        route !== 'my-consumption' &&
         route !== 'request-details' &&
         route !== 'login' &&
         route !== 'forgot-password'
@@ -283,6 +289,8 @@ export default function App() {
         navigate('/my-requests');
       } else if (subRoute === 'my-assigned-assets') {
         navigate('/my-assigned-assets');
+      } else if (subRoute === 'my-consumption') {
+        navigate('/my-consumption');
       } else if (subRoute.startsWith('my-requests/')) {
         navigate(`/${subRoute}`);
       } else if (subRoute.startsWith('requests/')) {
@@ -607,6 +615,16 @@ export default function App() {
   if (route === 'my-assigned-assets' && getToken()) {
     return (
       <EmployeeMyAssignedAssetsPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // Employee My Consumption Route
+  if (route === 'my-consumption' && getToken()) {
+    return (
+      <EmployeeMyConsumptionPage
         onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />
