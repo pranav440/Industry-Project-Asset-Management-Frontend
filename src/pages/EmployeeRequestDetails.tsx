@@ -1,8 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { getUser } from '../auth/session';
-import { getScopedEmployeeRequests, getScopedEmployeeHistoricalRequest } from '../data/employeeData';
-import type { RequestItemData } from '../data/requestsData';
+import {
+  getRequest,
+  RequestApiError,
+  downloadRequestAttachment,
+  previewRequestAttachment,
+  type RequestApiRecord,
+} from '../api/requestApi';
 import './EmployeeRequestDetails.css';
 
 interface EmployeeRequestDetailsPageProps {
@@ -17,6 +22,10 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
   onSignOut,
 }) => {
   const currentUser = getUser();
+  const [request, setRequest] = useState<RequestApiRecord | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -24,19 +33,42 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
     setTimeout(() => setToastMessage(null), 3200);
   };
 
-  // Strictly scoped requests for the authenticated employee
-  const scopedRequests = useMemo(() => getScopedEmployeeRequests(currentUser), [currentUser]);
+  const fetchRequestDetails = () => {
+    if (!requestId) {
+      setLoading(false);
+      setErrorStatus(404);
+      setErrorMessage('No requisition reference provided.');
+      return;
+    }
 
-  // Lookup the specific request ID
-  const request: RequestItemData | undefined = useMemo(() => {
-    if (!requestId) return undefined;
-    const cleanId = decodeURIComponent(requestId).trim().toLowerCase();
-    const found = scopedRequests.find((r) => r.id.trim().toLowerCase() === cleanId);
-    if (found) return found;
-    return getScopedEmployeeHistoricalRequest(currentUser, cleanId);
-  }, [scopedRequests, requestId, currentUser]);
+    setLoading(true);
+    setErrorStatus(null);
+    setErrorMessage(null);
 
-  const userDisplayName = currentUser?.full_name || request?.requesterName || 'Marcus Vance';
+    getRequest(requestId)
+      .then((data) => {
+        setRequest(data);
+      })
+      .catch((err) => {
+        if (err instanceof RequestApiError) {
+          setErrorStatus(err.status);
+          setErrorMessage(err.message);
+        } else {
+          setErrorStatus(500);
+          setErrorMessage(err instanceof Error ? err.message : 'Failed to retrieve request details');
+        }
+        setRequest(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchRequestDetails();
+  }, [requestId]);
+
+  const userDisplayName = currentUser?.full_name || request?.requester_name || 'Marcus Vance';
   const userInitials = userDisplayName
     .split(' ')
     .map((n) => n[0])
@@ -44,7 +76,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
     .toUpperCase()
     .slice(0, 2);
 
-  // Helper date and history extractors
+  // Helper date and history extractors from real backend response
   const approvalEntry = useMemo(() => {
     if (!request?.history) return undefined;
     return request.history.find(
@@ -55,43 +87,38 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
     );
   }, [request]);
 
-  const isApproved = useMemo(() => {
-    if (!request) return false;
-    return (
-      request.status === 'Fulfilled' ||
-      (request.history && request.history.some((h) => h.stage.toLowerCase() === 'approved'))
-    );
-  }, [request]);
 
   const approverName = useMemo(() => {
     if (!request) return 'Not assigned';
-    if (isApproved && approvalEntry?.performedBy) return approvalEntry.performedBy;
+    if (approvalEntry?.performed_by) return approvalEntry.performed_by;
     if (request.status === 'Rejected') {
       const rejectEntry = request.history?.find((h) => h.stage.toLowerCase() === 'rejected');
-      if (rejectEntry?.performedBy) return rejectEntry.performedBy;
+      if (rejectEntry?.performed_by) return rejectEntry.performed_by;
     }
     return 'Not assigned';
-  }, [request, isApproved, approvalEntry]);
+  }, [request, approvalEntry]);
 
   const approvalDate = useMemo(() => {
     if (!request) return 'Not recorded';
-    if (isApproved && approvalEntry?.timestamp) {
-      return approvalEntry.timestamp.split(' ')[0];
+    if (approvalEntry?.timestamp) {
+      return approvalEntry.timestamp.split('T')[0] || approvalEntry.timestamp.split(' ')[0];
     }
     return 'Not recorded';
-  }, [request, isApproved, approvalEntry]);
+  }, [request, approvalEntry]);
 
   const fulfillmentEntry = useMemo(() => {
     if (!request?.history) return undefined;
     return request.history.find(
-      (h) => h.stage.toLowerCase() === 'fulfilled' || h.action.toLowerCase().includes('disbursed')
+      (h) => h.stage.toLowerCase() === 'fulfilled' || h.action.toLowerCase().includes('fulfilled') || h.action.toLowerCase().includes('disbursed')
     );
   }, [request]);
 
   const fulfillmentDate = useMemo(() => {
     if (!request || request.status !== 'Fulfilled') return 'Not recorded';
-    if (fulfillmentEntry?.timestamp) return fulfillmentEntry.timestamp.split(' ')[0];
-    return request.requestDate || 'Recorded';
+    if (fulfillmentEntry?.timestamp) {
+      return fulfillmentEntry.timestamp.split('T')[0] || fulfillmentEntry.timestamp.split(' ')[0];
+    }
+    return request.request_date || 'Recorded';
   }, [request, fulfillmentEntry]);
 
   // Derived category breakdown
@@ -105,6 +132,29 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
 
   const attachments = request?.attachments || [];
 
+  const handleViewAttachment = async (doc: any) => {
+    if (!request) return;
+    try {
+      const attId = doc.attachment_id || doc.id;
+      const res = await previewRequestAttachment(request.request_id, attId);
+      window.open(res.objectUrl, '_blank');
+    } catch (err) {
+      showToast(`Unable to preview: ${err instanceof Error ? err.message : 'Preview error'}`);
+    }
+  };
+
+  const handleDownloadAttachment = async (doc: any) => {
+    if (!request) return;
+    try {
+      const attId = doc.attachment_id || doc.id;
+      const filename = doc.original_filename || doc.name || 'attachment';
+      await downloadRequestAttachment(request.request_id, attId, filename);
+      showToast(`Downloaded ${filename}`);
+    } catch (err) {
+      showToast(`Unable to download: ${err instanceof Error ? err.message : 'Download error'}`);
+    }
+  };
+
   return (
     <DashboardLayout
       currentNav="My Requests"
@@ -115,7 +165,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
       onSignOut={onSignOut}
       searchPlaceholder="Search my requests, assets..."
       onNotificationsClick={() =>
-        showToast('Notifications: 1 update — Requisition details view is read-only.')
+        showToast('Notifications: Requisition details view is read-only.')
       }
       onHelpClick={() =>
         showToast('Help & Policies: Requisitions require departmental review before fulfillment.')
@@ -175,20 +225,38 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
           </div>
         </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="amx-erd-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: '32px', color: 'var(--amx-dash-cyan, #00687a)', animation: 'spin 1s linear infinite' }}
+              aria-hidden="true"
+            >
+              sync
+            </span>
+            <p style={{ marginTop: '12px', fontSize: '14px', color: 'var(--amx-dash-text-muted, #45464d)' }}>
+              Loading request details...
+            </p>
+          </div>
+        )}
+
         {/* Not Found / Unauthorized Safe State */}
-        {!request ? (
+        {!loading && (!request || errorStatus) && (
           <div className="amx-erd-error-container" id="erdNotFoundBox">
             <div className="amx-erd-error-icon-wrap" aria-hidden="true">
               <span className="material-symbols-outlined" style={{ fontSize: '28px' }}>
                 lock_outline
               </span>
             </div>
-            <h2 className="amx-erd-error-title">Request Not Found or Access Restricted</h2>
+            <h2 className="amx-erd-error-title">
+              {errorStatus === 403
+                ? 'Access Restricted: Unauthorized'
+                : 'Request Not Found or Access Restricted'}
+            </h2>
             <p className="amx-erd-error-desc">
-              Requisition reference <strong>&ldquo;{requestId || 'Unknown'}&rdquo;</strong> could
-              not be found in your active employee requisitions register, or you do not have
-              authorization to view this record. Requisition records are strictly scoped to the
-              originating employee.
+              {errorMessage ||
+                `Requisition reference "${requestId || 'Unknown'}" could not be found in your active employee requisitions register, or you do not have authorization to view this record. Requisition records are strictly scoped to the originating employee.`}
             </p>
             <button
               type="button"
@@ -202,25 +270,28 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
               <span>Return to My Requests</span>
             </button>
           </div>
-        ) : (
+        )}
+
+        {/* Live Loaded Request Details View */}
+        {!loading && request && (
           <>
             {/* Headline Banner Card */}
             <div className="amx-erd-headline-banner">
               <div className="amx-erd-headline-left">
                 <div className="amx-erd-headline-icon-wrap" aria-hidden="true">
                   <span className="material-symbols-outlined" style={{ fontSize: '26px' }}>
-                    {request.requestType === 'Consumable Request' ? 'shopping_bag' : 'desktop_windows'}
+                    {request.request_type === 'Consumable Request' ? 'shopping_bag' : 'desktop_windows'}
                   </span>
                 </div>
                 <div className="amx-erd-headline-info">
                   <div className="amx-erd-title-row">
                     <h1 className="amx-erd-title">Request Details</h1>
                     <span className="amx-erd-id-badge" id="erdReqId">
-                      {request.id}
+                      {request.request_id}
                     </span>
                   </div>
                   <p className="amx-erd-item-summary">
-                    {request.requestedItem} &bull; {request.quantity}{' '}
+                    {request.requested_item} &bull; {request.quantity}{' '}
                     {request.quantity === 1 ? 'Unit' : 'Units'}
                   </p>
                 </div>
@@ -281,7 +352,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                 </p>
                 <p className="amx-erd-notice-desc">
                   {request.status === 'In Review'
-                    ? 'This request is currently in review. As an employee requester, this record is read-only.'
+                    ? 'This request is currently under review by administrators. As an employee requester, this record is read-only.'
                     : request.status === 'Pending'
                     ? 'This request is awaiting supervisor/departmental review. As an employee requester, this record is read-only.'
                     : request.status === 'Fulfilled'
@@ -313,7 +384,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                     <div className="amx-erd-bento-cell">
                       <span className="amx-erd-field-label">Request ID</span>
                       <span className="amx-erd-bento-val mono" id="overview-id">
-                        {request.id}
+                        {request.request_id}
                       </span>
                     </div>
 
@@ -328,7 +399,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                           inventory
                         </span>
                         <span className="amx-erd-bento-val" id="overview-type">
-                          {request.requestType}
+                          {request.request_type}
                         </span>
                       </div>
                     </div>
@@ -371,7 +442,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                     <div className="amx-erd-item-spec-top">
                       <span className="amx-erd-field-label">Requested Item</span>
                       <span className="amx-erd-item-spec-oem" id="overview-oem">
-                        Reference: {request.id}
+                        Reference: {request.request_id}
                       </span>
                     </div>
 
@@ -383,7 +454,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                       </div>
                       <div className="amx-erd-item-text-wrap">
                         <span className="amx-erd-item-name-bold" id="overview-item-name">
-                          {request.requestedItem}
+                          {request.requested_item}
                         </span>
                         <span className="amx-erd-item-desc-muted">
                           {request.category} &bull; Standard Requisition Specification
@@ -395,22 +466,22 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                   {/* Schedule Milestones */}
                   <div className="amx-erd-milestones-grid">
                     <div className="amx-erd-milestone-cell">
-                      <span className="amx-erd-field-label">Preferred Fulfillment Date</span>
+                      <span className="amx-erd-field-label">Estimated Cost</span>
                       <div className="amx-erd-milestone-value-row">
                         <span
                           className="material-symbols-outlined"
                           style={{ fontSize: '20px', color: 'var(--amx-dash-cyan, #00687a)' }}
                           aria-hidden="true"
                         >
-                          event_available
+                          payments
                         </span>
                         <span id="overview-pref-date">
-                          {request.dateReceived || 'Standard SLA Allocation'}
+                          {request.estimated_cost ? `$${request.estimated_cost}` : 'Standard SLA Allocation'}
                         </span>
                       </div>
                       <span className="amx-erd-milestone-subtext">
-                        {request.dateReceived
-                          ? 'Employee requested date preference'
+                        {request.estimated_cost
+                          ? 'Estimated requisition budget'
                           : 'Standard departmental fulfillment cycle'}
                       </span>
                     </div>
@@ -425,7 +496,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                         >
                           schedule
                         </span>
-                        <span id="overview-sub-date">{request.requestDate}</span>
+                        <span id="overview-sub-date">{request.request_date}</span>
                       </div>
                       <span className="amx-erd-milestone-subtext">
                         Recorded System Timestamp
@@ -516,11 +587,11 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                     </div>
                   </div>
 
-                  {/* Approver Remarks */}
+                  {/* Operational Remarks */}
                   <div className="amx-erd-remarks-box">
-                    <span className="amx-erd-field-label">Approver Remarks</span>
+                    <span className="amx-erd-field-label">Operational Notes / Guidelines</span>
                     <p className="amx-erd-remarks-text" id="review-remarks">
-                      {request.processingGuidelines || 'None recorded'}
+                      {request.processing_guidelines || 'None recorded'}
                     </p>
                   </div>
 
@@ -603,9 +674,9 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                     <div className="amx-erd-timeline-wrap" id="erdTimeline">
                       <div className="amx-erd-timeline-line" aria-hidden="true" />
                       {request.history.map((event, index) => {
-                        const isLatest = index === 0;
+                        const isLatest = index === request.history.length - 1;
                         return (
-                          <div key={event.id || index} className="amx-erd-timeline-item">
+                          <div key={event.history_id || index} className="amx-erd-timeline-item">
                             <div className={`amx-erd-timeline-node ${isLatest ? 'active' : ''}`} aria-hidden="true">
                               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
                                 {event.stage.toLowerCase() === 'fulfilled'
@@ -628,7 +699,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                               <p className="amx-erd-timeline-action">
                                 {event.note
                                   ? event.note
-                                  : `Recorded by ${event.performedBy || 'System'}.`}
+                                  : `Recorded by ${event.performed_by || 'System'}.`}
                               </p>
                             </div>
                           </div>
@@ -652,67 +723,49 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                   <div className="amx-erd-card-header">
                     <div className="amx-erd-card-title-group">
                       <span className="material-symbols-outlined amx-erd-card-icon" aria-hidden="true">
-                        badge
+                        person
                       </span>
                       <h2 className="amx-erd-card-title" id="erd-requester-heading">
-                        Requester
+                        Requester Profile
                       </h2>
                     </div>
-                    <span className="amx-erd-card-header-badge">Employee Profile</span>
+                    <span className="amx-erd-card-header-badge">Originator</span>
                   </div>
 
-                  <div className="amx-erd-requester-profile">
-                    <div className="amx-erd-avatar" aria-hidden="true">
+                  <div className="amx-erd-profile-row">
+                    <div className="amx-erd-profile-avatar" id="erdUserAvatar">
                       {userInitials}
                     </div>
-                    <div className="amx-erd-requester-text">
-                      <span className="amx-erd-requester-name" id="requester-name">
-                        {request.requesterName}
+                    <div className="amx-erd-profile-info">
+                      <span className="amx-erd-profile-name" id="erdUserName">
+                        {request.requester_name || userDisplayName}
                       </span>
-                      <span className="amx-erd-requester-title">
-                        {currentUser?.role === 'employee' ? 'Product Designer' : 'Requester'}
-                      </span>
-                      <span className="amx-erd-requester-id" id="requester-id">
-                        {currentUser?.employee_id || 'EMP-2024-0419'}
+                      <span className="amx-erd-profile-sub" id="erdUserEmail">
+                        {request.requester_email || currentUser?.email}
                       </span>
                     </div>
                   </div>
 
                   <div className="amx-erd-spec-list">
-                    <div className="amx-erd-spec-item row">
-                      <span className="amx-erd-field-label">Department</span>
-                      <span className="amx-erd-spec-val" id="requester-dept">
-                        {request.department || 'Product Design & UX'}
-                      </span>
-                    </div>
-
-                    <div className="amx-erd-spec-item row">
-                      <span className="amx-erd-field-label">Cost Center</span>
-                      <span className="amx-erd-spec-val">CC-4092 (R&amp;D)</span>
-                    </div>
-
                     <div className="amx-erd-spec-item">
-                      <span className="amx-erd-field-label">Delivery Location &amp; Desk</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingTop: '2px' }}>
-                        <span
-                          className="material-symbols-outlined"
-                          style={{ fontSize: '16px', color: 'var(--amx-dash-cyan, #00687a)' }}
-                          aria-hidden="true"
-                        >
-                          location_on
-                        </span>
-                        <span className="amx-erd-spec-val">HQ - Building B, Floor 4</span>
-                      </div>
-                      <span
-                        style={{
-                          fontSize: '11.5px',
-                          fontFamily: 'JetBrains Mono, monospace',
-                          color: 'var(--amx-dash-text-muted, #76777d)',
-                          paddingLeft: '22px',
-                        }}
-                      >
-                        Desk: B-412 (North Wing)
+                      <span className="amx-erd-spec-lbl">Department</span>
+                      <span className="amx-erd-spec-val" id="erdUserDept">
+                        {request.department || 'Product Design'}
                       </span>
+                    </div>
+                    <div className="amx-erd-spec-item">
+                      <span className="amx-erd-spec-lbl">Employee ID</span>
+                      <span
+                        className="amx-erd-spec-val"
+                        style={{ color: 'var(--amx-dash-cyan, #00687a)' }}
+                        id="erdUserEmpId"
+                      >
+                        {currentUser?.employee_id || 'EMP-2024-0419'}
+                      </span>
+                    </div>
+                    <div className="amx-erd-spec-item">
+                      <span className="amx-erd-spec-lbl">System Role</span>
+                      <span className="amx-erd-spec-val">Employee (Self-Service)</span>
                     </div>
                   </div>
                 </section>
@@ -736,7 +789,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                   {attachments.length > 0 ? (
                     <div className="amx-erd-docs-list" id="erdDocsList">
                       {attachments.map((doc) => (
-                        <div key={doc.id || doc.name} className="amx-erd-doc-card">
+                        <div key={doc.attachment_id || doc.id} className="amx-erd-doc-card">
                           <div className="amx-erd-doc-top">
                             <div className="amx-erd-doc-icon-box" aria-hidden="true">
                               <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
@@ -744,12 +797,12 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                               </span>
                             </div>
                             <div className="amx-erd-doc-meta">
-                              <span className="amx-erd-doc-name" title={doc.name}>
-                                {doc.name}
+                              <span className="amx-erd-doc-name" title={doc.original_filename || doc.name}>
+                                {doc.original_filename || doc.name}
                               </span>
                               <span className="amx-erd-doc-sub">
-                                {doc.size || '1.0 MB'} &bull; Uploaded{' '}
-                                {doc.uploadDate || request.requestDate}
+                                {doc.size || 'Attached'} &bull; Uploaded{' '}
+                                {doc.uploadDate || doc.uploaded_at || request.request_date}
                               </span>
                             </div>
                           </div>
@@ -758,7 +811,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                             <button
                               type="button"
                               className="amx-erd-doc-btn secondary"
-                              onClick={() => showToast(`Opening client preview for "${doc.name}"`)}
+                              onClick={() => handleViewAttachment(doc)}
                             >
                               <span className="material-symbols-outlined" style={{ fontSize: '15px' }} aria-hidden="true">
                                 visibility
@@ -768,7 +821,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                             <button
                               type="button"
                               className="amx-erd-doc-btn primary"
-                              onClick={() => showToast(`Initiating local download for "${doc.name}"`)}
+                              onClick={() => handleDownloadAttachment(doc)}
                             >
                               <span className="material-symbols-outlined" style={{ fontSize: '15px' }} aria-hidden="true">
                                 download
@@ -807,7 +860,7 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                       <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>
                         info
                       </span>
-                      <span>Attached by requester at time of submission</span>
+                      <span>Attached to requisition in registry</span>
                     </span>
                   </div>
                 </section>
@@ -825,16 +878,16 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
                     <span id="erd-support-heading">Need Help with this Request?</span>
                   </div>
                   <p className="amx-erd-support-desc">
-                    If you need to revise specifications or update desk relocation details, contact
+                    If you need to revise specifications or update delivery preferences, contact
                     the IT Hardware Desk quoting{' '}
-                    <strong style={{ fontFamily: 'JetBrains Mono, monospace' }}>{request.id}</strong>.
+                    <strong style={{ fontFamily: 'JetBrains Mono, monospace' }}>{request.request_id}</strong>.
                   </p>
                   <div className="amx-erd-support-link-row">
                     <button
                       type="button"
                       className="amx-erd-support-link"
                       onClick={() =>
-                        showToast(`IT Support Desk: Contact extension 4402 or helpdesk@assetmx.local quoting ${request.id}`)
+                        showToast(`IT Support Desk: Contact extension 4402 or helpdesk@assetmx.local quoting ${request.request_id}`)
                       }
                     >
                       <span>IT Support Desk</span>
@@ -866,4 +919,3 @@ export const EmployeeRequestDetailsPage: React.FC<EmployeeRequestDetailsPageProp
 };
 
 export default EmployeeRequestDetailsPage;
-

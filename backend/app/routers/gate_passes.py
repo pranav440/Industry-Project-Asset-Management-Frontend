@@ -7,8 +7,23 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_admin
-from app.models import AuditLog, GatePass, GatePassHistory, GatePassStatus, GatePassType, User
+from app.deps import (
+    require_admin,
+    require_admin_or_superadmin,
+    require_gate_pass_creator,
+    require_gate_staff,
+    require_guard_or_admin,
+    require_roles,
+)
+from app.models import (
+    AuditLog,
+    GatePass,
+    GatePassHistory,
+    GatePassStatus,
+    GatePassType,
+    User,
+    UserRole,
+)
 from app.schemas import (
     GatePassCreateRequest,
     GatePassDecisionRequest,
@@ -205,10 +220,21 @@ def list_gate_passes(
     location: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
-    _admin: User = Depends(require_admin),
+    _user: User = Depends(require_gate_staff),
     db: Session = Depends(get_db),
 ) -> GatePassListResponse:
     query = select(GatePass)
+    if _user.role == UserRole.host:
+        created_pass_ids = select(AuditLog.gate_pass_id).where(
+            AuditLog.actor_user_id == _user.id,
+            AuditLog.action == "gate_pass_created",
+        )
+        query = query.where(
+            or_(
+                GatePass.requester_name == _user.full_name,
+                GatePass.id.in_(created_pass_ids),
+            )
+        )
     if search:
         pattern = f"%{search}%"
         query = query.where(or_(
@@ -253,17 +279,21 @@ def list_gate_passes(
 @router.post("", response_model=GatePassOut, status_code=status.HTTP_201_CREATED)
 def create_gate_pass(
     body: GatePassCreateRequest,
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(require_gate_pass_creator),
     db: Session = Depends(get_db),
 ) -> GatePassOut:
     try:
+        dept = getattr(current_user, "department", None)
+        if not dept:
+            dept = "Operations" if current_user.role == UserRole.host else "Administration"
+
         gate_pass = GatePass(
             pass_id=_pass_id(db),
             pass_type=VALID_PASS_TYPES[body.pass_type],
             request_date=date.today(),
             status=GatePassStatus.pending,
-            requester_name=admin.full_name,
-            department="Administration",
+            requester_name=current_user.full_name,
+            department=dept,
             asset_or_item=body.asset_or_item,
             quantity=body.quantity,
             current_location=None,
@@ -286,21 +316,21 @@ def create_gate_pass(
         history = _create_history_entry(
             db=db,
             gate_pass=gate_pass,
-            actor=admin,
+            actor=current_user,
             action="Gate Pass Created",
-            note="Gate pass created by administrator.",
+            note=f"Gate pass created by {current_user.full_name}.",
             status_snapshot=GatePassStatus.pending.value,
         )
         audit = _create_audit_log(
             db=db,
             gate_pass=gate_pass,
-            actor=admin,
+            actor=current_user,
             action="gate_pass_created",
             before_state={"status": "New"},
             after_state=_serialize_gate_pass(gate_pass),
             metadata={
                 "pass_id": gate_pass.pass_id,
-                "created_by": admin.full_name,
+                "created_by": current_user.full_name,
                 "pass_type": gate_pass.pass_type.value,
             },
         )
@@ -320,12 +350,29 @@ def create_gate_pass(
 @router.get("/{pass_id}", response_model=GatePassOut)
 def get_gate_pass(
     pass_id: str,
-    _admin: User = Depends(require_admin),
+    _user: User = Depends(require_gate_staff),
     db: Session = Depends(get_db),
 ) -> GatePassOut:
     gate_pass = _find_gate_pass(db, pass_id)
     if gate_pass is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gate pass not found")
+
+    if _user.role == UserRole.host:
+        is_creator = gate_pass.requester_name == _user.full_name
+        if not is_creator:
+            has_audit = db.scalar(
+                select(AuditLog.id).where(
+                    AuditLog.gate_pass_id == gate_pass.id,
+                    AuditLog.actor_user_id == _user.id,
+                    AuditLog.action == "gate_pass_created",
+                )
+            )
+            if not has_audit:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to access this gate pass",
+                )
+
     return _gate_pass_response(db, gate_pass, include_history=True)
 
 
@@ -333,7 +380,7 @@ def get_gate_pass(
 def decide_gate_pass(
     pass_id: str,
     body: GatePassDecisionRequest,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_admin_or_superadmin),
     db: Session = Depends(get_db),
 ) -> GatePassOut:
     target_status = VALID_STATUS_VALUES.get(body.target_status)
@@ -392,7 +439,7 @@ def decide_gate_pass(
 def verify_exit_gate_pass(
     pass_id: str,
     body: GatePassVerificationRequest,
-    admin: User = Depends(require_admin),
+    officer: User = Depends(require_guard_or_admin),
     db: Session = Depends(get_db),
 ) -> GatePassOut:
     if body.exit_gate is None or not body.exit_gate.strip():
@@ -410,13 +457,13 @@ def verify_exit_gate_pass(
         gate_pass.exit_timestamp = datetime.now(timezone.utc)
         gate_pass.exit_gate = body.exit_gate.strip()
         gate_pass.exit_notes = body.exit_notes.strip() if body.exit_notes else None
-        gate_pass.exit_officer = admin.full_name
+        gate_pass.exit_officer = officer.full_name
         gate_pass.authorization_state = "Active in Transit"
 
         history = _create_history_entry(
             db=db,
             gate_pass=gate_pass,
-            actor=admin,
+            actor=officer,
             action="Exit Verification",
             note=body.exit_notes or "Exit verification completed.",
             status_snapshot=gate_pass.status.value,
@@ -424,7 +471,7 @@ def verify_exit_gate_pass(
         audit = _create_audit_log(
             db=db,
             gate_pass=gate_pass,
-            actor=admin,
+            actor=officer,
             action="gate_pass_exit_verified",
             before_state=before_state,
             after_state=_serialize_gate_pass(gate_pass),
@@ -447,7 +494,7 @@ def verify_exit_gate_pass(
 def verify_entry_gate_pass(
     pass_id: str,
     body: GatePassVerificationRequest,
-    admin: User = Depends(require_admin),
+    officer: User = Depends(require_guard_or_admin),
     db: Session = Depends(get_db),
 ) -> GatePassOut:
     if body.entry_gate is None or not body.entry_gate.strip():
@@ -458,6 +505,11 @@ def verify_entry_gate_pass(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gate pass not found")
         if gate_pass.status != GatePassStatus.active:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
+        if gate_pass.pass_type == GatePassType.non_returnable:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Non-returnable gate passes cannot undergo entry verification",
+            )
 
         before_state = _serialize_gate_pass(gate_pass)
         gate_pass.status = GatePassStatus.completed
@@ -465,13 +517,13 @@ def verify_entry_gate_pass(
         gate_pass.entry_timestamp = datetime.now(timezone.utc)
         gate_pass.entry_gate = body.entry_gate.strip()
         gate_pass.entry_notes = body.entry_notes.strip() if body.entry_notes else None
-        gate_pass.entry_officer = admin.full_name
+        gate_pass.entry_officer = officer.full_name
         gate_pass.authorization_state = "Completed"
 
         history = _create_history_entry(
             db=db,
             gate_pass=gate_pass,
-            actor=admin,
+            actor=officer,
             action="Entry Verification",
             note=body.entry_notes or "Entry verification completed.",
             status_snapshot=gate_pass.status.value,
@@ -479,7 +531,7 @@ def verify_entry_gate_pass(
         audit = _create_audit_log(
             db=db,
             gate_pass=gate_pass,
-            actor=admin,
+            actor=officer,
             action="gate_pass_entry_verified",
             before_state=before_state,
             after_state=_serialize_gate_pass(gate_pass),
@@ -502,7 +554,7 @@ def verify_entry_gate_pass(
 def escalate_gate_pass(
     pass_id: str,
     body: GatePassEscalationRequest,
-    admin: User = Depends(require_admin),
+    officer: User = Depends(require_guard_or_admin),
     db: Session = Depends(get_db),
 ) -> GatePassOut:
     try:
@@ -519,12 +571,12 @@ def escalate_gate_pass(
         gate_pass.escalation_reason = body.reason
         gate_pass.escalation_timestamp = datetime.now(timezone.utc)
         gate_pass.escalation_action_required = body.action_required
-        gate_pass.escalation_escalated_by = admin.full_name
+        gate_pass.escalation_escalated_by = officer.full_name
 
         history = _create_history_entry(
             db=db,
             gate_pass=gate_pass,
-            actor=admin,
+            actor=officer,
             action="Escalated",
             note=body.reason,
             status_snapshot=gate_pass.status.value,
@@ -532,7 +584,7 @@ def escalate_gate_pass(
         audit = _create_audit_log(
             db=db,
             gate_pass=gate_pass,
-            actor=admin,
+            actor=officer,
             action="gate_pass_escalated",
             before_state=before_state,
             after_state=_serialize_gate_pass(gate_pass),
@@ -555,7 +607,7 @@ def escalate_gate_pass(
 def override_gate_pass(
     pass_id: str,
     body: GatePassOverrideRequest,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_admin_or_superadmin),
     db: Session = Depends(get_db),
 ) -> GatePassOut:
     try:

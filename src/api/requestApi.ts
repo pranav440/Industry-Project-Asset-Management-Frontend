@@ -89,6 +89,25 @@ export interface ExternalRequestCreatePayload {
   processing_guidelines?: string;
 }
 
+export interface EmployeeRequestCreatePayload {
+  request_type?: RequestType;
+  requestType?: RequestType;
+  requested_item?: string;
+  itemName?: string;
+  category: string;
+  sub_category?: string;
+  subCategory?: string;
+  quantity: number;
+  priority: RequestPriority;
+  justification: string;
+  estimated_cost?: string;
+  estimatedCost?: string;
+  department?: string;
+  processing_guidelines?: string;
+  processingGuidelines?: string;
+}
+
+
 export class RequestApiError extends Error {
   status: number;
 
@@ -172,6 +191,44 @@ export function createExternalRequest(
     body: JSON.stringify(payload),
   });
 }
+
+export function createEmployeeRequest(
+  payload: EmployeeRequestCreatePayload,
+): Promise<RequestApiRecord> {
+  return request<RequestApiRecord>('/api/requests', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listMyRequests(params: {
+  search?: string;
+  requestType?: string;
+  status?: string;
+  priority?: string;
+  category?: string;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<RequestListResponse> {
+  const query = new URLSearchParams();
+
+  Object.entries({
+    search: params.search,
+    request_type: params.requestType,
+    status: params.status,
+    priority: params.priority,
+    category: params.category,
+    page: params.page,
+    page_size: params.pageSize,
+  }).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') {
+      query.set(key, String(value));
+    }
+  });
+
+  return request<RequestListResponse>(`/api/requests/my?${query.toString()}`);
+}
+
 
 export async function uploadRequestAttachment(
   requestId: string,

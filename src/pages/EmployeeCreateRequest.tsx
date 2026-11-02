@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { getUser } from '../auth/session';
-import { addEmployeeRequest } from '../data/employeeData';
+import { createEmployeeRequest, RequestApiError, type EmployeeRequestCreatePayload } from '../api/requestApi';
 import type { RequestItemData, RequestPriority, RequestType } from '../data/requestsData';
 import './EmployeeCreateRequest.css';
 
@@ -158,7 +158,7 @@ export const EmployeeCreateRequestPage: React.FC<EmployeeCreateRequestPageProps>
   };
 
   // Submit Handler with Strict Validation
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isSubmitting) return; // Prevent duplicate submissions
 
@@ -184,50 +184,80 @@ export const EmployeeCreateRequestPage: React.FC<EmployeeCreateRequestPageProps>
     setShowValidationBanner(false);
 
     try {
-      const requesterName = currentUser?.full_name || 'Marcus Vance';
-      const requesterEmail = currentUser?.email || 'employee@assetmx.local';
-      const department =
+      const userDepartment =
         ((currentUser as unknown) as Record<string, unknown>)?.department as string ||
-        (currentUser?.role === 'employee' ? 'Product Design' : 'Enterprise Operations');
+        (currentUser?.role === 'employee' ? 'Product Design' : undefined);
 
-      const created = addEmployeeRequest({
-        requesterName,
-        requesterEmail,
-        department,
+      const payload: EmployeeRequestCreatePayload = {
         requestType,
-        requestedItem: itemName.trim(),
-        category,
+        itemName: itemName.trim(),
+        category: category.trim(),
+        subCategory: subCategory.trim() || undefined,
         quantity,
         priority,
-        requestDate: new Date().toISOString().split('T')[0],
-        status: 'Pending',
         justification: justification.trim(),
-        estimatedCost: estimatedCost.trim() ? `$${estimatedCost.replace('$', '').trim()}` : undefined,
-        attachments: attachments.map((a) => ({
-          id: a.id,
-          name: a.name,
-          size: a.size,
-          type: a.type,
-        })),
+        estimatedCost: estimatedCost.trim() ? estimatedCost.replace('$', '').trim() : undefined,
+        department: userDepartment,
+      };
+
+      const created = await createEmployeeRequest(payload);
+
+      setSubmittedRequest({
+        id: created.request_id,
+        requesterName: created.requester_name,
+        requesterEmail: created.requester_email,
+        department: created.department,
+        requestType: created.request_type,
+        requestedItem: created.requested_item,
+        category: created.category,
+        quantity: created.quantity,
+        priority: created.priority,
+        requestDate: created.request_date,
+        status: created.status,
+        justification: created.justification,
+        processingGuidelines: created.processing_guidelines,
+        estimatedCost: created.estimated_cost || undefined,
+        history: (created.history || []) as any,
+        attachments: (created.attachments || []) as any,
       });
 
-      setSubmittedRequest(created);
+      if (attachments.length > 0) {
+        showToast(`Request ${created.request_id} created. Supporting attachments can be managed on the Request Details view.`);
+      }
     } catch (err) {
       console.error('Failed to submit employee request', err);
-      showToast('An unexpected error occurred while creating the requisition.');
+      const errorMsg =
+        err instanceof RequestApiError
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : 'An unexpected error occurred while creating the requisition.';
+      setValidationError(errorMsg);
+      setShowValidationBanner(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleModalClose = () => {
+    const reqId = submittedRequest?.id;
     setSubmittedRequest(null);
-    onNavigate?.('dashboard');
+    if (reqId) {
+      onNavigate?.(`my-requests/${reqId}`);
+    } else {
+      onNavigate?.('dashboard');
+    }
   };
 
   const handleViewInMyRequests = () => {
+    const reqId = submittedRequest?.id;
     setSubmittedRequest(null);
-    onNavigate?.('my-requests');
+    if (reqId) {
+      onNavigate?.(`my-requests/${reqId}`);
+    } else {
+      onNavigate?.('my-requests');
+    }
   };
 
   const currentCategories =

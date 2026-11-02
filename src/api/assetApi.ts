@@ -154,6 +154,68 @@ export interface ConsumableListResponse {
   items: ConsumableApiRecord[];
 }
 
+export interface EmployeeConsumptionCategoryMetricApiRecord {
+  name: string;
+  category_key: string;
+  categoryKey: string;
+  units: number;
+  percentage: number;
+  color_class: string;
+  colorClass: string;
+  color: string;
+}
+
+export interface EmployeeConsumptionSummaryApiRecord {
+  period: string;
+  cycle_reference: string;
+  cycleReference: string;
+  total_issued: number;
+  totalIssued: number;
+  active_categories_count: number;
+  activeCategoriesCount: number;
+  distinct_categories_count: number;
+  distinctCategoriesCount: number;
+  categories: EmployeeConsumptionCategoryMetricApiRecord[];
+}
+
+export interface EmployeeConsumableIssueApiRecord {
+  id: string;
+  issue_id: string;
+  item_name: string;
+  itemName: string;
+  specification: string;
+  category: string;
+  category_key: string;
+  categoryKey: string;
+  quantity_issued: number;
+  quantityIssued: number;
+  fulfillment_date: string;
+  fulfillmentDate: string;
+  raw_date: string;
+  rawDate: string;
+  related_request_id: string;
+  relatedRequestId: string;
+  status: string;
+  reference: string;
+  icon: string;
+  is_current_month: boolean;
+  isCurrentMonth: boolean;
+}
+
+export interface EmployeeConsumptionListResponse {
+  items: EmployeeConsumableIssueApiRecord[];
+  summary: EmployeeConsumptionSummaryApiRecord;
+  all_time_total_units: number;
+  allTimeTotalUnits: number;
+  this_month_total_units: number;
+  thisMonthTotalUnits: number;
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+
 export class AssetApiError extends Error {
   status: number;
 
@@ -200,6 +262,47 @@ export function listAssets(params: {
 export function getAsset(assetId: string): Promise<AssetRecord> {
   return request<AssetRecord>(`/api/assets/${encodeURIComponent(assetId)}`);
 }
+
+export function listMyAssets(params: {
+  category?: string;
+  status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<AssetListResponse> {
+  const query = new URLSearchParams();
+  Object.entries({
+    category: params.category,
+    status: params.status,
+    search: params.search,
+    page: params.page,
+    page_size: params.pageSize,
+  }).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') query.set(key, String(value));
+  });
+  return request<AssetListResponse>(`/api/assets/my?${query.toString()}`);
+}
+
+export function listMyConsumables(params: {
+  timeFilter?: 'all' | 'month';
+  category?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<EmployeeConsumptionListResponse> {
+  const query = new URLSearchParams();
+  Object.entries({
+    time_filter: params.timeFilter,
+    category: params.category,
+    search: params.search,
+    page: params.page,
+    page_size: params.pageSize,
+  }).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') query.set(key, String(value));
+  });
+  return request<EmployeeConsumptionListResponse>(`/api/consumables/my?${query.toString()}`);
+}
+
 
 export function listConsumables(params: {
   search?: string;

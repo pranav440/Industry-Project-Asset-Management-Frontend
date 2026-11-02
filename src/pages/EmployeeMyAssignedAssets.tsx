@@ -3,11 +3,10 @@
 // Self-Service inventory of non-consumable assets formally assigned to the employee
 // =====================================================================
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { getUser } from '../auth/session';
-import { getScopedEmployeeAssets, type EmployeeAssignedAsset } from '../data/employeeData';
-import { ASSET_DETAILS_MOCK_DATA, type AssetDetailsData } from '../data/assetDetailsData';
+import { listMyAssets, AssetApiError, type AssetRecord } from '../api/assetApi';
 import './EmployeeMyAssignedAssets.css';
 
 interface EmployeeMyAssignedAssetsPageProps {
@@ -17,12 +16,68 @@ interface EmployeeMyAssignedAssetsPageProps {
 
 type CategoryFilterKey = 'all' | 'compute' | 'displays' | 'peripherals' | 'mobile';
 
+export interface EmployeeAssignedAsset {
+  id: string;
+  name: string;
+  category: string;
+  categoryKey: string;
+  location: string;
+  status: string;
+  statusCode: 'active' | 'maintenance' | 'transit';
+  icon: string;
+  specification: string;
+  assignedDate: string;
+  custodianName: string;
+  custodianEmpId: string;
+  custodianDepartment: string;
+  serialNumber: string;
+  hardwareModel: string;
+  qrCodeDataUrl?: string;
+  qrCodeValue?: string;
+  technicalSpecs: Array<{ label: string; value: string }>;
+  custodyLog: Array<{ date: string; time: string; event: string }>;
+  acquisition: {
+    purchaseDate: string;
+    warrantyStatus: string;
+    warrantyCover: string;
+    totalCost: string;
+  };
+}
+
+function getAssetIcon(category?: string, name?: string): string {
+  const text = `${category || ''} ${name || ''}`.toLowerCase();
+  if (text.includes('laptop') || text.includes('macbook') || text.includes('thinkpad') || text.includes('compute')) {
+    return 'laptop_mac';
+  }
+  if (text.includes('monitor') || text.includes('display') || text.includes('ultrasharp')) {
+    return 'desktop_windows';
+  }
+  if (text.includes('mouse') || text.includes('keyboard') || text.includes('peripheral') || text.includes('adapter')) {
+    return 'mouse';
+  }
+  if (text.includes('phone') || text.includes('mobile') || text.includes('tablet')) {
+    return 'smartphone';
+  }
+  return 'devices';
+}
+
+function normalizeCategoryKey(cat?: string): string {
+  const c = (cat || '').toLowerCase();
+  if (/compute|laptop|workstation/i.test(c)) return 'compute';
+  if (/display|monitor/i.test(c)) return 'displays';
+  if (/peripheral|audio|headset|keyboard|mouse/i.test(c)) return 'peripherals';
+  if (/mobile|security|tablet|key/i.test(c)) return 'mobile';
+  return 'other';
+}
+
 export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
   const currentUser = getUser();
-  const rawAssets = useMemo(() => getScopedEmployeeAssets(currentUser), [currentUser]);
+  const [apiAssets, setApiAssets] = useState<AssetRecord[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -38,6 +93,31 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const fetchAssets = () => {
+    setLoading(true);
+    setError(null);
+    listMyAssets({ pageSize: 100 })
+      .then((res) => {
+        setApiAssets(res.items || []);
+      })
+      .catch((err) => {
+        setError(
+          err instanceof AssetApiError
+            ? err.message
+            : err instanceof Error
+            ? err.message
+            : 'Unable to load assigned assets'
+        );
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchAssets();
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3200);
@@ -51,6 +131,84 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
     showToast(`Copied ${text} to clipboard`);
     setTimeout(() => setCopiedId(null), 1800);
   };
+
+  const userDisplayName = currentUser?.full_name || 'Marcus Vance';
+  const userEmpId = currentUser?.employee_id || 'EMP-2024-0419';
+  const userDept = (currentUser as any)?.department || 'Product Design & UX';
+
+  // Map API records to rich EmployeeAssignedAsset model
+  const rawAssets = useMemo<EmployeeAssignedAsset[]>(() => {
+    return apiAssets.map((asset) => {
+      const catKey = normalizeCategoryKey(asset.category);
+      const isMaint = (asset.status || '').toLowerCase().includes('maintenance');
+      const isTransit = (asset.status || '').toLowerCase().includes('transit');
+      const statusCode: 'active' | 'maintenance' | 'transit' = isMaint
+        ? 'maintenance'
+        : isTransit
+        ? 'transit'
+        : 'active';
+
+      const technicalSpecs = [
+        { label: 'Hardware Serial Number', value: asset.serial_number || 'N/A' },
+        { label: 'Specification', value: asset.specification || asset.category },
+        { label: 'Category', value: asset.category },
+        { label: 'Vendor / Brand', value: asset.vendor_name || 'Standard Vendor' },
+        { label: 'Warranty Period', value: asset.warranty_period || 'Standard Coverage' },
+        { label: 'QR Tag Code', value: asset.qr_code_value || `assetmx:${asset.asset_id}` },
+      ];
+
+      const custodyLog =
+        asset.movement_history && asset.movement_history.length > 0
+          ? asset.movement_history.map((m) => ({
+              date: m.initiated_at ? m.initiated_at.split('T')[0] : 'Recorded',
+              time: m.status || 'Completed',
+              event: `Transferred from ${m.from_location} to ${m.to_location} (${m.from_custodian} → ${m.to_custodian}). Reason: ${m.reason || 'Workstation setup'}.`,
+            }))
+          : [
+              {
+                date: asset.allocation_date
+                  ? asset.allocation_date.split('T')[0]
+                  : asset.purchase_date
+                  ? asset.purchase_date.split('T')[0]
+                  : 'Recorded',
+                time: 'Initial Assignment',
+                event: `Allocated to ${asset.custodian} at ${asset.location}.`,
+              },
+            ];
+
+      return {
+        id: asset.asset_id,
+        name: asset.name,
+        category: asset.category,
+        categoryKey: catKey,
+        location: asset.location,
+        status: asset.status,
+        statusCode,
+        icon: getAssetIcon(asset.category, asset.name),
+        specification: asset.specification || asset.category,
+        assignedDate: asset.allocation_date
+          ? asset.allocation_date.split('T')[0]
+          : asset.purchase_date
+          ? asset.purchase_date.split('T')[0]
+          : 'Recorded',
+        custodianName: asset.custodian || userDisplayName,
+        custodianEmpId: userEmpId,
+        custodianDepartment: userDept,
+        serialNumber: asset.serial_number || 'SN-RECORDED-TAG',
+        hardwareModel: asset.specification || asset.name,
+        qrCodeDataUrl: asset.qr_code_data_url,
+        qrCodeValue: asset.qr_code_value,
+        technicalSpecs,
+        custodyLog,
+        acquisition: {
+          purchaseDate: asset.purchase_date ? asset.purchase_date.split('T')[0] : 'N/A',
+          warrantyStatus: asset.warranty_period || 'Standard Coverage',
+          warrantyCover: `Vendor: ${asset.vendor_name || 'Standard'}`,
+          totalCost: asset.total_cost ? `₹${asset.total_cost}` : 'Recorded',
+        },
+      };
+    });
+  }, [apiAssets, userDisplayName, userEmpId, userDept]);
 
   // Derive summary metrics from the employee's assigned assets
   const totalCount = rawAssets.length;
@@ -82,7 +240,7 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
         } else if (selectedCategory === 'peripherals') {
           const match =
             asset.categoryKey === 'peripherals' ||
-            /peripheral|audio|headset|keyboard/i.test(asset.category);
+            /peripheral|audio|headset|keyboard|mouse/i.test(asset.category);
           if (!match) return false;
         } else if (selectedCategory === 'mobile') {
           const match =
@@ -117,9 +275,7 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
           (asset.specification && asset.specification.toLowerCase().includes(term)) ||
           (asset.category && asset.category.toLowerCase().includes(term)) ||
           (asset.location && asset.location.toLowerCase().includes(term)) ||
-          (asset.serialNumber && asset.serialNumber.toLowerCase().includes(term)) ||
-          (asset.legacyId && asset.legacyId.toLowerCase().includes(term)) ||
-          (asset.altName && asset.altName.toLowerCase().includes(term));
+          (asset.serialNumber && asset.serialNumber.toLowerCase().includes(term));
         if (!matchesSearch) return false;
       }
 
@@ -129,8 +285,7 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
 
   // Open asset inspection drawer
   const handleOpenDetails = (asset: EmployeeAssignedAsset) => {
-    // Verify asset is formally in this employee's assigned assets
-    const isAllocated = rawAssets.some((a) => a.id === asset.id || a.legacyId === asset.id);
+    const isAllocated = rawAssets.some((a) => a.id === asset.id);
     if (!isAllocated) {
       setDrawerError('Asset Record Not Found or Access Restricted');
       setSelectedAsset(null);
@@ -152,20 +307,6 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
     setSelectedCategory('all');
     setSelectedStatus('');
   };
-
-  const userDisplayName = currentUser?.full_name || 'Marcus Vance';
-  const userEmpId = currentUser?.employee_id || 'EMP-2024-0419';
-  const userDept = (currentUser as any)?.department || 'Product Design & UX';
-
-  // Find rich details from mock database if available
-  const richDetails: AssetDetailsData | null = useMemo(() => {
-    if (!selectedAsset) return null;
-    return (
-      ASSET_DETAILS_MOCK_DATA[selectedAsset.id] ||
-      (selectedAsset.legacyId ? ASSET_DETAILS_MOCK_DATA[selectedAsset.legacyId] : null) ||
-      null
-    );
-  }, [selectedAsset]);
 
   return (
     <DashboardLayout
@@ -229,428 +370,475 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
           </button>
         </div>
 
-        {/* KPI Summary Row: 4 Compact Systematic Cards */}
-        <div className="amx-eaa-kpi-grid" id="eaaKpiGrid">
-          {/* Card 1: Total Assigned */}
-          <div className="amx-eaa-kpi-card" id="kpiTotalAssigned">
-            <div className="amx-eaa-kpi-header">
-              <span className="amx-eaa-kpi-label">Total Assigned Assets</span>
-              <div className="amx-eaa-kpi-icon-wrap" aria-hidden="true">
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                  devices
-                </span>
-              </div>
-            </div>
-            <div className="amx-eaa-kpi-body">
-              <div className="amx-eaa-kpi-value" id="kpiTotalVal">
-                {totalCount}
-              </div>
-              <div className="amx-eaa-kpi-subtext">Formally issued to you</div>
-            </div>
+        {/* Loading State */}
+        {loading && (
+          <div className="amx-eaa-support-card" style={{ padding: '48px 24px', textAlign: 'center', justifyContent: 'center' }}>
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: '32px', color: 'var(--amx-dash-cyan, #00687a)', animation: 'spin 1s linear infinite' }}
+              aria-hidden="true"
+            >
+              sync
+            </span>
+            <p style={{ marginTop: '12px', fontSize: '14px', color: 'var(--amx-dash-text-muted, #76777d)' }}>
+              Loading assigned assets from registry...
+            </p>
           </div>
+        )}
 
-          {/* Card 2: Active Assets */}
-          <div className="amx-eaa-kpi-card" id="kpiActiveAssets">
-            <div className="amx-eaa-kpi-header">
-              <span className="amx-eaa-kpi-label">Active Assets</span>
-              <span className="amx-eaa-kpi-pill cyan" id="kpiActivePill">
-                <span className="amx-eaa-kpi-dot cyan" aria-hidden="true"></span>
-                Operational
+        {/* Error State */}
+        {!loading && error && (
+          <div
+            style={{
+              padding: '24px',
+              border: '1px solid #ffdad6',
+              backgroundColor: '#fff8f7',
+              borderRadius: '12px',
+              marginBottom: '20px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span className="material-symbols-outlined" style={{ color: '#ba1a1a', fontSize: '28px' }} aria-hidden="true">
+                error
               </span>
-            </div>
-            <div className="amx-eaa-kpi-body">
-              <div className="amx-eaa-kpi-value" id="kpiActiveVal">
-                {activeCount}
+              <div>
+                <h3 style={{ margin: 0, color: '#410002', fontSize: '16px' }}>Failed to Load Assigned Assets</h3>
+                <p style={{ margin: '4px 0 0', color: '#93000a', fontSize: '14px' }}>{error}</p>
               </div>
-              <div className="amx-eaa-kpi-subtext">In your custody &amp; in use</div>
             </div>
+            <button
+              type="button"
+              className="amx-eaa-support-btn"
+              style={{ marginTop: '16px' }}
+              onClick={fetchAssets}
+            >
+              Retry
+            </button>
           </div>
+        )}
 
-          {/* Card 3: In Maintenance */}
-          <div className="amx-eaa-kpi-card" id="kpiMaintenanceAssets">
-            <div className="amx-eaa-kpi-header">
-              <span className="amx-eaa-kpi-label">In Maintenance</span>
-              <span className="amx-eaa-kpi-pill neutral" id="kpiMaintenancePill">
-                <span className="amx-eaa-kpi-dot neutral" aria-hidden="true"></span>
-                IT Ticket Open
-              </span>
-            </div>
-            <div className="amx-eaa-kpi-body">
-              <div className="amx-eaa-kpi-value" id="kpiMaintenanceVal">
-                {maintenanceCount}
+        {/* Live Content */}
+        {!loading && !error && (
+          <>
+            {/* KPI Summary Row: 4 Compact Systematic Cards */}
+            <div className="amx-eaa-kpi-grid" id="eaaKpiGrid">
+              {/* Card 1: Total Assigned */}
+              <div className="amx-eaa-kpi-card" id="kpiTotalAssigned">
+                <div className="amx-eaa-kpi-header">
+                  <span className="amx-eaa-kpi-label">Total Assigned Assets</span>
+                  <div className="amx-eaa-kpi-icon-wrap" aria-hidden="true">
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                      devices
+                    </span>
+                  </div>
+                </div>
+                <div className="amx-eaa-kpi-number" id="valTotalAssigned">
+                  {totalCount}
+                </div>
+                <div className="amx-eaa-kpi-footer">
+                  <span className="amx-eaa-kpi-tag cyan">Custodian Records</span>
+                  <span className="amx-eaa-kpi-subtext">Active equipment</span>
+                </div>
               </div>
-              <div className="amx-eaa-kpi-subtext">With IT service lab (B-102)</div>
-            </div>
-          </div>
 
-          {/* Card 4: In Transit */}
-          <div className="amx-eaa-kpi-card" id="kpiTransitAssets">
-            <div className="amx-eaa-kpi-header">
-              <span className="amx-eaa-kpi-label">In Transit</span>
-              <div className="amx-eaa-kpi-icon-wrap" aria-hidden="true">
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                  local_shipping
-                </span>
+              {/* Card 2: Active Custody */}
+              <div className="amx-eaa-kpi-card" id="kpiActiveCustody">
+                <div className="amx-eaa-kpi-header">
+                  <span className="amx-eaa-kpi-label">Active In Custody</span>
+                  <div className="amx-eaa-kpi-icon-wrap cyan" aria-hidden="true">
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                      check_circle
+                    </span>
+                  </div>
+                </div>
+                <div className="amx-eaa-kpi-number" id="valActiveCustody">
+                  {activeCount}
+                </div>
+                <div className="amx-eaa-kpi-footer">
+                  <span className="amx-eaa-kpi-tag cyan">In Service</span>
+                  <span className="amx-eaa-kpi-subtext">Verified operational</span>
+                </div>
+              </div>
+
+              {/* Card 3: In Maintenance */}
+              <div className="amx-eaa-kpi-card" id="kpiInMaintenance">
+                <div className="amx-eaa-kpi-header">
+                  <span className="amx-eaa-kpi-label">In Maintenance</span>
+                  <div className="amx-eaa-kpi-icon-wrap neutral" aria-hidden="true">
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                      build
+                    </span>
+                  </div>
+                </div>
+                <div className="amx-eaa-kpi-number" id="valInMaintenance">
+                  {maintenanceCount}
+                </div>
+                <div className="amx-eaa-kpi-footer">
+                  <span className="amx-eaa-kpi-tag neutral">Diagnostics</span>
+                  <span className="amx-eaa-kpi-subtext">Service queue</span>
+                </div>
+              </div>
+
+              {/* Card 4: In Transit */}
+              <div className="amx-eaa-kpi-card" id="kpiInTransit">
+                <div className="amx-eaa-kpi-header">
+                  <span className="amx-eaa-kpi-label">In Transit / Gate-Pass</span>
+                  <div className="amx-eaa-kpi-icon-wrap teal" aria-hidden="true">
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                      local_shipping
+                    </span>
+                  </div>
+                </div>
+                <div className="amx-eaa-kpi-number" id="valInTransit">
+                  {transitCount}
+                </div>
+                <div className="amx-eaa-kpi-footer">
+                  <span className="amx-eaa-kpi-tag teal">Dispatched</span>
+                  <span className="amx-eaa-kpi-subtext">Movement logged</span>
+                </div>
               </div>
             </div>
-            <div className="amx-eaa-kpi-body">
-              <div className={`amx-eaa-kpi-value ${transitCount === 0 ? 'dim' : ''}`} id="kpiTransitVal">
-                {transitCount}
-              </div>
-              <div className="amx-eaa-kpi-subtext">
-                {transitCount === 0 ? 'No transfers in progress' : `${transitCount} units moving`}
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Filter & Controls Toolbar */}
-        <div className="amx-eaa-toolbar" id="eaaToolbar">
-          <div className="amx-eaa-toolbar-inner">
-            {/* Search Input */}
-            <div className="amx-eaa-search-box">
-              <span className="material-symbols-outlined amx-eaa-search-icon" style={{ fontSize: '20px' }} aria-hidden="true">
-                search
-              </span>
-              <input
-                type="text"
-                className="amx-eaa-search-input"
-                id="eaaSearchInput"
-                placeholder="Search by Asset ID or Asset Name..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                aria-label="Search by Asset ID or Asset Name"
-              />
-            </div>
-
-            {/* Filter Pills & Counter */}
-            <div className="amx-eaa-filter-pills" role="tablist" aria-label="Category filter tabs">
-              <button
-                type="button"
-                className={`amx-eaa-pill-btn ${selectedCategory === 'all' ? 'active' : ''}`}
-                id="pillFilterAll"
-                onClick={() => setSelectedCategory('all')}
-              >
-                All ({totalCount})
-              </button>
-              <button
-                type="button"
-                className={`amx-eaa-pill-btn ${selectedCategory === 'compute' ? 'active' : ''}`}
-                id="pillFilterCompute"
-                onClick={() => setSelectedCategory('compute')}
-              >
-                Compute &amp; Laptops
-              </button>
-              <button
-                type="button"
-                className={`amx-eaa-pill-btn ${selectedCategory === 'displays' ? 'active' : ''}`}
-                id="pillFilterDisplays"
-                onClick={() => setSelectedCategory('displays')}
-              >
-                Displays
-              </button>
-              <button
-                type="button"
-                className={`amx-eaa-pill-btn ${selectedCategory === 'peripherals' ? 'active' : ''}`}
-                id="pillFilterPeripherals"
-                onClick={() => setSelectedCategory('peripherals')}
-              >
-                Peripherals
-              </button>
-              <button
-                type="button"
-                className={`amx-eaa-pill-btn ${selectedCategory === 'mobile' ? 'active' : ''}`}
-                id="pillFilterMobile"
-                onClick={() => setSelectedCategory('mobile')}
-              >
-                Mobile Devices
-              </button>
-
-              <div className="amx-eaa-pill-sep" aria-hidden="true"></div>
-
-              <span className="amx-eaa-counter-badge" id="assetCounterBadge">
-                Showing {filteredAssets.length} of {totalCount} assets
-              </span>
-
-              {(searchTerm || selectedCategory !== 'all' || selectedStatus) && (
-                <button
-                  type="button"
-                  className="amx-eaa-btn-reset"
-                  id="resetFiltersBtn"
-                  onClick={handleResetFilters}
-                  title="Reset search and filters"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }} aria-hidden="true">
-                    close
+            {/* Inventory Container */}
+            <div className="amx-eaa-table-container">
+              {/* Filter / Search Bar */}
+              <div className="amx-eaa-filter-bar">
+                {/* Search Box */}
+                <div className="amx-eaa-search-box">
+                  <span className="material-symbols-outlined amx-eaa-search-icon" aria-hidden="true">
+                    search
                   </span>
-                  <span>Reset Filters</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+                  <input
+                    type="text"
+                    className="amx-eaa-search-input"
+                    id="assetSearchInput"
+                    placeholder="Search by Asset ID, Model, Serial No..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
 
-        {/* Assigned Assets Table Card */}
-        <div className="amx-eaa-table-card" id="eaaTableCard">
-          <div className="amx-eaa-table-wrap">
-            <table className="amx-eaa-table" aria-label="Formally assigned assets table">
-              <thead className="amx-eaa-thead">
-                <tr>
-                  <th className="amx-eaa-th">Asset ID</th>
-                  <th className="amx-eaa-th" style={{ minWidth: '260px' }}>
-                    Equipment &amp; Specification
-                  </th>
-                  <th className="amx-eaa-th">Category</th>
-                  <th className="amx-eaa-th" style={{ minWidth: '180px' }}>
-                    Current Location
-                  </th>
-                  <th className="amx-eaa-th">Assigned Date</th>
-                  <th className="amx-eaa-th">Custodian</th>
-                  <th className="amx-eaa-th">Status</th>
-                  <th className="amx-eaa-th" style={{ textAlign: 'right' }}>
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="amx-eaa-tbody">
-                {totalCount === 0 ? (
-                  <tr>
-                    <td colSpan={8}>
-                      <div className="amx-eaa-empty-state" id="eaaEmptyStateNoAssets">
-                        <span className="material-symbols-outlined amx-eaa-empty-icon" aria-hidden="true">
-                          devices
-                        </span>
-                        <h3 className="amx-eaa-empty-title">No Assets Formally Assigned</h3>
-                        <p className="amx-eaa-empty-desc">
-                          You do not currently have any equipment or hardware checked out to your custody.
-                          Submit an Asset Request via Self-Service if you require hardware allocation.
-                        </p>
-                        <button
-                          type="button"
-                          className="amx-eaa-btn-view-requests"
-                          onClick={() => onNavigate?.('create-request')}
-                          style={{ marginTop: '8px' }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
-                            post_add
-                          </span>
-                          <span>Create Request</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : filteredAssets.length === 0 ? (
-                  <tr>
-                    <td colSpan={8}>
-                      <div className="amx-eaa-empty-state" id="eaaEmptyStateNoMatch">
-                        <span className="material-symbols-outlined amx-eaa-empty-icon" aria-hidden="true">
-                          search_off
-                        </span>
-                        <h3 className="amx-eaa-empty-title">No matching assets found</h3>
-                        <p className="amx-eaa-empty-desc">
-                          No assigned equipment matches your current search or filter criteria.
-                        </p>
-                        <button
-                          type="button"
-                          className="amx-eaa-btn-reset"
-                          onClick={handleResetFilters}
-                          style={{ marginTop: '8px' }}
-                        >
-                          <span>Clear filters</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAssets.map((asset) => {
-                    const isCopied = copiedId === asset.id;
-                    const isMaint = asset.status.toLowerCase().includes('maintenance');
-                    const isTransit = asset.status.toLowerCase().includes('transit');
+                {/* Filters */}
+                <div className="amx-eaa-filter-group">
+                  {/* Category Pills */}
+                  <div className="amx-eaa-pills-wrap" role="tablist" aria-label="Asset category filters">
+                    <button
+                      type="button"
+                      className={`amx-eaa-pill-btn ${selectedCategory === 'all' ? 'active' : ''}`}
+                      onClick={() => setSelectedCategory('all')}
+                    >
+                      All ({totalCount})
+                    </button>
+                    <button
+                      type="button"
+                      className={`amx-eaa-pill-btn ${selectedCategory === 'compute' ? 'active' : ''}`}
+                      onClick={() => setSelectedCategory('compute')}
+                    >
+                      Compute
+                    </button>
+                    <button
+                      type="button"
+                      className={`amx-eaa-pill-btn ${selectedCategory === 'displays' ? 'active' : ''}`}
+                      onClick={() => setSelectedCategory('displays')}
+                    >
+                      Displays
+                    </button>
+                    <button
+                      type="button"
+                      className={`amx-eaa-pill-btn ${selectedCategory === 'peripherals' ? 'active' : ''}`}
+                      onClick={() => setSelectedCategory('peripherals')}
+                    >
+                      Peripherals
+                    </button>
+                    <button
+                      type="button"
+                      className={`amx-eaa-pill-btn ${selectedCategory === 'mobile' ? 'active' : ''}`}
+                      onClick={() => setSelectedCategory('mobile')}
+                    >
+                      Mobile &amp; Security
+                    </button>
+                  </div>
 
-                    return (
-                      <tr
-                        key={asset.id}
-                        className="amx-eaa-tr asset-row"
-                        data-category={asset.categoryKey || 'other'}
-                        onClick={() => handleOpenDetails(asset)}
-                        title={`Click to view inspection details for ${asset.id}`}
-                      >
-                        {/* 1. Asset ID */}
-                        <td className="amx-eaa-td">
-                          <div className="amx-eaa-id-cell">
-                            <span>{asset.id}</span>
-                            <button
-                              type="button"
-                              className="amx-eaa-copy-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCopy(asset.id, asset.id);
-                              }}
-                              title="Copy Asset Tag to clipboard"
-                              aria-label={`Copy Asset Tag ${asset.id}`}
-                            >
-                              <span
-                                className="material-symbols-outlined"
-                                style={{ fontSize: '15px' }}
-                                aria-hidden="true"
+                  {/* Status Select */}
+                  <div className="amx-eaa-select-wrap">
+                    <select
+                      id="statusSelect"
+                      className="amx-eaa-select"
+                      value={selectedStatus}
+                      onChange={(e) => setSelectedStatus(e.target.value)}
+                      aria-label="Filter assets by status"
+                    >
+                      <option value="">Status: All</option>
+                      <option value="active">Active / In Custody</option>
+                      <option value="maintenance">In Maintenance</option>
+                      <option value="transit">In Transit</option>
+                    </select>
+                    <span className="material-symbols-outlined amx-eaa-select-icon" aria-hidden="true">
+                      expand_more
+                    </span>
+                  </div>
+
+                  {(searchTerm || selectedCategory !== 'all' || selectedStatus) && (
+                    <button
+                      type="button"
+                      className="amx-eaa-btn-reset"
+                      onClick={handleResetFilters}
+                      title="Reset filters"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '15px' }} aria-hidden="true">
+                        restart_alt
+                      </span>
+                      <span>Reset</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Data Table */}
+              <div className="amx-eaa-table-scroll">
+                <table className="amx-eaa-table" aria-label="Assigned Assets Table">
+                  <thead>
+                    <tr className="amx-eaa-thead-tr">
+                      <th scope="col" className="amx-eaa-th">Asset ID</th>
+                      <th scope="col" className="amx-eaa-th">Equipment &amp; Specification</th>
+                      <th scope="col" className="amx-eaa-th">Category</th>
+                      <th scope="col" className="amx-eaa-th">Current Location</th>
+                      <th scope="col" className="amx-eaa-th">Assigned Date</th>
+                      <th scope="col" className="amx-eaa-th">Custodian</th>
+                      <th scope="col" className="amx-eaa-th">Status</th>
+                      <th scope="col" className="amx-eaa-th" style={{ textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAssets.length === 0 ? (
+                      <tr>
+                        <td colSpan={8}>
+                          <div className="amx-eaa-empty-state" id="emptyStateBox">
+                            <span className="material-symbols-outlined amx-eaa-empty-icon" aria-hidden="true">
+                              devices_off
+                            </span>
+                            <h3 className="amx-eaa-empty-title">
+                              {rawAssets.length === 0
+                                ? 'No assets assigned to your custody'
+                                : 'No matching assets found'}
+                            </h3>
+                            <p className="amx-eaa-empty-desc">
+                              {rawAssets.length === 0
+                                ? 'You do not have any non-consumable equipment or hardware registered to your employee record. Use Create Request to request equipment.'
+                                : 'No assigned equipment matches your current search or category filter. Try clearing your filters.'}
+                            </p>
+                            {rawAssets.length === 0 ? (
+                              <button
+                                type="button"
+                                className="amx-eaa-support-btn"
+                                onClick={() => onNavigate?.('create-request')}
                               >
-                                {isCopied ? 'check' : 'content_copy'}
-                              </span>
-                            </button>
+                                Create Request
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="amx-eaa-btn-reset"
+                                onClick={handleResetFilters}
+                              >
+                                Reset Filters
+                              </button>
+                            )}
                           </div>
-                        </td>
-
-                        {/* 2. Equipment & Specification */}
-                        <td className="amx-eaa-td">
-                          <div className="amx-eaa-equip-cell">
-                            <div className="amx-eaa-equip-icon-wrap" aria-hidden="true">
-                              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                                {asset.icon || 'devices'}
-                              </span>
-                            </div>
-                            <div className="amx-eaa-equip-info">
-                              <span className="amx-eaa-equip-title">{asset.name}</span>
-                              <span className="amx-eaa-equip-spec">
-                                {asset.specification || asset.category}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* 3. Category */}
-                        <td className="amx-eaa-td">
-                          <span className="amx-eaa-cat-text">{asset.category}</span>
-                        </td>
-
-                        {/* 4. Current Location */}
-                        <td className="amx-eaa-td">
-                          <div className="amx-eaa-loc-cell">
-                            <span
-                              className="material-symbols-outlined amx-eaa-loc-icon"
-                              style={{
-                                color: isMaint ? '#76777d' : 'var(--amx-dash-cyan, #00687a)',
-                              }}
-                              aria-hidden="true"
-                            >
-                              {isMaint ? 'build' : asset.location.includes('Remote') ? 'home_pin' : 'location_on'}
-                            </span>
-                            <span>{asset.location}</span>
-                          </div>
-                        </td>
-
-                        {/* 5. Assigned Date */}
-                        <td className="amx-eaa-td">
-                          <span className="amx-eaa-date-text">
-                            {asset.assignedDate || '12 Jan 2024'}
-                          </span>
-                        </td>
-
-                        {/* 6. Custodian */}
-                        <td className="amx-eaa-td">
-                          <div className="amx-eaa-custodian-cell">
-                            <span className="amx-eaa-custodian-name">
-                              {asset.custodianName || userDisplayName}
-                            </span>
-                            <span className="amx-eaa-custodian-empid">
-                              {asset.custodianEmpId || userEmpId}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 7. Status */}
-                        <td className="amx-eaa-td">
-                          <span
-                            className={`amx-eaa-status-badge ${
-                              isMaint ? 'maintenance' : isTransit ? 'transit' : 'active'
-                            }`}
-                          >
-                            <span
-                              className={`amx-eaa-kpi-dot ${isMaint ? 'neutral' : 'cyan'}`}
-                              aria-hidden="true"
-                            ></span>
-                            <span>{asset.status}</span>
-                          </span>
-                        </td>
-
-                        {/* 8. Action */}
-                        <td className="amx-eaa-td" style={{ textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            className="amx-eaa-action-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenDetails(asset);
-                            }}
-                            aria-label={`View details for ${asset.id}`}
-                          >
-                            <span
-                              className="material-symbols-outlined"
-                              style={{ fontSize: '16px' }}
-                              aria-hidden="true"
-                            >
-                              visibility
-                            </span>
-                            <span>View Details</span>
-                          </button>
                         </td>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                    ) : (
+                      filteredAssets.map((asset) => {
+                        const isCopied = copiedId === asset.id;
+                        const isMaint = asset.statusCode === 'maintenance';
+                        const isTransit = asset.statusCode === 'transit';
 
-          {/* Table Footer Metadata */}
-          <div className="amx-eaa-table-footer">
-            <span className="amx-eaa-custodian-notice">
-              Formally registered custodian:{' '}
-              <strong>
-                {userDisplayName} ({userEmpId})
-              </strong>{' '}
-              &bull; {userDept}
-            </span>
-            <div className="amx-eaa-policy-reminder">
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
-                info
-              </span>
-              <span>
-                Assets must be surrendered to Hardware Operations upon role transition or offboarding.
-              </span>
-            </div>
-          </div>
-        </div>
+                        return (
+                          <tr
+                            key={asset.id}
+                            className="amx-eaa-tr asset-row"
+                            data-category={asset.categoryKey || 'other'}
+                            onClick={() => handleOpenDetails(asset)}
+                            title={`Click to view inspection details for ${asset.id}`}
+                          >
+                            {/* 1. Asset ID */}
+                            <td className="amx-eaa-td">
+                              <div className="amx-eaa-id-cell">
+                                <span>{asset.id}</span>
+                                <button
+                                  type="button"
+                                  className="amx-eaa-copy-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCopy(asset.id, asset.id);
+                                  }}
+                                  title="Copy Asset Tag to clipboard"
+                                  aria-label={`Copy Asset Tag ${asset.id}`}
+                                >
+                                  <span
+                                    className="material-symbols-outlined"
+                                    style={{ fontSize: '15px' }}
+                                    aria-hidden="true"
+                                  >
+                                    {isCopied ? 'check' : 'content_copy'}
+                                  </span>
+                                </button>
+                              </div>
+                            </td>
 
-        {/* Self-Service Guidance Card (Editorial Layout) */}
-        <div className="amx-eaa-support-card" id="eaaSupportCard">
-          <div className="amx-eaa-support-left">
-            <div className="amx-eaa-support-icon-wrap" aria-hidden="true">
-              <span className="material-symbols-outlined" style={{ fontSize: '26px' }}>
-                support_agent
-              </span>
+                            {/* 2. Equipment & Specification */}
+                            <td className="amx-eaa-td">
+                              <div className="amx-eaa-equip-cell">
+                                <div className="amx-eaa-equip-icon-wrap" aria-hidden="true">
+                                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                                    {asset.icon || 'devices'}
+                                  </span>
+                                </div>
+                                <div className="amx-eaa-equip-info">
+                                  <span className="amx-eaa-equip-title">{asset.name}</span>
+                                  <span className="amx-eaa-equip-spec">
+                                    {asset.specification || asset.category}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* 3. Category */}
+                            <td className="amx-eaa-td">
+                              <span className="amx-eaa-cat-text">{asset.category}</span>
+                            </td>
+
+                            {/* 4. Current Location */}
+                            <td className="amx-eaa-td">
+                              <div className="amx-eaa-loc-cell">
+                                <span
+                                  className="material-symbols-outlined amx-eaa-loc-icon"
+                                  style={{
+                                    color: isMaint ? '#76777d' : 'var(--amx-dash-cyan, #00687a)',
+                                  }}
+                                  aria-hidden="true"
+                                >
+                                  {isMaint ? 'build' : asset.location.includes('Remote') ? 'home_pin' : 'location_on'}
+                                </span>
+                                <span>{asset.location}</span>
+                              </div>
+                            </td>
+
+                            {/* 5. Assigned Date */}
+                            <td className="amx-eaa-td">
+                              <span className="amx-eaa-date-text">
+                                {asset.assignedDate}
+                              </span>
+                            </td>
+
+                            {/* 6. Custodian */}
+                            <td className="amx-eaa-td">
+                              <div className="amx-eaa-custodian-cell">
+                                <span className="amx-eaa-custodian-name">
+                                  {asset.custodianName}
+                                </span>
+                                <span className="amx-eaa-custodian-empid">
+                                  {asset.custodianEmpId}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* 7. Status */}
+                            <td className="amx-eaa-td">
+                              <span
+                                className={`amx-eaa-status-badge ${
+                                  isMaint ? 'maintenance' : isTransit ? 'transit' : 'active'
+                                }`}
+                              >
+                                <span
+                                  className={`amx-eaa-kpi-dot ${isMaint ? 'neutral' : 'cyan'}`}
+                                  aria-hidden="true"
+                                ></span>
+                                <span>{asset.status}</span>
+                              </span>
+                            </td>
+
+                            {/* 8. Action */}
+                            <td className="amx-eaa-td" style={{ textAlign: 'right' }}>
+                              <button
+                                type="button"
+                                className="amx-eaa-action-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenDetails(asset);
+                                }}
+                                aria-label={`View details for ${asset.id}`}
+                              >
+                                <span
+                                  className="material-symbols-outlined"
+                                  style={{ fontSize: '16px' }}
+                                  aria-hidden="true"
+                                >
+                                  visibility
+                                </span>
+                                <span>View Details</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Table Footer Metadata */}
+              <div className="amx-eaa-table-footer">
+                <span className="amx-eaa-custodian-notice">
+                  Formally registered custodian:{' '}
+                  <strong>
+                    {userDisplayName} ({userEmpId})
+                  </strong>{' '}
+                  &bull; {userDept}
+                </span>
+                <div className="amx-eaa-policy-reminder">
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
+                    info
+                  </span>
+                  <span>
+                    Assets must be surrendered to Hardware Operations upon role transition or offboarding.
+                  </span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h2 className="amx-eaa-support-title">Need adjustments or hardware support?</h2>
-              <p className="amx-eaa-support-desc">
-                As an employee, asset assignment modifications (such as desk relocations, ergonomic
-                loaners, or faulty battery replacements) must be processed through corporate IT ticket
-                workflows.
-              </p>
+
+            {/* Self-Service Guidance Card */}
+            <div className="amx-eaa-support-card" id="eaaSupportCard">
+              <div className="amx-eaa-support-left">
+                <div className="amx-eaa-support-icon-wrap" aria-hidden="true">
+                  <span className="material-symbols-outlined" style={{ fontSize: '26px' }}>
+                    support_agent
+                  </span>
+                </div>
+                <div>
+                  <h2 className="amx-eaa-support-title">Need adjustments or hardware support?</h2>
+                  <p className="amx-eaa-support-desc">
+                    As an employee, asset assignment modifications (such as desk relocations, ergonomic
+                    loaners, or faulty battery replacements) must be processed through corporate IT ticket
+                    workflows.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="amx-eaa-support-btn"
+                id="itPolicyBtn"
+                onClick={() =>
+                  showToast(
+                    'Corporate IT Hardware Policy: All equipment allocations require manager signoff and asset tagging before deployment.'
+                  )
+                }
+              >
+                IT Hardware Policy
+              </button>
             </div>
-          </div>
-          <button
-            type="button"
-            className="amx-eaa-support-btn"
-            id="itPolicyBtn"
-            onClick={() =>
-              showToast(
-                'Corporate IT Hardware Policy: All equipment allocations require manager signoff and asset tagging before deployment.'
-              )
-            }
-          >
-            IT Hardware Policy
-          </button>
-        </div>
+          </>
+        )}
       </div>
 
       {/* Backdrop for Inspection Drawer */}
@@ -755,7 +943,54 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
                   </p>
                 </div>
 
-                {/* 2. Allocation & Custody Information */}
+                {/* 2. QR Code & Digital Asset Tag */}
+                <div>
+                  <span className="amx-eaa-drawer-section-title" style={{ display: 'block', marginBottom: '8px' }}>
+                    Asset Tag &amp; Verification QR
+                  </span>
+                  <div className="amx-eaa-drawer-card" style={{ textAlign: 'center', padding: '16px' }}>
+                    {selectedAsset.qrCodeDataUrl ? (
+                      <img
+                        src={selectedAsset.qrCodeDataUrl}
+                        alt={`QR Code for ${selectedAsset.id}`}
+                        style={{
+                          width: '130px',
+                          height: '130px',
+                          margin: '0 auto',
+                          display: 'block',
+                          borderRadius: '8px',
+                          border: '1px solid var(--amx-dash-border, #c6c6cd)',
+                          backgroundColor: '#ffffff',
+                          padding: '4px',
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          padding: '16px',
+                          backgroundColor: '#f1f4f6',
+                          borderRadius: '8px',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                        }}
+                      >
+                        {selectedAsset.qrCodeValue || `assetmx:${selectedAsset.id}`}
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        marginTop: '10px',
+                        fontSize: '12px',
+                        fontFamily: 'JetBrains Mono, monospace',
+                        color: 'var(--amx-dash-text-muted, #76777d)',
+                      }}
+                    >
+                      {selectedAsset.qrCodeValue || `assetmx:${selectedAsset.id}`}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Allocation & Custody Information */}
                 <div>
                   <span className="amx-eaa-drawer-section-title" style={{ display: 'block', marginBottom: '8px' }}>
                     Allocation &amp; Custody
@@ -764,19 +999,19 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
                     <div className="amx-eaa-spec-row">
                       <span className="amx-eaa-spec-label">Assigned Custodian</span>
                       <span className="amx-eaa-spec-value">
-                        {selectedAsset.custodianName || userDisplayName} ({selectedAsset.custodianEmpId || userEmpId})
+                        {selectedAsset.custodianName} ({selectedAsset.custodianEmpId})
                       </span>
                     </div>
                     <div className="amx-eaa-spec-row">
                       <span className="amx-eaa-spec-label">Department / Unit</span>
                       <span className="amx-eaa-spec-value">
-                        {selectedAsset.custodianDepartment || userDept}
+                        {selectedAsset.custodianDepartment}
                       </span>
                     </div>
                     <div className="amx-eaa-spec-row">
                       <span className="amx-eaa-spec-label">Assigned Date</span>
                       <span className="amx-eaa-spec-value">
-                        {selectedAsset.assignedDate || '12 January 2024'}
+                        {selectedAsset.assignedDate}
                       </span>
                     </div>
                     <div className="amx-eaa-spec-row">
@@ -786,7 +1021,7 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
                   </div>
                 </div>
 
-                {/* 3. Technical Specifications Card */}
+                {/* 4. Technical Specifications Card */}
                 <div>
                   <span className="amx-eaa-drawer-section-title" style={{ display: 'block', marginBottom: '8px' }}>
                     Technical Specifications
@@ -799,7 +1034,7 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
                           className="amx-eaa-spec-value"
                           style={{ fontFamily: 'var(--amx-dash-mono, monospace)', fontWeight: 600 }}
                         >
-                          {selectedAsset.serialNumber || 'SN-RECORDED-TAG'}
+                          {selectedAsset.serialNumber}
                         </span>
                         <button
                           type="button"
@@ -827,22 +1062,18 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
                       </div>
                     ))}
 
-                    {richDetails?.acquisition && (
-                      <>
-                        <div className="amx-eaa-spec-row">
-                          <span className="amx-eaa-spec-label">Acquisition Cost</span>
-                          <span className="amx-eaa-spec-value">{richDetails.acquisition.totalCost}</span>
-                        </div>
-                        <div className="amx-eaa-spec-row">
-                          <span className="amx-eaa-spec-label">Warranty Status</span>
-                          <span className="amx-eaa-spec-value">{richDetails.warrantyStatus}</span>
-                        </div>
-                      </>
-                    )}
+                    <div className="amx-eaa-spec-row">
+                      <span className="amx-eaa-spec-label">Acquisition Cost</span>
+                      <span className="amx-eaa-spec-value">{selectedAsset.acquisition.totalCost}</span>
+                    </div>
+                    <div className="amx-eaa-spec-row">
+                      <span className="amx-eaa-spec-label">Warranty Status</span>
+                      <span className="amx-eaa-spec-value">{selectedAsset.acquisition.warrantyStatus}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* 4. Recorded History / Custody Events */}
+                {/* 5. Recorded History / Custody Events */}
                 <div>
                   <span className="amx-eaa-drawer-section-title" style={{ display: 'block', marginBottom: '8px' }}>
                     Custody Log
@@ -864,24 +1095,6 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
                           </div>
                         </div>
                       ))
-                    ) : richDetails?.movementHistory && richDetails.movementHistory.length > 0 ? (
-                      richDetails.movementHistory.map((mov, idx) => (
-                        <div key={idx} className="amx-eaa-timeline-item">
-                          <div
-                            className={`amx-eaa-timeline-dot ${idx === 0 ? '' : 'muted'}`}
-                            aria-hidden="true"
-                          ></div>
-                          <div>
-                            <div>
-                              <span className="amx-eaa-timeline-time">{mov.date}</span>
-                              <span className="amx-eaa-timeline-subtime">&bull; {mov.movementType}</span>
-                            </div>
-                            <p className="amx-eaa-timeline-desc">
-                              Transferred from {mov.from} to {mov.to} (Custodian: {mov.custodian})
-                            </p>
-                          </div>
-                        </div>
-                      ))
                     ) : (
                       <div className="amx-eaa-spec-row">
                         <span className="amx-eaa-spec-label">Custody Trail</span>
@@ -891,7 +1104,7 @@ export const EmployeeMyAssignedAssetsPage: React.FC<EmployeeMyAssignedAssetsPage
                   </div>
                 </div>
 
-                {/* 5. Employee Notice Box */}
+                {/* 6. Employee Notice Box */}
                 <div className="amx-eaa-drawer-notice">
                   <span className="material-symbols-outlined amx-eaa-drawer-notice-icon" aria-hidden="true">
                     info

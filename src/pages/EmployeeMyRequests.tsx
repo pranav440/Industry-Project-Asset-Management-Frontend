@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { getUser } from '../auth/session';
-import { getScopedEmployeeRequests } from '../data/employeeData';
+import { listMyRequests, RequestApiError, type RequestListItemApiRecord } from '../api/requestApi';
 import type { RequestItemData } from '../data/requestsData';
 import './EmployeeMyRequests.css';
 
@@ -17,7 +17,9 @@ export const EmployeeMyRequestsPage: React.FC<EmployeeMyRequestsPageProps> = ({
   onSignOut,
 }) => {
   const currentUser = getUser();
-  const requests = useMemo(() => getScopedEmployeeRequests(currentUser), [currentUser]);
+  const [rawRequests, setRawRequests] = useState<RequestListItemApiRecord[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -27,22 +29,63 @@ export const EmployeeMyRequestsPage: React.FC<EmployeeMyRequestsPageProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const pageSize = 6;
 
-  // Selected request for read-only details modal
+  // Selected request for read-only details modal (fallback if onNavigate not available)
   const [selectedRequest, setSelectedRequest] = useState<RequestItemData | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const fetchRequests = () => {
+    setLoading(true);
+    setError(null);
+    listMyRequests({ pageSize: 100 })
+      .then((res) => {
+        setRawRequests(res.items || []);
+      })
+      .catch((err) => {
+        setError(
+          err instanceof RequestApiError
+            ? err.message
+            : err instanceof Error
+            ? err.message
+            : 'Unable to load employee requests'
+        );
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3200);
   };
 
+  // Normalized requests mapped from API records
+  const requests = useMemo<RequestItemData[]>(() => {
+    return rawRequests.map((r) => ({
+      id: r.request_id,
+      requesterName: r.requester_name,
+      requesterEmail: r.requester_email,
+      department: r.department,
+      requestType: r.request_type,
+      requestedItem: r.requested_item,
+      category: r.category,
+      quantity: r.quantity,
+      priority: r.priority,
+      requestDate: r.request_date,
+      status: r.status,
+      justification: r.justification,
+      history: [],
+      attachments: [],
+    }));
+  }, [rawRequests]);
+
   // Helper date extractors
   const getApprovalDate = (req: RequestItemData): string => {
     if (req.status === 'Pending') return '—';
-    const entry = req.history?.find(
-      (h) => h.stage === 'Approved' || h.stage === 'In Review' || h.action?.toLowerCase().includes('approved')
-    );
-    if (entry?.timestamp) return entry.timestamp.split(' ')[0];
     if (req.status === 'In Review') return req.requestDate || '—';
     if (req.status === 'Fulfilled') return req.requestDate || '—';
     return '—';
@@ -50,9 +93,7 @@ export const EmployeeMyRequestsPage: React.FC<EmployeeMyRequestsPageProps> = ({
 
   const getFulfillmentDate = (req: RequestItemData): string => {
     if (req.status !== 'Fulfilled') return '—';
-    const entry = req.history?.find((h) => h.stage === 'Fulfilled' || h.action?.toLowerCase().includes('disbursed'));
-    if (entry?.timestamp) return entry.timestamp.split(' ')[0];
-    return '—';
+    return req.requestDate || 'Recorded';
   };
 
   // Dynamic KPI Counts strictly from employee's records
@@ -79,7 +120,6 @@ export const EmployeeMyRequestsPage: React.FC<EmployeeMyRequestsPageProps> = ({
     const set = new Set<string>();
     requests.forEach((r) => {
       if (r.category) {
-        // Clean category prefix if has bullet
         const mainCat = r.category.split('•')[0].trim();
         set.add(mainCat);
       }
@@ -170,7 +210,7 @@ export const EmployeeMyRequestsPage: React.FC<EmployeeMyRequestsPageProps> = ({
       onSignOut={onSignOut}
       searchPlaceholder="Search my requests, assets..."
       onNotificationsClick={() =>
-        showToast('Notifications: 1 update — Monitor requisition REQ-2026-0841 moved to In Review.')
+        showToast('Notifications: No pending requisition alerts.')
       }
       onHelpClick={() =>
         showToast('Help & Policies: Requisitions require departmental review before fulfillment.')
@@ -225,78 +265,81 @@ export const EmployeeMyRequestsPage: React.FC<EmployeeMyRequestsPageProps> = ({
           </div>
         </div>
 
-        {/* Four Summary KPI Cards */}
-        <div className="amx-myr-kpi-grid">
-          {/* Card 1: All My Requests */}
-          <div className="amx-myr-kpi-card">
-            <div className="amx-myr-kpi-top">
-              <span className="amx-myr-kpi-label">All My Requests</span>
+        {/* Section 1: KPI Statistics Summary */}
+        <div className="amx-myr-kpis-grid">
+          {/* Card 1: Total Requisitions */}
+          <div className="amx-myr-kpi-card" id="kpi-total-reqs">
+            <div className="amx-myr-kpi-header">
+              <span className="amx-myr-kpi-label">Total Submitted</span>
               <div className="amx-myr-kpi-icon-wrap" aria-hidden="true">
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                  receipt_long
-                </span>
+                <span className="material-symbols-outlined">folder_shared</span>
               </div>
             </div>
-            <div className="amx-myr-kpi-body">
-              <div className="amx-myr-kpi-value">{allCount}</div>
-              <p className="amx-myr-kpi-desc">Total submitted requisitions</p>
+            <div className="amx-myr-kpi-val" id="val-total-reqs">
+              {allCount}
+            </div>
+            <div className="amx-myr-kpi-footer">
+              <span className="amx-myr-kpi-tag neutral">All Records</span>
+              <span className="amx-myr-kpi-subtext">Cumulative history</span>
             </div>
           </div>
 
-          {/* Card 2: Open Requests */}
-          <div className="amx-myr-kpi-card">
-            <div className="amx-myr-kpi-top">
-              <span className="amx-myr-kpi-label">Open Requests</span>
+          {/* Card 2: Open / In Pipeline */}
+          <div className="amx-myr-kpi-card" id="kpi-open-reqs">
+            <div className="amx-myr-kpi-header">
+              <span className="amx-myr-kpi-label">Open in Pipeline</span>
               <div className="amx-myr-kpi-icon-wrap cyan" aria-hidden="true">
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                  hourglass_top
-                </span>
+                <span className="material-symbols-outlined">pending_actions</span>
               </div>
             </div>
-            <div className="amx-myr-kpi-body">
-              <div className="amx-myr-kpi-value">{openRequests.length}</div>
-              <p className="amx-myr-kpi-desc">Requests not yet fulfilled or rejected</p>
+            <div className="amx-myr-kpi-val" id="val-open-reqs">
+              {openRequests.length}
+            </div>
+            <div className="amx-myr-kpi-footer">
+              <span className="amx-myr-kpi-tag cyan">{awaitingApproval.length} Pending Review</span>
+              <span className="amx-myr-kpi-subtext">Active workflow</span>
             </div>
           </div>
 
-          {/* Card 3: Awaiting Approval */}
-          <div className="amx-myr-kpi-card">
-            <div className="amx-myr-kpi-top">
-              <span className="amx-myr-kpi-label">Awaiting Approval</span>
-              <div className="amx-myr-kpi-icon-wrap amber" aria-hidden="true">
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                  pending
-                </span>
+          {/* Card 3: Fulfilled */}
+          <div className="amx-myr-kpi-card" id="kpi-fulfilled-reqs">
+            <div className="amx-myr-kpi-header">
+              <span className="amx-myr-kpi-label">Fulfilled &amp; Issued</span>
+              <div className="amx-myr-kpi-icon-wrap teal" aria-hidden="true">
+                <span className="material-symbols-outlined">verified</span>
               </div>
             </div>
-            <div className="amx-myr-kpi-body">
-              <div className="amx-myr-kpi-value">{awaitingApproval.length}</div>
-              <p className="amx-myr-kpi-desc">Your requests awaiting an approver's decision</p>
+            <div className="amx-myr-kpi-val" id="val-fulfilled-reqs">
+              {fulfilledRequests.length}
+            </div>
+            <div className="amx-myr-kpi-footer">
+              <span className="amx-myr-kpi-tag teal">Dispatched</span>
+              <span className="amx-myr-kpi-subtext">Delivered to user</span>
             </div>
           </div>
 
-          {/* Card 4: Fulfilled Requests */}
-          <div className="amx-myr-kpi-card">
-            <div className="amx-myr-kpi-top">
-              <span className="amx-myr-kpi-label">Fulfilled Requests</span>
-              <div className="amx-myr-kpi-icon-wrap green" aria-hidden="true">
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                  check_circle
-                </span>
+          {/* Card 4: Disapproved / Rejected */}
+          <div className="amx-myr-kpi-card" id="kpi-rejected-reqs">
+            <div className="amx-myr-kpi-header">
+              <span className="amx-myr-kpi-label">Disapproved</span>
+              <div className="amx-myr-kpi-icon-wrap neutral" aria-hidden="true">
+                <span className="material-symbols-outlined">block</span>
               </div>
             </div>
-            <div className="amx-myr-kpi-body">
-              <div className="amx-myr-kpi-value">{fulfilledRequests.length}</div>
-              <p className="amx-myr-kpi-desc">Successfully completed &amp; delivered</p>
+            <div className="amx-myr-kpi-val" id="val-rejected-reqs">
+              {rejectedRequests.length}
+            </div>
+            <div className="amx-myr-kpi-footer">
+              <span className="amx-myr-kpi-tag neutral">Closed</span>
+              <span className="amx-myr-kpi-subtext">Not approved</span>
             </div>
           </div>
         </div>
 
-        {/* Main Requests Table Container */}
-        <div className="amx-myr-main-card">
-          {/* Filter Bar */}
-          <div className="amx-myr-filter-bar">
-            {/* Search Input */}
+        {/* Section 2: Requisitions Data Table Card */}
+        <div className="amx-myr-table-card">
+          {/* Controls Bar: Search + Filter Group */}
+          <div className="amx-myr-controls-bar">
             <div className="amx-myr-search-wrapper">
               <span className="material-symbols-outlined amx-myr-search-icon" aria-hidden="true">
                 search
@@ -423,173 +466,224 @@ export const EmployeeMyRequestsPage: React.FC<EmployeeMyRequestsPageProps> = ({
             </div>
           </div>
 
-          {/* Table Container */}
-          <div className="amx-myr-table-scroll">
-            <table className="amx-myr-table" aria-label="My Requests Table">
-              <thead>
-                <tr>
-                  <th scope="col">Request ID</th>
-                  <th scope="col">Item Name</th>
-                  <th scope="col">Category</th>
-                  <th scope="col" style={{ textAlign: 'center' }}>Qty</th>
-                  <th scope="col">Priority</th>
-                  <th scope="col">Request Date</th>
-                  <th scope="col">Approval Date</th>
-                  <th scope="col">Fulfillment Date</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" style={{ textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody id="requests-tbody">
-                {paginatedRequests.map((req) => {
-                  const statusKey = req.status.toLowerCase().replace(/\s+/g, '-');
-                  const priorityKey = (req.priority || 'Medium').toLowerCase();
-                  const approvalDate = getApprovalDate(req);
-                  const fulfillmentDate = getFulfillmentDate(req);
-
-                  return (
-                    <tr
-                      key={req.id}
-                      className="amx-myr-table-row"
-                      onClick={() => handleRowClick(req)}
-                    >
-                      <td className="amx-myr-col-id">{req.id}</td>
-                      <td className="amx-myr-col-item" title={req.requestedItem}>
-                        {req.requestedItem}
-                      </td>
-                      <td className="amx-myr-col-cat">{req.category}</td>
-                      <td className="amx-myr-col-qty">{req.quantity}</td>
-                      <td>
-                        <span className={`amx-myr-priority-badge ${priorityKey}`}>
-                          {req.priority || 'Medium'}
-                        </span>
-                      </td>
-                      <td className="amx-myr-col-date">{req.requestDate || '—'}</td>
-                      <td className="amx-myr-col-date">{approvalDate}</td>
-                      <td className="amx-myr-col-date">{fulfillmentDate}</td>
-                      <td>
-                        <span className={`amx-myr-status-pill ${statusKey}`}>
-                          {req.status === 'Fulfilled' ? (
-                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
-                              done_all
-                            </span>
-                          ) : req.status === 'Rejected' ? (
-                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
-                              close
-                            </span>
-                          ) : (
-                            <span className="dot" aria-hidden="true" />
-                          )}
-                          <span>{req.status}</span>
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          className="amx-myr-action-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenDetails(req);
-                          }}
-                          aria-label={`View details for ${req.id}`}
-                        >
-                          <span>View Details</span>
-                          <span
-                            className="material-symbols-outlined"
-                            style={{ fontSize: '16px', color: 'var(--amx-dash-cyan, #00687a)' }}
-                            aria-hidden="true"
-                          >
-                            chevron_right
-                          </span>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Empty Results State */}
-          {filteredRequests.length === 0 && (
-            <div className="amx-myr-empty-box" id="table-empty-state">
-              <div className="amx-myr-empty-icon-wrap" aria-hidden="true">
-                <span className="material-symbols-outlined" style={{ fontSize: '26px' }}>
-                  search_off
-                </span>
-              </div>
-              <h3 className="amx-myr-empty-title">No matching requests found</h3>
-              <p className="amx-myr-empty-desc">
-                {requests.length === 0
-                  ? 'You have not submitted any asset or consumable requisitions yet.'
-                  : 'No requisitions match your current filter parameters. Try clearing your search keyword or resetting category and priority filters.'}
+          {/* Loading State */}
+          {loading && (
+            <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: '32px', color: 'var(--amx-dash-secondary, #00687a)', animation: 'spin 1s linear infinite' }}
+                aria-hidden="true"
+              >
+                sync
+              </span>
+              <p style={{ marginTop: '12px', fontSize: '14px', color: 'var(--amx-dash-text-muted, #45464d)' }}>
+                Loading your requisitions...
               </p>
-              {requests.length > 0 && (
-                <button
-                  type="button"
-                  className="amx-myr-btn-reset"
-                  id="reset-filters-btn"
-                  onClick={handleResetFilters}
-                >
-                  Reset Filters
-                </button>
-              )}
             </div>
           )}
 
-          {/* Pagination Footer */}
-          {filteredRequests.length > 0 && (
-            <div className="amx-myr-pagination-footer">
-              <div className="amx-myr-count-text">
-                <span>
-                  Showing{' '}
-                  <strong id="count-visible">
-                    {filteredRequests.length === 0 ? 0 : startIndex + 1}
-                  </strong>{' '}
-                  to{' '}
-                  <strong>
-                    {Math.min(startIndex + pageSize, filteredRequests.length)}
-                  </strong>{' '}
-                  of <strong>{filteredRequests.length}</strong> requests
+          {/* Error State */}
+          {!loading && error && (
+            <div
+              style={{
+                margin: '24px',
+                padding: '24px',
+                border: '1px solid #ffdad6',
+                backgroundColor: '#fff8f7',
+                borderRadius: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span className="material-symbols-outlined" style={{ color: '#ba1a1a', fontSize: '28px' }} aria-hidden="true">
+                  error
                 </span>
-                <span className="amx-myr-subtext-sep">•</span>
-                <span className="amx-myr-tracking-hint">Read-only personal tracking view</span>
+                <div>
+                  <h3 style={{ margin: 0, color: '#410002', fontSize: '16px' }}>Failed to Load Requests</h3>
+                  <p style={{ margin: '4px 0 0', color: '#93000a', fontSize: '14px' }}>{error}</p>
+                </div>
               </div>
-
-              <div className="amx-myr-pager-controls">
-                <button
-                  type="button"
-                  className="amx-myr-pager-btn"
-                  disabled={currentPage <= 1}
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  aria-label="Previous page"
-                >
-                  Previous
-                </button>
-
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={`amx-myr-page-num ${p === currentPage ? 'active' : ''}`}
-                    onClick={() => handlePageChange(p)}
-                    aria-label={`Go to page ${p}`}
-                  >
-                    {p}
-                  </button>
-                ))}
-
-                <button
-                  type="button"
-                  className="amx-myr-pager-btn"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  aria-label="Next page"
-                >
-                  Next
-                </button>
-              </div>
+              <button
+                type="button"
+                className="amx-myr-btn-create"
+                style={{ marginTop: '16px' }}
+                onClick={fetchRequests}
+              >
+                Retry
+              </button>
             </div>
+          )}
+
+          {/* Table Container */}
+          {!loading && !error && (
+            <>
+              <div className="amx-myr-table-scroll">
+                <table className="amx-myr-table" aria-label="My Requests Table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Request ID</th>
+                      <th scope="col">Item Name</th>
+                      <th scope="col">Category</th>
+                      <th scope="col" style={{ textAlign: 'center' }}>Qty</th>
+                      <th scope="col">Priority</th>
+                      <th scope="col">Request Date</th>
+                      <th scope="col">Approval Date</th>
+                      <th scope="col">Fulfillment Date</th>
+                      <th scope="col">Status</th>
+                      <th scope="col" style={{ textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="requests-tbody">
+                    {paginatedRequests.map((req) => {
+                      const statusKey = req.status.toLowerCase().replace(/\s+/g, '-');
+                      const priorityKey = (req.priority || 'Medium').toLowerCase();
+                      const approvalDate = getApprovalDate(req);
+                      const fulfillmentDate = getFulfillmentDate(req);
+
+                      return (
+                        <tr
+                          key={req.id}
+                          className="amx-myr-table-row"
+                          onClick={() => handleRowClick(req)}
+                        >
+                          <td className="amx-myr-col-id">{req.id}</td>
+                          <td className="amx-myr-col-item" title={req.requestedItem}>
+                            {req.requestedItem}
+                          </td>
+                          <td className="amx-myr-col-cat">{req.category}</td>
+                          <td className="amx-myr-col-qty">{req.quantity}</td>
+                          <td>
+                            <span className={`amx-myr-priority-badge ${priorityKey}`}>
+                              {req.priority || 'Medium'}
+                            </span>
+                          </td>
+                          <td className="amx-myr-col-date">{req.requestDate || '—'}</td>
+                          <td className="amx-myr-col-date">{approvalDate}</td>
+                          <td className="amx-myr-col-date">{fulfillmentDate}</td>
+                          <td>
+                            <span className={`amx-myr-status-pill ${statusKey}`}>
+                              {req.status === 'Fulfilled' ? (
+                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                                  done_all
+                                </span>
+                              ) : req.status === 'Rejected' ? (
+                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                                  close
+                                </span>
+                              ) : (
+                                <span className="dot" aria-hidden="true" />
+                              )}
+                              <span>{req.status}</span>
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              className="amx-myr-action-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenDetails(req);
+                              }}
+                              aria-label={`View details for ${req.id}`}
+                            >
+                              <span>View Details</span>
+                              <span
+                                className="material-symbols-outlined"
+                                style={{ fontSize: '16px', color: 'var(--amx-dash-cyan, #00687a)' }}
+                                aria-hidden="true"
+                              >
+                                chevron_right
+                              </span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Empty Results State */}
+              {filteredRequests.length === 0 && (
+                <div className="amx-myr-empty-box" id="table-empty-state">
+                  <div className="amx-myr-empty-icon-wrap" aria-hidden="true">
+                    <span className="material-symbols-outlined" style={{ fontSize: '26px' }}>
+                      search_off
+                    </span>
+                  </div>
+                  <h3 className="amx-myr-empty-title">No matching requests found</h3>
+                  <p className="amx-myr-empty-desc">
+                    {requests.length === 0
+                      ? 'You have not submitted any asset or consumable requisitions yet.'
+                      : 'No requisitions match your current filter parameters. Try clearing your search keyword or resetting category and priority filters.'}
+                  </p>
+                  {requests.length > 0 && (
+                    <button
+                      type="button"
+                      className="amx-myr-btn-reset"
+                      id="reset-filters-btn"
+                      onClick={handleResetFilters}
+                    >
+                      Reset Filters
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Pagination Footer */}
+              {filteredRequests.length > 0 && (
+                <div className="amx-myr-pagination-footer">
+                  <div className="amx-myr-count-text">
+                    <span>
+                      Showing{' '}
+                      <strong id="count-visible">
+                        {filteredRequests.length === 0 ? 0 : startIndex + 1}
+                      </strong>{' '}
+                      to{' '}
+                      <strong>
+                        {Math.min(startIndex + pageSize, filteredRequests.length)}
+                      </strong>{' '}
+                      of <strong>{filteredRequests.length}</strong> requests
+                    </span>
+                    <span className="amx-myr-subtext-sep">•</span>
+                    <span className="amx-myr-tracking-hint">Live personal tracking view</span>
+                  </div>
+
+                  <div className="amx-myr-pager-controls">
+                    <button
+                      type="button"
+                      className="amx-myr-pager-btn"
+                      disabled={currentPage <= 1}
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      aria-label="Previous page"
+                    >
+                      Previous
+                    </button>
+
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        className={`amx-myr-page-num ${p === currentPage ? 'active' : ''}`}
+                        onClick={() => handlePageChange(p)}
+                        aria-label={`Go to page ${p}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      className="amx-myr-pager-btn"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      aria-label="Next page"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 

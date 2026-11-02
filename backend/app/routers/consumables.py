@@ -6,13 +6,14 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_admin
+from app.deps import require_admin, require_authenticated_user
 from app.models import (
     AuditLog,
     Consumable,
     ConsumableIssue,
     ConsumableOperationType,
     ConsumableStockMovement,
+    Request,
     User,
 )
 from app.schemas import (
@@ -24,6 +25,10 @@ from app.schemas import (
     ConsumableOut,
     ConsumableStockOperation,
     ConsumableUpdate,
+    EmployeeConsumableIssueOut,
+    EmployeeConsumptionCategoryMetric,
+    EmployeeConsumptionListResponse,
+    EmployeeConsumptionSummaryOut,
 )
 
 router = APIRouter(prefix="/api/consumables", tags=["consumables"])
@@ -202,6 +207,242 @@ def list_consumables(
         page_size=page_size,
         total_pages=(total + page_size - 1) // page_size,
         items=[_consumable_response(db, row) for row in rows],
+    )
+
+
+def _normalize_category_key(cat: str | None) -> str:
+    if not cat:
+        return "other"
+    c = cat.lower()
+    if "cable" in c or "adapter" in c:
+        return "cables"
+    if "ergonomic" in c or "furniture" in c:
+        return "ergonomics"
+    if "stationery" in c or "paper" in c or "office" in c:
+        return "stationery"
+    if "clean" in c:
+        return "cleaning"
+    return "other"
+
+
+def _category_icon(cat: str | None, name: str | None = None) -> str:
+    text = f"{cat or ''} {name or ''}".lower()
+    if "cable" in text or "adapter" in text or "thunderbolt" in text:
+        return "cable"
+    if "wrist" in text or "ergonomic" in text:
+        return "pan_tool"
+    if "clean" in text:
+        return "cleaning_services"
+    if "paper" in text or "pen" in text or "stationery" in text or "note" in text:
+        return "edit_note"
+    if "mouse" in text:
+        return "mouse"
+    if "keyboard" in text:
+        return "keyboard"
+    return "inventory_2"
+
+
+CATEGORY_COLORS: dict[str, str] = {
+    "cables": "#00687a",
+    "ergonomics": "#4cd7f6",
+    "stationery": "#57dffe",
+    "cleaning": "#8b95ad",
+    "other": "#00687a",
+}
+
+CATEGORY_COLOR_CLASSES: dict[str, str] = {
+    "cables": "amx-mc-bar-cables",
+    "ergonomics": "amx-mc-bar-ergonomics",
+    "stationery": "amx-mc-bar-stationery",
+    "cleaning": "amx-mc-bar-cleaning",
+    "other": "amx-mc-bar-other",
+}
+
+
+@router.get("/my", response_model=EmployeeConsumptionListResponse)
+def get_my_consumables(
+    time_filter: str | None = Query(default=None),
+    timeFilter: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    current_user: User = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> EmployeeConsumptionListResponse:
+    effective_time_filter = (time_filter or timeFilter or "all").lower().strip()
+    user_email = (current_user.email or "").strip().lower()
+
+    now = datetime.now(timezone.utc)
+    if not user_email:
+        empty_summary = EmployeeConsumptionSummaryOut(
+            period="This Month" if effective_time_filter == "month" else "All Time",
+            cycle_reference=f"REC-{now.year}-M{now.month:02d}" if effective_time_filter == "month" else f"REC-{now.year}-ALL",
+            cycleReference=f"REC-{now.year}-M{now.month:02d}" if effective_time_filter == "month" else f"REC-{now.year}-ALL",
+            total_issued=0,
+            totalIssued=0,
+            active_categories_count=0,
+            activeCategoriesCount=0,
+            distinct_categories_count=0,
+            distinctCategoriesCount=0,
+            categories=[],
+        )
+        return EmployeeConsumptionListResponse(
+            items=[],
+            summary=empty_summary,
+            all_time_total_units=0,
+            allTimeTotalUnits=0,
+            this_month_total_units=0,
+            thisMonthTotalUnits=0,
+            total=0,
+            page=page,
+            page_size=page_size,
+            total_pages=0,
+        )
+
+    # Attribution: ConsumableIssue.request_reference -> Request.request_id -> Request.requester_email
+    stmt = (
+        select(ConsumableIssue, Consumable, Request)
+        .join(Consumable, ConsumableIssue.consumable_id == Consumable.id)
+        .join(Request, func.trim(ConsumableIssue.request_reference) == func.trim(Request.request_id))
+        .where(
+            ConsumableIssue.request_reference.isnot(None),
+            func.lower(func.trim(Request.requester_email)) == user_email,
+        )
+        .order_by(ConsumableIssue.issue_date.desc(), ConsumableIssue.id.desc())
+    )
+    all_user_records = db.execute(stmt).all()
+
+    all_time_total_units = sum(issue.quantity for issue, _con, _req in all_user_records)
+    this_month_total_units = sum(
+        issue.quantity
+        for issue, _con, _req in all_user_records
+        if issue.issue_date.year == now.year and issue.issue_date.month == now.month
+    )
+
+    # Apply time filter scoping
+    if effective_time_filter == "month":
+        time_scoped_records = [
+            r for r in all_user_records
+            if r[0].issue_date.year == now.year and r[0].issue_date.month == now.month
+        ]
+        period_label = "This Month"
+        cycle_ref = f"REC-{now.year}-M{now.month:02d}"
+    else:
+        time_scoped_records = all_user_records
+        period_label = "All Time"
+        cycle_ref = f"REC-{now.year}-ALL"
+
+    time_scoped_total_units = sum(issue.quantity for issue, _con, _req in time_scoped_records)
+
+    # Compute category metrics distribution from time-scoped records
+    cat_units: dict[str, int] = {}
+    cat_keys: dict[str, str] = {}
+
+    for issue, consumable, req in time_scoped_records:
+        c_name = consumable.category or "Other"
+        cat_units[c_name] = cat_units.get(c_name, 0) + issue.quantity
+        if c_name not in cat_keys:
+            cat_keys[c_name] = _normalize_category_key(c_name)
+
+    cat_metrics: list[EmployeeConsumptionCategoryMetric] = []
+    for c_name, units in cat_units.items():
+        ckey = cat_keys[c_name]
+        pct = round((units / time_scoped_total_units) * 100, 1) if time_scoped_total_units > 0 else 0.0
+        cat_metrics.append(EmployeeConsumptionCategoryMetric(
+            name=c_name,
+            category_key=ckey,
+            categoryKey=ckey,
+            units=units,
+            percentage=pct,
+            color_class=CATEGORY_COLOR_CLASSES.get(ckey, "amx-mc-bar-other"),
+            colorClass=CATEGORY_COLOR_CLASSES.get(ckey, "amx-mc-bar-other"),
+            color=CATEGORY_COLORS.get(ckey, "#00687a"),
+        ))
+    cat_metrics.sort(key=lambda x: x.units, reverse=True)
+
+    summary = EmployeeConsumptionSummaryOut(
+        period=period_label,
+        cycle_reference=cycle_ref,
+        cycleReference=cycle_ref,
+        total_issued=time_scoped_total_units,
+        totalIssued=time_scoped_total_units,
+        active_categories_count=len(cat_metrics),
+        activeCategoriesCount=len(cat_metrics),
+        distinct_categories_count=len(cat_metrics),
+        distinctCategoriesCount=len(cat_metrics),
+        categories=cat_metrics,
+    )
+
+    # Apply search and category filters
+    filtered_records = []
+    for issue, consumable, req in time_scoped_records:
+        if category and category.strip().lower() != "all":
+            cat_filter = category.strip().lower()
+            c_name = (consumable.category or "").lower()
+            c_key = _normalize_category_key(consumable.category)
+            if cat_filter != c_key and cat_filter != c_name and cat_filter not in c_name:
+                continue
+
+        if search and search.strip():
+            q = search.strip().lower()
+            item_name = (consumable.name or "").lower()
+            c_name = (consumable.category or "").lower()
+            req_ref = (issue.request_reference or "").lower()
+            issue_id = (issue.issue_id or "").lower()
+            if q not in item_name and q not in c_name and q not in req_ref and q not in issue_id:
+                continue
+
+        filtered_records.append((issue, consumable, req))
+
+    total = len(filtered_records)
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    paged_slice = filtered_records[(page - 1) * page_size : page * page_size]
+
+    items: list[EmployeeConsumableIssueOut] = []
+    for issue, consumable, req in paged_slice:
+        is_curr_m = (issue.issue_date.year == now.year and issue.issue_date.month == now.month)
+        ckey = _normalize_category_key(consumable.category)
+        icon = _category_icon(consumable.category, consumable.name)
+        fulfillment_date_str = issue.issue_date.strftime("%d %b %Y")
+        raw_date_str = issue.issue_date.strftime("%Y-%m-%d")
+        req_id = issue.request_reference or ""
+
+        items.append(EmployeeConsumableIssueOut(
+            id=issue.issue_id,
+            issue_id=issue.issue_id,
+            item_name=consumable.name,
+            itemName=consumable.name,
+            specification=consumable.name,
+            category=consumable.category,
+            category_key=ckey,
+            categoryKey=ckey,
+            quantity_issued=issue.quantity,
+            quantityIssued=issue.quantity,
+            fulfillment_date=fulfillment_date_str,
+            fulfillmentDate=fulfillment_date_str,
+            raw_date=raw_date_str,
+            rawDate=raw_date_str,
+            related_request_id=req_id,
+            relatedRequestId=req_id,
+            status="Fulfilled / Issued",
+            reference=issue.issue_id,
+            icon=icon,
+            is_current_month=is_curr_m,
+            isCurrentMonth=is_curr_m,
+        ))
+
+    return EmployeeConsumptionListResponse(
+        items=items,
+        summary=summary,
+        all_time_total_units=all_time_total_units,
+        allTimeTotalUnits=all_time_total_units,
+        this_month_total_units=this_month_total_units,
+        thisMonthTotalUnits=this_month_total_units,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
     )
 
 

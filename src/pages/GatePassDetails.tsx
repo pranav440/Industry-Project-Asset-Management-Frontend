@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
+import { getUser } from '../auth/session';
 import { type GatePassItemData } from '../data/gatePassData';
 import {
   decideGatePass,
@@ -21,6 +22,11 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
+  const currentUser = getUser();
+  const isHost = currentUser?.role === 'host';
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isGuard = currentUser?.role === 'guard';
+
   const [gatePass, setGatePass] = useState<GatePassItemData | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -116,6 +122,9 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
   return (
     <DashboardLayout
       currentNav="Gate Pass"
+      role={currentUser?.role}
+      userName={currentUser?.full_name}
+      userRoleSubtitle={currentUser?.role === 'host' ? 'Host Security Officer' : currentUser?.role === 'guard' ? 'Security Guard' : undefined}
       onNavigate={handleNav}
       onSignOut={onSignOut}
       onAddAsset={() => onNavigate?.('assets/new')}
@@ -123,7 +132,9 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
         showToast('1 Alert: Gate pass record notification.')
       }
       onHelpClick={() => showToast('AssetMX Gate Pass Verification Manual.')}
-      onProfileClick={() => showToast('Active User: Administrator (Role: Admin, Dept: IT).')}
+      onProfileClick={() =>
+        showToast(`Signed in as: ${currentUser?.full_name || 'Administrator'} (${currentUser?.email || ''}) — Role: ${currentUser?.role || 'admin'}`)
+      }
     >
       {/* Toast Notification */}
       {toastMessage && (
@@ -191,8 +202,8 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
 
           {/* State-Dependent Action Buttons per Spec */}
           <div className="amx-details-header-actions">
-            {/* Pending State Actions: Approve, Reject */}
-            {gatePass.status === 'Pending' && (
+            {/* Pending State Actions: Approve, Reject (Admin / SuperAdmin only) */}
+            {isAdmin && gatePass.status === 'Pending' && (
               <>
                 <button
                   type="button"
@@ -219,36 +230,40 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
               </>
             )}
 
-            {/* Approved State Actions: Override, Gate Verification */}
+            {/* Approved State Actions: Override (Admin), Gate Verification (Guard/Admin) */}
             {gatePass.status === 'Approved' && (
               <>
-                <button
-                  type="button"
-                  className="amx-btn-override"
-                  onClick={() => handleOpenDecisionModal('Override')}
-                  aria-label="Override"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
-                    rule
-                  </span>
-                  <span>Override</span>
-                </button>
-                <button
-                  type="button"
-                  className="amx-btn-verify-gate"
-                  onClick={() => onNavigate?.(`gate-pass/${encodeURIComponent(gatePass.id)}/verification`)}
-                  aria-label="Gate Verification"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
-                    verified_user
-                  </span>
-                  <span>Gate Verification</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="amx-btn-override"
+                    onClick={() => handleOpenDecisionModal('Override')}
+                    aria-label="Override"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
+                      rule
+                    </span>
+                    <span>Override</span>
+                  </button>
+                )}
+                {(isGuard || isAdmin) && (
+                  <button
+                    type="button"
+                    className="amx-btn-verify-gate"
+                    onClick={() => onNavigate?.(`gate-pass/${encodeURIComponent(gatePass.id)}/verification`)}
+                    aria-label="Gate Verification"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
+                      verified_user
+                    </span>
+                    <span>Gate Verification</span>
+                  </button>
+                )}
               </>
             )}
 
-            {/* Active State Actions: Gate Verification */}
-            {gatePass.status === 'Active' && (
+            {/* Active State Actions: Gate Verification (Guard/Admin) */}
+            {gatePass.status === 'Active' && (isGuard || isAdmin) && (
               <button
                 type="button"
                 className="amx-btn-verify-gate"
@@ -262,31 +277,35 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
               </button>
             )}
 
-            {/* Escalated State Actions: Override, Gate Verification */}
+            {/* Escalated State Actions: Override (Admin), Gate Verification (Guard/Admin) */}
             {gatePass.status === 'Escalated' && (
               <>
-                <button
-                  type="button"
-                  className="amx-btn-override"
-                  onClick={() => handleOpenDecisionModal('Override')}
-                  aria-label="Override"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
-                    rule
-                  </span>
-                  <span>Override</span>
-                </button>
-                <button
-                  type="button"
-                  className="amx-btn-verify-gate"
-                  onClick={() => onNavigate?.(`gate-pass/${encodeURIComponent(gatePass.id)}/verification`)}
-                  aria-label="Gate Verification"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
-                    verified_user
-                  </span>
-                  <span>Gate Verification</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="amx-btn-override"
+                    onClick={() => handleOpenDecisionModal('Override')}
+                    aria-label="Override"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
+                      rule
+                    </span>
+                    <span>Override</span>
+                  </button>
+                )}
+                {(isGuard || isAdmin) && (
+                  <button
+                    type="button"
+                    className="amx-btn-verify-gate"
+                    onClick={() => onNavigate?.(`gate-pass/${encodeURIComponent(gatePass.id)}/verification`)}
+                    aria-label="Gate Verification"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
+                      verified_user
+                    </span>
+                    <span>Gate Verification</span>
+                  </button>
+                )}
               </>
             )}
 
@@ -303,6 +322,23 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
                 </span>
                 <span>Verification Log</span>
               </button>
+            )}
+
+            {/* Host Read-Only Context Notice */}
+            {isHost && (
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: 'var(--amx-dash-text-muted, #64748b)',
+                  backgroundColor: '#f1f5f9',
+                  border: '1px solid #e2e8f0',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                }}
+              >
+                Host Initiator View (Read-Only)
+              </span>
             )}
           </div>
         </div>

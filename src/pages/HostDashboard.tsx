@@ -1,16 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { getUser } from '../auth/session';
 import {
-  HOST_KPIS_DATA,
-  HOST_GATE_PASS_ACTIVITY_DATA,
-  HOST_MOVEMENT_OVERVIEW_DATA,
-  HOST_PENDING_ACTIONS_DATA,
-  HOST_OPERATIONAL_ALERTS_DATA,
+  getHostDashboard,
+  getHostMovements,
+  getHostAlerts,
+  DashboardApiError,
+  type HostDashboardKpis,
   type HostGatePassActivityItem,
+  type HostMovementScanItem,
   type HostPendingActionItem,
   type HostOperationalAlertItem,
-} from '../data/hostData';
+} from '../services/dashboardApi';
 import './HostDashboard.css';
 
 interface HostDashboardPageProps {
@@ -28,6 +29,15 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
 
+  // Live API States
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [kpis, setKpis] = useState<HostDashboardKpis | null>(null);
+  const [gatePassActivity, setGatePassActivity] = useState<HostGatePassActivityItem[]>([]);
+  const [movements, setMovements] = useState<HostMovementScanItem[]>([]);
+  const [pendingActions, setPendingActions] = useState<HostPendingActionItem[]>([]);
+  const [alerts, setAlerts] = useState<HostOperationalAlertItem[]>([]);
+
   // Selected item for Inspection / Verification Drawer
   const [selectedPass, setSelectedPass] = useState<HostGatePassActivityItem | null>(null);
   const [selectedAction, setSelectedAction] = useState<HostPendingActionItem | null>(null);
@@ -40,8 +50,7 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
   const [sealInspected, setSealInspected] = useState(false);
   const [hostNotes, setHostNotes] = useState('');
 
-  // Operational Alerts state
-  const [alerts, setAlerts] = useState<HostOperationalAlertItem[]>(HOST_OPERATIONAL_ALERTS_DATA);
+  // Toast feedback state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -51,13 +60,45 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
     }, 3200);
   };
 
+  // Load Host Dashboard from live API
+  const loadDashboardData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getHostDashboard();
+      setKpis(data.kpis || data.summary || null);
+      setGatePassActivity(data.gatePassActivity || data.gate_pass_activity || []);
+      setMovements(data.movementOverview || data.movement_overview || []);
+      setPendingActions(data.pendingActions || data.pending_actions || []);
+      setAlerts(data.operationalAlerts || data.operational_alerts || []);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof DashboardApiError
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : 'Failed to load Host dashboard data from server.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
   const handleNav = (path: string) => {
     if (path === 'dashboard' || path === 'Host Dashboard') {
       onNavigate?.('dashboard');
     } else if (path === 'gate-pass' || path === 'Gate Passes') {
       onNavigate?.('gate-pass');
     } else if (path === 'movement' || path === 'movement-activity' || path === 'Movement Activity') {
-      showToast('Movement Activity log — Synchronized with Perimeter Scanners.');
+      const el = document.getElementById('panelMovementOverview');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+      showToast('Movement Overview — Live Perimeter Scans');
     } else if (path === 'support') {
       showToast('Host Security Support: Contact Central Security Desk (Ext. 4040).');
     } else if (path === 'login' || path === 'signout') {
@@ -69,7 +110,7 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
 
   // Filter Gate Pass Activity
   const filteredPasses = useMemo(() => {
-    let items = HOST_GATE_PASS_ACTIVITY_DATA;
+    let items = gatePassActivity;
 
     // Filter by tab
     if (activeTab === 'Pending') {
@@ -85,18 +126,18 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
       const q = searchQuery.toLowerCase().trim();
       items = items.filter(
         (p) =>
-          p.id.toLowerCase().includes(q) ||
-          p.assetName.toLowerCase().includes(q) ||
-          p.serialNumber.toLowerCase().includes(q) ||
-          p.requesterName.toLowerCase().includes(q) ||
-          p.department.toLowerCase().includes(q) ||
-          p.passType.toLowerCase().includes(q) ||
-          p.status.toLowerCase().includes(q)
+          (p.id && p.id.toLowerCase().includes(q)) ||
+          (p.assetName && p.assetName.toLowerCase().includes(q)) ||
+          (p.serialNumber && p.serialNumber.toLowerCase().includes(q)) ||
+          (p.requesterName && p.requesterName.toLowerCase().includes(q)) ||
+          (p.department && p.department.toLowerCase().includes(q)) ||
+          (p.passType && p.passType.toLowerCase().includes(q)) ||
+          (p.status && p.status.toLowerCase().includes(q))
       );
     }
 
     return items;
-  }, [activeTab, searchQuery]);
+  }, [gatePassActivity, activeTab, searchQuery]);
 
   const totalPages = Math.ceil(filteredPasses.length / pageSize) || 1;
   const paginatedPasses = useMemo(() => {
@@ -118,7 +159,10 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
   // Open drawer from Pending Action Card
   const handleOpenActionDetails = (action: HostPendingActionItem) => {
     setSelectedAction(action);
-    const matched = HOST_GATE_PASS_ACTIVITY_DATA.find((p) => p.id === action.passId);
+    const passId = action.passId || action.pass_id;
+    const matched = gatePassActivity.find(
+      (p) => p.id === passId || p.passId === passId || p.pass_id === passId
+    );
     setSelectedPass(matched || null);
     setSerialVerified(false);
     setIdVerified(false);
@@ -129,36 +173,58 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
 
   // Record Host Verification
   const handleRecordVerification = () => {
-    const id = selectedAction?.passId || selectedPass?.id || 'Gate Pass';
-    showToast(`Verification recorded for ${id} by Host Sarah Jenkins.`);
+    const id = selectedAction?.passId || selectedAction?.pass_id || selectedPass?.id || 'Gate Pass';
+    showToast(`Verification recorded for ${id} by Host ${currentUser?.full_name || 'Sarah Jenkins'}.`);
     setIsDrawerOpen(false);
   };
 
-  // Clear or reset alerts
-  const handleClearAlerts = () => {
+  // Refresh or Clear/Restore alerts
+  const handleClearAlerts = async () => {
     if (alerts.length > 0) {
       setAlerts([]);
       showToast('Operational alerts dismissed from local view.');
     } else {
-      setAlerts(HOST_OPERATIONAL_ALERTS_DATA);
-      showToast('Operational alerts restored.');
+      try {
+        const res = await getHostAlerts();
+        setAlerts(res.items || []);
+        showToast('Operational alerts restored from server.');
+      } catch {
+        showToast('Unable to restore operational alerts.');
+      }
     }
   };
+
+  // Refresh movements telemetry from live API
+  const handleRefreshMovements = async () => {
+    try {
+      const res = await getHostMovements({ pageSize: 10 });
+      setMovements(res.items || []);
+      showToast('Movement telemetry synchronized with perimeter scanners.');
+    } catch {
+      showToast('Unable to refresh movement telemetry.');
+    }
+  };
+
+  const hostDisplayName = currentUser?.full_name || 'Sarah Jenkins';
 
   return (
     <DashboardLayout
       currentNav="Host Dashboard"
       role="host"
-      userName={currentUser?.full_name || 'Sarah Jenkins'}
+      userName={hostDisplayName}
       userRoleSubtitle="Host Security Officer"
       onNavigate={handleNav}
       onSignOut={onSignOut}
       onSearch={setSearchQuery}
       searchValue={searchQuery}
       searchPlaceholder="Search gate passes, assets, movement..."
-      onNotificationsClick={() => showToast('3 Operational Alerts active. Review right-rail queue.')}
+      onNotificationsClick={() =>
+        showToast(`${alerts.length} Operational Alerts active. Review right-rail queue.`)
+      }
       onHelpClick={() => setIsEscalationGuideOpen(true)}
-      onProfileClick={() => showToast('Host Security Officer: Sarah Jenkins • Node: GATE-04A')}
+      onProfileClick={() =>
+        showToast(`Host Security Officer: ${hostDisplayName} • Role: Host • Node: GATE-04A`)
+      }
     >
       <div className="amx-host-dash-container" id="hostDashboardContainer">
         {/* Title Bar */}
@@ -188,433 +254,575 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
           </div>
         </section>
 
-        {/* KPI Cards Grid */}
-        <section className="amx-host-kpi-grid" aria-label="Host Operational Metrics">
-          {/* Card 1: Active Gate Passes */}
-          <div className="amx-host-kpi-card" id="kpiActiveGatePasses">
-            <div>
-              <div className="amx-host-kpi-header">
-                <p className="amx-host-kpi-title">Active Gate Passes</p>
-                <div className="amx-host-kpi-icon-wrap">
-                  <span className="material-symbols-outlined" aria-hidden="true">confirmation_number</span>
-                </div>
-              </div>
-              <div className="amx-host-kpi-body">
-                <span className="amx-host-kpi-value">{HOST_KPIS_DATA.activeGatePasses.total}</span>
-                <span className="amx-host-kpi-pill live">{HOST_KPIS_DATA.activeGatePasses.badgeText}</span>
-              </div>
-            </div>
-            <p className="amx-host-kpi-footer">
-              {HOST_KPIS_DATA.activeGatePasses.outbound} outbound • {HOST_KPIS_DATA.activeGatePasses.inboundScheduled} inbound scheduled
-            </p>
-          </div>
-
-          {/* Card 2: Pending Host Actions */}
-          <div className="amx-host-kpi-card" id="kpiPendingHostActions">
-            <div>
-              <div className="amx-host-kpi-header">
-                <p className="amx-host-kpi-title">Pending Host Actions</p>
-                <div className="amx-host-kpi-icon-wrap alert-accent">
-                  <span className="material-symbols-outlined" aria-hidden="true">fact_check</span>
-                  <span className="amx-host-kpi-dot" aria-hidden="true" />
-                </div>
-              </div>
-              <div className="amx-host-kpi-body">
-                <span className="amx-host-kpi-value">{HOST_KPIS_DATA.pendingHostActions.total}</span>
-                <span className="amx-host-kpi-pill priority">{HOST_KPIS_DATA.pendingHostActions.badgeText}</span>
-              </div>
-            </div>
-            <p className="amx-host-kpi-footer">
-              {HOST_KPIS_DATA.pendingHostActions.subtext}
-            </p>
-          </div>
-
-          {/* Card 3: Today's Movement */}
-          <div className="amx-host-kpi-card" id="kpiTodaysMovement">
-            <div>
-              <div className="amx-host-kpi-header">
-                <p className="amx-host-kpi-title">Today's Movement</p>
-                <div className="amx-host-kpi-icon-wrap">
-                  <span className="material-symbols-outlined" aria-hidden="true">swap_horiz</span>
-                </div>
-              </div>
-              <div className="amx-host-kpi-body">
-                <span className="amx-host-kpi-value">{HOST_KPIS_DATA.todaysMovement.total}</span>
-                <span className="amx-host-kpi-pill trend-up">↗ {HOST_KPIS_DATA.todaysMovement.trend}</span>
-              </div>
-            </div>
-            <p className="amx-host-kpi-footer">
-              {HOST_KPIS_DATA.todaysMovement.completed} completed • {HOST_KPIS_DATA.todaysMovement.inTransit} in transit
-            </p>
-          </div>
-
-          {/* Card 4: Escalated Gate Passes */}
-          <div className="amx-host-kpi-card" id="kpiEscalatedGatePasses">
-            <div>
-              <div className="amx-host-kpi-header">
-                <p className="amx-host-kpi-title">Escalated Gate Passes</p>
-                <div className="amx-host-kpi-icon-wrap warning-accent">
-                  <span className="material-symbols-outlined" aria-hidden="true">warning</span>
-                </div>
-              </div>
-              <div className="amx-host-kpi-body">
-                <span className="amx-host-kpi-value">{HOST_KPIS_DATA.escalatedGatePasses.total}</span>
-                <span className="amx-host-kpi-pill review">{HOST_KPIS_DATA.escalatedGatePasses.badgeText}</span>
-              </div>
-            </div>
-            <p className="amx-host-kpi-footer">
-              {HOST_KPIS_DATA.escalatedGatePasses.subtext}
-            </p>
-          </div>
-        </section>
-
-        {/* Upper Section: Gate Pass Activity Table (Left) + Movement Overview (Right) */}
-        <div className="amx-host-section-row">
-          {/* Gate Pass Activity Panel */}
-          <section className="amx-host-panel" id="panelGatePassActivity" aria-label="Gate Pass Activity">
-            <div className="amx-host-panel-header">
-              <div className="amx-host-panel-header-left">
-                <h2 className="amx-host-panel-title">Gate Pass Activity</h2>
-                <span className="amx-host-count-badge" id="hostTotalPassesBadge">
-                  {HOST_GATE_PASS_ACTIVITY_DATA.length} Total Passes
-                </span>
-              </div>
-
-              <div className="amx-host-panel-header-right">
-                <div className="amx-host-tabs" role="tablist">
-                  {(['All', 'Pending', 'In Progress', 'Approved'] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      role="tab"
-                      aria-selected={activeTab === tab}
-                      className={`amx-host-tab-btn ${activeTab === tab ? 'active' : ''}`}
-                      onClick={() => {
-                        setActiveTab(tab);
-                        setCurrentPage(1);
-                      }}
-                      id={`tabFilter-${tab.replace(/\s+/g, '')}`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  className="amx-host-header-link"
-                  id="btnViewAllGatePasses"
-                  onClick={() => handleNav('gate-pass')}
-                >
-                  <span>View All →</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Table */}
-            <div className="amx-host-table-wrap">
-              <table className="amx-host-table" id="hostGatePassTable">
-                <thead>
-                  <tr>
-                    <th>Pass ID</th>
-                    <th>Type</th>
-                    <th>Asset / Item</th>
-                    <th>Requester</th>
-                    <th>Schedule</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedPasses.map((pass) => {
-                    const typeClass =
-                      pass.passType === 'Returnable'
-                        ? 'returnable'
-                        : pass.passType === 'Non-Returnable'
-                        ? 'non-returnable'
-                        : pass.passType === 'Maint. Dispatch'
-                        ? 'maint-dispatch'
-                        : 'transfer';
-
-                    const statusClass =
-                      pass.status === 'In Progress'
-                        ? 'in-progress'
-                        : pass.status === 'Approved'
-                        ? 'approved'
-                        : pass.status === 'Escalated'
-                        ? 'escalated'
-                        : 'pending';
-
-                    return (
-                      <tr
-                        key={pass.id}
-                        className="amx-host-table-row"
-                        onClick={() => handleOpenPassDetails(pass)}
-                        title="Click to inspect gate pass details"
-                      >
-                        <td className="amx-host-pass-id">{pass.id}</td>
-                        <td>
-                          <span className={`amx-host-type-pill ${typeClass}`}>
-                            {pass.passType}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="amx-host-asset-info">
-                            <span className="amx-host-asset-name">{pass.assetName}</span>
-                            <span className="amx-host-asset-sn">{pass.serialNumber}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="amx-host-requester-info">
-                            <span className="amx-host-requester-name">{pass.requesterName}</span>
-                            <span className="amx-host-requester-dept">{pass.department}</span>
-                          </div>
-                        </td>
-                        <td className="amx-host-schedule-text">{pass.schedule}</td>
-                        <td>
-                          <span className={`amx-host-status-badge-cell ${statusClass}`}>
-                            <span className="amx-host-status-dot-cell" aria-hidden="true" />
-                            {pass.status}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Footer */}
-            <div className="amx-host-table-footer">
-              <span className="amx-host-records-count">
-                Showing {paginatedPasses.length} of {filteredPasses.length} records
+        {/* Error State Banner */}
+        {error && (
+          <div
+            className="amx-host-error-banner"
+            role="alert"
+            style={{
+              marginBottom: '24px',
+              padding: '16px 20px',
+              borderRadius: '12px',
+              backgroundColor: 'rgba(186, 26, 26, 0.08)',
+              border: '1px solid rgba(186, 26, 26, 0.25)',
+              color: '#ba1a1a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>
+                error
               </span>
-
-              <div className="amx-host-pagination">
-                <button
-                  type="button"
-                  className="amx-host-page-nav-btn"
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  aria-label="Previous page"
-                >
-                  <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
-                </button>
-                <span className="amx-host-page-label">
-                  Page {currentPage} / {totalPages}
-                </span>
-                <button
-                  type="button"
-                  className="amx-host-page-nav-btn"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  aria-label="Next page"
-                >
-                  <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
-                </button>
-              </div>
-            </div>
-          </section>
-
-          {/* Movement Overview Panel */}
-          <section className="amx-host-panel" id="panelMovementOverview" aria-label="Movement Overview">
-            <div className="amx-host-panel-header">
               <div>
-                <h2 className="amx-host-panel-title">Movement Overview</h2>
-                <p className="amx-host-panel-subtitle">Live Perimeter Scans</p>
-              </div>
-
-              <div className="amx-host-panel-header-right">
-                <span style={{ fontSize: '11px', color: '#64748b' }}>5m ago</span>
-                <button
-                  type="button"
-                  className="amx-host-header-link"
-                  id="btnViewMovementLog"
-                  onClick={() => showToast('Displaying real-time perimeter scanner telemetry.')}
-                >
-                  <span>View Log</span>
-                </button>
+                <strong style={{ display: 'block', fontSize: '14px', fontWeight: 600 }}>
+                  Failed to load Host dashboard
+                </strong>
+                <span style={{ fontSize: '13px', opacity: 0.9 }}>{error}</span>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={loadDashboardData}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: '1px solid rgba(186, 26, 26, 0.4)',
+                backgroundColor: '#fff',
+                color: '#ba1a1a',
+                fontWeight: 600,
+                fontSize: '13px',
+                cursor: 'pointer',
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
-            {/* Movement list */}
-            <div className="amx-host-movement-list">
-              {HOST_MOVEMENT_OVERVIEW_DATA.map((item) => {
-                const pillClass =
-                  item.status === 'Verified In-Transit'
-                    ? 'in-transit'
-                    : item.status === 'Gate Clearance'
-                    ? 'clearance'
-                    : 'checkin';
-
-                return (
-                  <div key={item.id} className="amx-host-movement-item">
-                    <div className="amx-host-movement-top">
-                      <span className="amx-host-movement-id">{item.id}</span>
-                      <span className={`amx-host-movement-pill ${pillClass}`}>
-                        {item.status}
-                      </span>
-                    </div>
-
-                    <div className="amx-host-movement-asset">
-                      {item.assetTag} • {item.assetName}
-                    </div>
-
-                    <div className="amx-host-movement-route">
-                      <span className="material-symbols-outlined" style={{ fontSize: '14px', color: '#00687a' }} aria-hidden="true">
-                        alt_route
-                      </span>
-                      <span>{item.route}</span>
-                    </div>
-
-                    <div className="amx-host-movement-bottom">
-                      <span>{item.station}</span>
-                      <span>{item.timeAgo}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        </div>
-
-        {/* Lower Section: Pending Host Actions (Left) + Operational Alerts (Right) */}
-        <div className="amx-host-section-row equal-split">
-          {/* Pending Host Actions */}
-          <section className="amx-host-panel" id="panelPendingActions" aria-label="Pending Host Actions">
-            <div className="amx-host-panel-header">
-              <div className="amx-host-panel-header-left">
-                <h2 className="amx-host-panel-title">Pending Host Actions</h2>
-                <span className="amx-host-count-badge action-badge" id="hostActionCountBadge">
-                  {HOST_PENDING_ACTIONS_DATA.length} Action Items
-                </span>
-              </div>
-            </div>
-            <p className="amx-host-panel-subtitle" style={{ marginTop: '-8px', marginBottom: '14px' }}>
-              Gate-pass records requiring Host check-in, identity verification, or dispatch logging.
+        {/* Loading Spinner */}
+        {loading ? (
+          <div
+            id="hostLoadingState"
+            style={{
+              padding: '80px 20px',
+              textAlign: 'center',
+              color: 'var(--amx-dash-text-muted, #70787d)',
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{
+                fontSize: '44px',
+                animation: 'spin 1.5s linear infinite',
+                color: 'var(--amx-dash-cyan, #00687a)',
+              }}
+            >
+              progress_activity
+            </span>
+            <p style={{ marginTop: '14px', fontSize: '15px', fontWeight: 500 }}>
+              Loading Host operational data from server...
             </p>
-
-            <div className="amx-host-actions-list">
-              {HOST_PENDING_ACTIONS_DATA.map((act) => (
-                <div key={act.id} className="amx-host-action-card">
-                  <div className="amx-host-action-card-left">
-                    <div className="amx-host-action-icon-box">
-                      <span className="material-symbols-outlined" aria-hidden="true">{act.icon}</span>
-                    </div>
-
-                    <div className="amx-host-action-content">
-                      <div className="amx-host-action-title-row">
-                        <span>{act.passId}</span> • <span>{act.title}</span>
-                      </div>
-                      <div className="amx-host-action-requester">
-                        Requester: {act.requester}
-                      </div>
-                      <div className={`amx-host-action-prompt ${act.isPrimary ? '' : 'subtle-prompt'}`}>
-                        <span className="material-symbols-outlined" aria-hidden="true">
-                          {act.isPrimary ? 'error' : 'schedule'}
-                        </span>
-                        <span>{act.actionText}</span>
-                      </div>
+          </div>
+        ) : (
+          <>
+            {/* KPI Cards Grid */}
+            <section className="amx-host-kpi-grid" aria-label="Host Operational Metrics">
+              {/* Card 1: Active Gate Passes */}
+              <div className="amx-host-kpi-card" id="kpiActiveGatePasses">
+                <div>
+                  <div className="amx-host-kpi-header">
+                    <p className="amx-host-kpi-title">Active Gate Passes</p>
+                    <div className="amx-host-kpi-icon-wrap">
+                      <span className="material-symbols-outlined" aria-hidden="true">confirmation_number</span>
                     </div>
                   </div>
+                  <div className="amx-host-kpi-body">
+                    <span className="amx-host-kpi-value">
+                      {kpis?.activeGatePasses?.total ?? kpis?.active_gate_passes?.total ?? 0}
+                    </span>
+                    <span className="amx-host-kpi-pill live">
+                      {kpis?.activeGatePasses?.badgeText ?? kpis?.active_gate_passes?.badge_text ?? 'Live'}
+                    </span>
+                  </div>
+                </div>
+                <p className="amx-host-kpi-footer">
+                  {kpis?.activeGatePasses?.outbound ?? kpis?.active_gate_passes?.outbound ?? 0} outbound •{' '}
+                  {kpis?.activeGatePasses?.inboundScheduled ?? kpis?.active_gate_passes?.inbound_scheduled ?? 0} inbound scheduled
+                </p>
+              </div>
 
-                  <div>
+              {/* Card 2: Pending Host Actions */}
+              <div className="amx-host-kpi-card" id="kpiPendingHostActions">
+                <div>
+                  <div className="amx-host-kpi-header">
+                    <p className="amx-host-kpi-title">Pending Host Actions</p>
+                    <div className="amx-host-kpi-icon-wrap alert-accent">
+                      <span className="material-symbols-outlined" aria-hidden="true">fact_check</span>
+                      <span className="amx-host-kpi-dot" aria-hidden="true" />
+                    </div>
+                  </div>
+                  <div className="amx-host-kpi-body">
+                    <span className="amx-host-kpi-value">
+                      {kpis?.pendingHostActions?.total ?? kpis?.pending_host_actions?.total ?? 0}
+                    </span>
+                    <span className="amx-host-kpi-pill priority">
+                      {kpis?.pendingHostActions?.badgeText ?? kpis?.pending_host_actions?.badge_text ?? 'Priority'}
+                    </span>
+                  </div>
+                </div>
+                <p className="amx-host-kpi-footer">
+                  {kpis?.pendingHostActions?.subtext ?? kpis?.pending_host_actions?.subtext ?? 'Verification & check-in required'}
+                </p>
+              </div>
+
+              {/* Card 3: Today's Movement */}
+              <div className="amx-host-kpi-card" id="kpiTodaysMovement">
+                <div>
+                  <div className="amx-host-kpi-header">
+                    <p className="amx-host-kpi-title">Today's Movement</p>
+                    <div className="amx-host-kpi-icon-wrap">
+                      <span className="material-symbols-outlined" aria-hidden="true">swap_horiz</span>
+                    </div>
+                  </div>
+                  <div className="amx-host-kpi-body">
+                    <span className="amx-host-kpi-value">
+                      {kpis?.todaysMovement?.total ?? kpis?.todays_movement?.total ?? 0}
+                    </span>
+                    <span className="amx-host-kpi-pill trend-up">
+                      ↗ {kpis?.todaysMovement?.trend ?? kpis?.todays_movement?.trend ?? '+0%'}
+                    </span>
+                  </div>
+                </div>
+                <p className="amx-host-kpi-footer">
+                  {kpis?.todaysMovement?.completed ?? kpis?.todays_movement?.completed ?? 0} completed •{' '}
+                  {kpis?.todaysMovement?.inTransit ?? kpis?.todays_movement?.in_transit ?? 0} in transit
+                </p>
+              </div>
+
+              {/* Card 4: Escalated Gate Passes */}
+              <div className="amx-host-kpi-card" id="kpiEscalatedGatePasses">
+                <div>
+                  <div className="amx-host-kpi-header">
+                    <p className="amx-host-kpi-title">Escalated Gate Passes</p>
+                    <div className="amx-host-kpi-icon-wrap warning-accent">
+                      <span className="material-symbols-outlined" aria-hidden="true">warning</span>
+                    </div>
+                  </div>
+                  <div className="amx-host-kpi-body">
+                    <span className="amx-host-kpi-value">
+                      {kpis?.escalatedGatePasses?.total ?? kpis?.escalated_gate_passes?.total ?? 0}
+                    </span>
+                    <span className="amx-host-kpi-pill review">
+                      {kpis?.escalatedGatePasses?.badgeText ?? kpis?.escalated_gate_passes?.badge_text ?? 'Review'}
+                    </span>
+                  </div>
+                </div>
+                <p className="amx-host-kpi-footer">
+                  {kpis?.escalatedGatePasses?.subtext ?? kpis?.escalated_gate_passes?.subtext ?? 'Security officer review queue'}
+                </p>
+              </div>
+            </section>
+
+            {/* Upper Section: Gate Pass Activity Table (Left) + Movement Overview (Right) */}
+            <div className="amx-host-section-row">
+              {/* Gate Pass Activity Panel */}
+              <section className="amx-host-panel" id="panelGatePassActivity" aria-label="Gate Pass Activity">
+                <div className="amx-host-panel-header">
+                  <div className="amx-host-panel-header-left">
+                    <h2 className="amx-host-panel-title">Gate Pass Activity</h2>
+                    <span className="amx-host-count-badge" id="hostTotalPassesBadge">
+                      {gatePassActivity.length} Total Passes
+                    </span>
+                  </div>
+
+                  <div className="amx-host-panel-header-right">
+                    <div className="amx-host-tabs" role="tablist">
+                      {(['All', 'Pending', 'In Progress', 'Approved'] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          type="button"
+                          role="tab"
+                          aria-selected={activeTab === tab}
+                          className={`amx-host-tab-btn ${activeTab === tab ? 'active' : ''}`}
+                          onClick={() => {
+                            setActiveTab(tab);
+                            setCurrentPage(1);
+                          }}
+                          id={`tabFilter-${tab.replace(/\s+/g, '')}`}
+                        >
+                          {tab}
+                        </button>
+                      ))}
+                    </div>
+
                     <button
                       type="button"
-                      className={act.isPrimary ? 'amx-host-action-btn-primary' : 'amx-host-action-btn-secondary'}
-                      onClick={() => handleOpenActionDetails(act)}
-                      id={`btnAction-${act.id}`}
+                      className="amx-host-header-link"
+                      id="btnViewAllGatePasses"
+                      onClick={() => handleNav('gate-pass')}
                     >
-                      {act.buttonText}
+                      <span>View All →</span>
                     </button>
                   </div>
                 </div>
-              ))}
-            </div>
 
-            <div className="amx-host-action-footer-note">
-              <span className="material-symbols-outlined" aria-hidden="true">info</span>
-              <span>Host actions are limited to physical verification, custody check-in, and clearance logs.</span>
-            </div>
-          </section>
+                {/* Table */}
+                <div className="amx-host-table-wrap">
+                  <table className="amx-host-table" id="hostGatePassTable">
+                    <thead>
+                      <tr>
+                        <th>Pass ID</th>
+                        <th>Type</th>
+                        <th>Asset / Item</th>
+                        <th>Requester</th>
+                        <th>Schedule</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedPasses.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
+                            No gate passes found matching your filter criteria.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedPasses.map((pass) => {
+                          const pType = pass.passType || pass.pass_type || 'Asset Movement';
+                          const typeClass =
+                            pType === 'Returnable'
+                              ? 'returnable'
+                              : pType === 'Non-Returnable'
+                              ? 'non-returnable'
+                              : pType === 'Maintenance' || pType === 'Maint. Dispatch'
+                              ? 'maint-dispatch'
+                              : 'transfer';
 
-          {/* Operational Alerts */}
-          <section className="amx-host-panel" id="panelOperationalAlerts" aria-label="Operational Alerts">
-            <div className="amx-host-panel-header">
-              <div className="amx-host-panel-header-left">
-                <h2 className="amx-host-panel-title">Operational Alerts</h2>
-                <span className="amx-host-count-badge" id="hostAlertsCountBadge">
-                  {alerts.length} Active
-                </span>
-              </div>
+                          const pStatus = pass.status || 'Pending';
+                          const statusClass =
+                            pStatus === 'In Progress'
+                              ? 'in-progress'
+                              : pStatus === 'Approved' || pStatus === 'Active'
+                              ? 'approved'
+                              : pStatus === 'Escalated'
+                              ? 'escalated'
+                              : 'pending';
 
-              <div className="amx-host-panel-header-right">
-                <button
-                  type="button"
-                  className="amx-host-header-link"
-                  id="btnClearAlertLogs"
-                  onClick={handleClearAlerts}
-                >
-                  {alerts.length > 0 ? 'Clear Logs' : 'Restore Logs'}
-                </button>
-              </div>
-            </div>
+                          const pId = pass.id || pass.passId || pass.pass_id;
+                          const assetName = pass.assetName || pass.asset_name || 'Hardware Asset';
+                          const sn = pass.serialNumber || pass.serial_number || '—';
+                          const reqName = pass.requesterName || pass.requester_name || '—';
+                          const dept = pass.department || 'Operations';
 
-            <div className="amx-host-alerts-list">
-              {alerts.length === 0 ? (
-                <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
-                  No active operational alerts. Perimeter flow is clear.
+                          return (
+                            <tr
+                              key={pId}
+                              className="amx-host-table-row"
+                              onClick={() => handleOpenPassDetails(pass)}
+                              title="Click to inspect gate pass details"
+                            >
+                              <td className="amx-host-pass-id">{pId}</td>
+                              <td>
+                                <span className={`amx-host-type-pill ${typeClass}`}>
+                                  {pType}
+                                </span>
+                              </td>
+                              <td>
+                                <div className="amx-host-asset-info">
+                                  <span className="amx-host-asset-name">{assetName}</span>
+                                  <span className="amx-host-asset-sn">{sn}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="amx-host-requester-info">
+                                  <span className="amx-host-requester-name">{reqName}</span>
+                                  <span className="amx-host-requester-dept">{dept}</span>
+                                </div>
+                              </td>
+                              <td className="amx-host-schedule-text">{pass.schedule}</td>
+                              <td>
+                                <span className={`amx-host-status-badge-cell ${statusClass}`}>
+                                  <span className="amx-host-status-dot-cell" aria-hidden="true" />
+                                  {pStatus}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              ) : (
-                alerts.map((alert) => (
-                  <div
-                    key={alert.id}
-                    className={`amx-host-alert-item ${
-                      alert.severity === 'critical'
-                        ? 'critical-alert'
-                        : alert.severity === 'info'
-                        ? 'info-alert'
-                        : 'warning-alert'
-                    }`}
-                  >
-                    <div className="amx-host-alert-top">
-                      <div className="amx-host-alert-header-row">
-                        <span className="material-symbols-outlined" aria-hidden="true">{alert.icon}</span>
-                        <span>{alert.title}</span>
-                      </div>
-                      <span
-                        className="amx-host-alert-dot"
-                        style={{ backgroundColor: alert.dotColor }}
-                        aria-hidden="true"
-                      />
-                    </div>
 
-                    <p className="amx-host-alert-desc">{alert.description}</p>
+                {/* Pagination Footer */}
+                <div className="amx-host-table-footer">
+                  <span className="amx-host-records-count">
+                    Showing {paginatedPasses.length} of {filteredPasses.length} records
+                  </span>
 
-                    <div className="amx-host-alert-bottom">
-                      <span>{alert.location}</span>
-                      <span>{alert.timeAgo}</span>
-                    </div>
+                  <div className="amx-host-pagination">
+                    <button
+                      type="button"
+                      className="amx-host-page-nav-btn"
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      aria-label="Previous page"
+                    >
+                      <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+                    </button>
+                    <span className="amx-host-page-label">
+                      Page {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="amx-host-page-nav-btn"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      aria-label="Next page"
+                    >
+                      <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+                    </button>
                   </div>
-                ))
-              )}
+                </div>
+              </section>
+
+              {/* Movement Overview Panel */}
+              <section className="amx-host-panel" id="panelMovementOverview" aria-label="Movement Overview">
+                <div className="amx-host-panel-header">
+                  <div>
+                    <h2 className="amx-host-panel-title">Movement Overview</h2>
+                    <p className="amx-host-panel-subtitle">Live Perimeter Scans</p>
+                  </div>
+
+                  <div className="amx-host-panel-header-right">
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Live</span>
+                    <button
+                      type="button"
+                      className="amx-host-header-link"
+                      id="btnViewMovementLog"
+                      onClick={handleRefreshMovements}
+                      title="Refresh live scanner telemetry"
+                    >
+                      <span>Sync Telemetry</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Movement list */}
+                <div className="amx-host-movement-list">
+                  {movements.length === 0 ? (
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                      No live perimeter movement scans recorded today.
+                    </div>
+                  ) : (
+                    movements.map((item) => {
+                      const mStatus = item.status || 'Verified In-Transit';
+                      const pillClass =
+                        mStatus.includes('Transit')
+                          ? 'in-transit'
+                          : mStatus.includes('Clearance')
+                          ? 'clearance'
+                          : 'checkin';
+
+                      const mId = item.id || item.movementId || item.movement_id;
+                      const aTag = item.assetTag || item.asset_tag;
+                      const aName = item.assetName || item.asset_name;
+                      const tAgo = item.timeAgo || item.time_ago || 'just now';
+
+                      return (
+                        <div key={mId} className="amx-host-movement-item">
+                          <div className="amx-host-movement-top">
+                            <span className="amx-host-movement-id">{mId}</span>
+                            <span className={`amx-host-movement-pill ${pillClass}`}>
+                              {mStatus}
+                            </span>
+                          </div>
+
+                          <div className="amx-host-movement-asset">
+                            {aTag} • {aName}
+                          </div>
+
+                          <div className="amx-host-movement-route">
+                            <span className="material-symbols-outlined" style={{ fontSize: '14px', color: '#00687a' }} aria-hidden="true">
+                              alt_route
+                            </span>
+                            <span>{item.route}</span>
+                          </div>
+
+                          <div className="amx-host-movement-bottom">
+                            <span>{item.station}</span>
+                            <span>{tAgo}</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
             </div>
 
-            <div className="amx-host-alerts-footer">
-              <span>Alert Escalation Policy: L2 Auto-Notify</span>
-              <button
-                type="button"
-                className="amx-host-escalation-link"
-                id="btnEscalationGuide"
-                onClick={() => setIsEscalationGuideOpen(true)}
-              >
-                <span>Escalation Guide</span>
-                <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">
-                  open_in_new
-                </span>
-              </button>
+            {/* Lower Section: Pending Host Actions (Left) + Operational Alerts (Right) */}
+            <div className="amx-host-section-row equal-split">
+              {/* Pending Host Actions */}
+              <section className="amx-host-panel" id="panelPendingActions" aria-label="Pending Host Actions">
+                <div className="amx-host-panel-header">
+                  <div className="amx-host-panel-header-left">
+                    <h2 className="amx-host-panel-title">Pending Host Actions</h2>
+                    <span className="amx-host-count-badge action-badge" id="hostActionCountBadge">
+                      {pendingActions.length} Action Items
+                    </span>
+                  </div>
+                </div>
+                <p className="amx-host-panel-subtitle" style={{ marginTop: '-8px', marginBottom: '14px' }}>
+                  Gate-pass records requiring Host check-in, identity verification, or dispatch logging.
+                </p>
+
+                <div className="amx-host-actions-list">
+                  {pendingActions.length === 0 ? (
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                      No pending host actions requiring attention.
+                    </div>
+                  ) : (
+                    pendingActions.map((act) => {
+                      const actId = act.id;
+                      const pId = act.passId || act.pass_id;
+                      const actionText = act.actionText || act.action_text || 'Action required';
+                      const isPrimary = act.isPrimary ?? act.is_primary ?? true;
+                      const btnText = act.buttonText || act.button_text || 'Review';
+
+                      return (
+                        <div key={actId} className="amx-host-action-card">
+                          <div className="amx-host-action-card-left">
+                            <div className="amx-host-action-icon-box">
+                              <span className="material-symbols-outlined" aria-hidden="true">{act.icon || 'fact_check'}</span>
+                            </div>
+
+                            <div className="amx-host-action-content">
+                              <div className="amx-host-action-title-row">
+                                <span>{pId}</span> • <span>{act.title}</span>
+                              </div>
+                              <div className="amx-host-action-requester">
+                                Requester: {act.requester}
+                              </div>
+                              <div className={`amx-host-action-prompt ${isPrimary ? '' : 'subtle-prompt'}`}>
+                                <span className="material-symbols-outlined" aria-hidden="true">
+                                  {isPrimary ? 'error' : 'schedule'}
+                                </span>
+                                <span>{actionText}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <button
+                              type="button"
+                              className={isPrimary ? 'amx-host-action-btn-primary' : 'amx-host-action-btn-secondary'}
+                              onClick={() => handleOpenActionDetails(act)}
+                              id={`btnAction-${actId}`}
+                            >
+                              {btnText}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="amx-host-action-footer-note">
+                  <span className="material-symbols-outlined" aria-hidden="true">info</span>
+                  <span>Host actions are limited to physical verification, custody check-in, and clearance logs.</span>
+                </div>
+              </section>
+
+              {/* Operational Alerts */}
+              <section className="amx-host-panel" id="panelOperationalAlerts" aria-label="Operational Alerts">
+                <div className="amx-host-panel-header">
+                  <div className="amx-host-panel-header-left">
+                    <h2 className="amx-host-panel-title">Operational Alerts</h2>
+                    <span className="amx-host-count-badge" id="hostAlertsCountBadge">
+                      {alerts.length} Active
+                    </span>
+                  </div>
+
+                  <div className="amx-host-panel-header-right">
+                    <button
+                      type="button"
+                      className="amx-host-header-link"
+                      id="btnClearAlertLogs"
+                      onClick={handleClearAlerts}
+                    >
+                      {alerts.length > 0 ? 'Clear Logs' : 'Restore Logs'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="amx-host-alerts-list">
+                  {alerts.length === 0 ? (
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                      No active operational alerts. Perimeter flow is clear.
+                    </div>
+                  ) : (
+                    alerts.map((alert) => {
+                      const tAgo = alert.timeAgo || alert.time_ago || 'recent';
+                      const dotColor = alert.dotColor || alert.dot_color || '#ef4444';
+
+                      return (
+                        <div
+                          key={alert.id}
+                          className={`amx-host-alert-item ${
+                            alert.severity === 'critical'
+                              ? 'critical-alert'
+                              : alert.severity === 'info'
+                              ? 'info-alert'
+                              : 'warning-alert'
+                          }`}
+                        >
+                          <div className="amx-host-alert-top">
+                            <div className="amx-host-alert-header-row">
+                              <span className="material-symbols-outlined" aria-hidden="true">{alert.icon || 'warning'}</span>
+                              <span>{alert.title}</span>
+                            </div>
+                            <span
+                              className="amx-host-alert-dot"
+                              style={{ backgroundColor: dotColor }}
+                              aria-hidden="true"
+                            />
+                          </div>
+
+                          <p className="amx-host-alert-desc">{alert.description}</p>
+
+                          <div className="amx-host-alert-bottom">
+                            <span>{alert.location}</span>
+                            <span>{tAgo}</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="amx-host-alerts-footer">
+                  <span>Alert Escalation Policy: L2 Auto-Notify</span>
+                  <button
+                    type="button"
+                    className="amx-host-escalation-link"
+                    id="btnEscalationGuide"
+                    onClick={() => setIsEscalationGuideOpen(true)}
+                  >
+                    <span>Escalation Guide</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">
+                      open_in_new
+                    </span>
+                  </button>
+                </div>
+              </section>
             </div>
-          </section>
-        </div>
+          </>
+        )}
 
         {/* Right-Rail Inspection & Verification Drawer */}
         {isDrawerOpen && (
@@ -632,7 +840,7 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
                     {selectedAction ? 'Host Physical Verification & Clearance' : 'Gate Pass Inspection'}
                   </h3>
                   <span style={{ fontSize: '12px', color: '#64748b' }}>
-                    {selectedAction?.passId || selectedPass?.id} • Read &amp; Verify Mode
+                    {selectedAction?.passId || selectedAction?.pass_id || selectedPass?.id} • Read &amp; Verify Mode
                   </span>
                 </div>
                 <button
@@ -653,19 +861,19 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
                     <div className="amx-host-drawer-field">
                       <span className="amx-host-drawer-field-label">Pass ID</span>
                       <span className="amx-host-drawer-field-val">
-                        {selectedAction?.passId || selectedPass?.id}
+                        {selectedAction?.passId || selectedAction?.pass_id || selectedPass?.id}
                       </span>
                     </div>
                     <div className="amx-host-drawer-field">
                       <span className="amx-host-drawer-field-label">Pass Type</span>
                       <span className="amx-host-drawer-field-val">
-                        {selectedPass?.passType || 'Returnable'}
+                        {selectedPass?.passType || selectedPass?.pass_type || 'Returnable'}
                       </span>
                     </div>
                     <div className="amx-host-drawer-field">
                       <span className="amx-host-drawer-field-label">Requester</span>
                       <span className="amx-host-drawer-field-val">
-                        {selectedAction?.requester || selectedPass?.requesterName}
+                        {selectedAction?.requester || selectedPass?.requesterName || selectedPass?.requester_name}
                       </span>
                     </div>
                     <div className="amx-host-drawer-field">
@@ -677,19 +885,19 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
                     <div className="amx-host-drawer-field" style={{ gridColumn: 'span 2' }}>
                       <span className="amx-host-drawer-field-label">Hardware Asset</span>
                       <span className="amx-host-drawer-field-val">
-                        {selectedAction?.assetName || selectedPass?.assetName}
+                        {selectedAction?.assetName || selectedAction?.asset_name || selectedPass?.assetName || selectedPass?.asset_name}
                       </span>
                     </div>
                     <div className="amx-host-drawer-field">
                       <span className="amx-host-drawer-field-label">Serial Number</span>
                       <span className="amx-host-drawer-field-val" style={{ fontFamily: 'monospace' }}>
-                        {selectedAction?.serialNumber || selectedPass?.serialNumber}
+                        {selectedAction?.serialNumber || selectedAction?.serial_number || selectedPass?.serialNumber || selectedPass?.serial_number}
                       </span>
                     </div>
                     <div className="amx-host-drawer-field">
                       <span className="amx-host-drawer-field-label">Location / Gate</span>
                       <span className="amx-host-drawer-field-val">
-                        {selectedPass?.gateLocation || 'Main Gate Checkpoint'}
+                        {selectedPass?.gateLocation || selectedPass?.gate_location || 'Main Gate Checkpoint'}
                       </span>
                     </div>
                   </div>
@@ -701,7 +909,7 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
                     <p className="amx-host-drawer-section-title">Host Verification Task</p>
                     <div style={{ backgroundColor: '#fff8f6', border: '1px solid #ffdcd4', borderRadius: '8px', padding: '12px 14px' }}>
                       <div style={{ fontWeight: 600, color: '#b91c1c', fontSize: '13px', marginBottom: '4px' }}>
-                        {selectedAction.actionText}
+                        {selectedAction.actionText || selectedAction.action_text}
                       </div>
                       <div style={{ fontSize: '12px', color: '#45464d', lineHeight: 1.4 }}>
                         {selectedAction.instructions}
@@ -723,7 +931,8 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
                       <div className="amx-host-check-text">
                         <span className="amx-host-check-title">Physical Serial Number Verified</span>
                         <span className="amx-host-check-sub">
-                          Serial on chassis matches {selectedAction?.serialNumber || selectedPass?.serialNumber}
+                          Serial on chassis matches{' '}
+                          {selectedAction?.serialNumber || selectedAction?.serial_number || selectedPass?.serialNumber || selectedPass?.serial_number}
                         </span>
                       </div>
                     </label>
@@ -871,4 +1080,3 @@ export const HostDashboardPage: React.FC<HostDashboardPageProps> = ({
     </DashboardLayout>
   );
 };
-

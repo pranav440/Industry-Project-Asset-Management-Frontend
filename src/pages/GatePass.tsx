@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
+import { getUser } from '../auth/session';
 import {
   GATE_PASS_FILTER_OPTIONS,
   type GatePassItemData,
@@ -22,6 +23,7 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
+  const currentUser = getUser();
   const [passes, setPasses] = useState<GatePassItemData[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [passTypeFilter, setPassTypeFilter] = useState('');
@@ -239,6 +241,9 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
   return (
     <DashboardLayout
       currentNav="Gate Pass"
+      role={currentUser?.role}
+      userName={currentUser?.full_name}
+      userRoleSubtitle={currentUser?.role === 'host' ? 'Host Security Officer' : currentUser?.role === 'guard' ? 'Security Guard' : undefined}
       onNavigate={handleNav}
       onSignOut={onSignOut}
       onSearch={(q) => {
@@ -252,7 +257,9 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
         showToast('1 Alert: 1 Gate pass pending clearance review.')
       }
       onHelpClick={() => showToast('AssetMX Gate Pass Verification Manual.')}
-      onProfileClick={() => showToast('Active User: Administrator (Role: Admin, Dept: IT).')}
+      onProfileClick={() =>
+        showToast(`Signed in as: ${currentUser?.full_name || 'Administrator'} (${currentUser?.email || ''}) — Role: ${currentUser?.role || 'admin'}`)
+      }
     >
       {/* Toast Notification */}
       {toastMessage && (

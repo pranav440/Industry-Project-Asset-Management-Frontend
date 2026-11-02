@@ -11,7 +11,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_admin
+from app.deps import require_admin, require_authenticated_user
 from app.models import (
     Asset,
     AssetMovement,
@@ -23,6 +23,7 @@ from app.models import (
     MaintenanceStatus,
     MaintenanceType,
     User,
+    UserRole,
 )
 from app.schemas import (
     AssetCreate,
@@ -111,31 +112,81 @@ def _maintenance_history_response(record: Maintenance) -> MaintenanceHistoryOut:
     )
 
 
+def _normalize_asset_category_key(cat: str | None) -> str:
+    if not cat:
+        return "compute"
+    c = cat.lower()
+    if any(k in c for k in ["compute", "laptop", "workstation", "macbook", "pc"]):
+        return "compute"
+    if any(k in c for k in ["display", "monitor", "screen"]):
+        return "displays"
+    if any(k in c for k in ["peripheral", "audio", "headset", "keyboard", "mouse"]):
+        return "peripherals"
+    if any(k in c for k in ["mobile", "tablet", "ipad", "security", "phone", "key"]):
+        return "mobile"
+    return "compute"
+
+
+def _asset_icon(category: str | None, name: str | None = None) -> str:
+    text = f"{category or ''} {name or ''}".lower()
+    if any(k in text for k in ["laptop", "compute", "macbook", "workstation"]):
+        return "laptop_mac"
+    if any(k in text for k in ["display", "monitor", "screen"]):
+        return "monitor"
+    if any(k in text for k in ["keyboard"]):
+        return "keyboard"
+    if any(k in text for k in ["mouse"]):
+        return "mouse"
+    if any(k in text for k in ["headset", "audio"]):
+        return "headphones"
+    if any(k in text for k in ["tablet", "mobile", "ipad", "phone"]):
+        return "tablet_mac"
+    return "devices"
+
+
 def _to_response_with_history(
     asset: Asset,
     movements: list[AssetMovement],
     audits: list[AuditLog],
     maintenance: list[Maintenance],
 ) -> AssetOut:
+    assigned_date_str = None
+    if asset.allocation_date:
+        assigned_date_str = asset.allocation_date.strftime("%d %b %Y")
+    elif asset.purchase_date:
+        assigned_date_str = asset.purchase_date.strftime("%d %b %Y")
+
+    cat_key = _normalize_asset_category_key(asset.category)
+    icon_name = _asset_icon(asset.category, asset.name)
+
     return AssetOut(
         asset_id=asset.asset_id,
+        id=asset.asset_id,
         name=asset.name,
         status=asset.status.value,
         category=asset.category,
         specification=asset.specification,
         serial_number=asset.serial_number,
+        serialNumber=asset.serial_number,
         location=asset.location,
         custodian=asset.custodian,
+        custodianName=asset.custodian,
         purchase_date=asset.purchase_date.date(),
         vendor_name=asset.vendor_name,
         total_cost=asset.total_cost,
+        totalCost=asset.total_cost,
         warranty_period=asset.warranty_period,
+        warrantyPeriod=asset.warranty_period,
         invoice_reference=asset.invoice_reference,
         depreciation=asset.depreciation,
         allocation_date=asset.allocation_date.date() if asset.allocation_date else None,
+        assignedDate=assigned_date_str,
         documents=asset.documents,
         qr_code_value=asset.qr_code_value,
         qr_code_data_url=asset.qr_code_data_url,
+        icon=icon_name,
+        category_key=cat_key,
+        categoryKey=cat_key,
         movement_history=[_movement_response(movement) for movement in movements],
         maintenance_history=[_maintenance_history_response(record) for record in maintenance],
         audit_history=[AuditLogOut(
@@ -169,6 +220,45 @@ def _asset_history(db: Session, asset: Asset) -> tuple[list[AssetMovement], list
         .order_by(Maintenance.service_date.desc(), Maintenance.id.desc())
     ).all()
     return movements, audits, maintenance
+
+
+def _is_custodian_match(custodian: str | None, user: User) -> bool:
+    if not custodian:
+        return False
+    c_raw = custodian.strip()
+    c_lower = c_raw.lower()
+    if not c_lower or c_lower in {"unassigned", "none", "n/a", "-", "null"}:
+        return False
+
+    name = (user.full_name or "").strip().lower()
+    emp_id = (user.employee_id or "").strip().lower()
+
+    if name:
+        if name == c_lower:
+            return True
+        pattern = rf"(^|[^\w]){re.escape(name)}([^\w]|$)"
+        if re.search(pattern, c_lower):
+            return True
+
+    if emp_id:
+        if emp_id == c_lower:
+            return True
+        pattern = rf"(^|[^\w]){re.escape(emp_id)}([^\w]|$)"
+        if re.search(pattern, c_lower):
+            return True
+
+    return False
+
+
+def _check_asset_access(asset: Asset, user: User) -> None:
+    if user.role in (UserRole.admin, UserRole.superadmin):
+        return
+    if _is_custodian_match(asset.custodian, user):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied: asset is not assigned to current user",
+    )
 
 
 @router.get("", response_model=AssetListResponse)
@@ -217,11 +307,129 @@ def list_assets(
     )
 
 
+@router.get("/my", response_model=AssetListResponse)
+def list_my_assets(
+    category: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    search: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    current_user: User = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> AssetListResponse:
+    name = (current_user.full_name or "").strip()
+    emp_id = (current_user.employee_id or "").strip()
+
+    or_conds = []
+    if name:
+        or_conds.append(func.trim(func.lower(Asset.custodian)) == name.lower())
+        or_conds.append(Asset.custodian.ilike(f"%{name}%"))
+    if emp_id:
+        or_conds.append(func.trim(func.lower(Asset.custodian)) == emp_id.lower())
+        or_conds.append(Asset.custodian.ilike(f"%{emp_id}%"))
+
+    if not or_conds:
+        return AssetListResponse(items=[], page=page, page_size=page_size, total=0, total_pages=0)
+
+    query = select(Asset).where(
+        Asset.custodian.isnot(None),
+        or_(*or_conds),
+    )
+
+    if category and category.lower() != "all":
+        cat_lower = category.strip().lower()
+        if cat_lower == "compute":
+            query = query.where(or_(
+                Asset.category.ilike("%compute%"),
+                Asset.category.ilike("%laptop%"),
+                Asset.category.ilike("%workstation%"),
+            ))
+        elif cat_lower == "displays":
+            query = query.where(or_(
+                Asset.category.ilike("%display%"),
+                Asset.category.ilike("%monitor%"),
+            ))
+        elif cat_lower == "peripherals":
+            query = query.where(or_(
+                Asset.category.ilike("%peripheral%"),
+                Asset.category.ilike("%audio%"),
+                Asset.category.ilike("%headset%"),
+                Asset.category.ilike("%keyboard%"),
+            ))
+        elif cat_lower == "mobile":
+            query = query.where(or_(
+                Asset.category.ilike("%mobile%"),
+                Asset.category.ilike("%security%"),
+                Asset.category.ilike("%tablet%"),
+                Asset.category.ilike("%key%"),
+            ))
+        else:
+            query = query.where(Asset.category.ilike(f"%{category.strip()}%"))
+
+    if status_filter and status_filter.lower() != "all":
+        st = status_filter.strip().lower()
+        if "active" in st:
+            query = query.where(Asset.status == AssetStatus.active)
+        elif "maint" in st:
+            query = query.where(Asset.status == AssetStatus.in_maintenance)
+        elif "transit" in st:
+            query = query.where(Asset.status == AssetStatus.in_transit)
+        elif "dispos" in st:
+            query = query.where(Asset.status == AssetStatus.disposed)
+        else:
+            query = query.where(Asset.status.ilike(f"%{status_filter.strip()}%"))
+
+    if search:
+        pattern = f"%{search.strip()}%"
+        query = query.where(or_(
+            Asset.asset_id.ilike(pattern),
+            Asset.name.ilike(pattern),
+            Asset.specification.ilike(pattern),
+            Asset.category.ilike(pattern),
+            Asset.location.ilike(pattern),
+            Asset.serial_number.ilike(pattern),
+        ))
+
+    all_candidates = db.scalars(query.order_by(Asset.created_at.desc(), Asset.id.desc())).all()
+    seen_ids = set()
+    filtered_items = []
+    for asset in all_candidates:
+        if asset.id not in seen_ids and _is_custodian_match(asset.custodian, current_user):
+            seen_ids.add(asset.id)
+            filtered_items.append(asset)
+
+    total = len(filtered_items)
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    paged_items = filtered_items[(page - 1) * page_size : page * page_size]
+
+    results = []
+    for asset in paged_items:
+        movements = db.scalars(
+            select(AssetMovement)
+            .where(AssetMovement.asset_id == asset.id)
+            .order_by(AssetMovement.initiated_at.asc(), AssetMovement.id.asc())
+        ).all()
+        results.append(_to_response_with_history(asset, movements, [], []))
+
+    return AssetListResponse(
+        items=results,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
+    )
+
+
 @router.get("/{asset_id}", response_model=AssetOut)
-def get_asset(asset_id: str, _admin: User = Depends(require_admin), db: Session = Depends(get_db)) -> AssetOut:
+def get_asset(
+    asset_id: str,
+    current_user: User = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> AssetOut:
     asset = db.scalar(select(Asset).where(Asset.asset_id == asset_id))
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    _check_asset_access(asset, current_user)
     movements, audits, maintenance = _asset_history(db, asset)
     return _to_response_with_history(asset, movements, audits, maintenance)
 

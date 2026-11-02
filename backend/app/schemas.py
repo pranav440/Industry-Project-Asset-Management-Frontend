@@ -88,28 +88,37 @@ class AssetUpdate(BaseModel):
 
 class AssetOut(BaseModel):
     asset_id: str
+    id: str | None = None
     name: str
     status: AssetStatusValue
     category: str
     specification: str | None
     serial_number: str | None
+    serialNumber: str | None = None
     location: str
     custodian: str
+    custodianName: str | None = None
     purchase_date: date
     vendor_name: str
     total_cost: str
+    totalCost: str | None = None
     warranty_period: str
+    warrantyPeriod: str | None = None
     invoice_reference: str | None
     depreciation: str | None
     allocation_date: date | None
+    assignedDate: str | None = None
     documents: dict[str, Any] | None
     qr_code_value: str
     qr_code_data_url: str
-    movement_history: list["AssetMovementOut"]
-    maintenance_history: list["MaintenanceHistoryOut"]
-    audit_history: list["AuditLogOut"]
+    icon: str | None = None
+    category_key: str | None = None
+    categoryKey: str | None = None
+    movement_history: list["AssetMovementOut"] = Field(default_factory=list)
+    maintenance_history: list["MaintenanceHistoryOut"] = Field(default_factory=list)
+    audit_history: list["AuditLogOut"] = Field(default_factory=list)
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class AssetListResponse(BaseModel):
@@ -291,6 +300,90 @@ class ExternalRequestCreate(BaseModel):
             raise ValueError("Justification cannot be empty")
         if len(s) > 500:
             raise ValueError("Justification must be at most 500 characters")
+        return s
+
+    @field_validator("estimated_cost")
+    @classmethod
+    def validate_estimated_cost(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            return None
+        if cleaned.startswith("₹") or cleaned.startswith("$"):
+            cleaned = cleaned[1:].strip()
+        cleaned_num = cleaned.replace(",", "")
+        lower = cleaned_num.lower()
+        if "nan" in lower or "inf" in lower:
+            raise ValueError("Estimated cost must be a valid finite number")
+        try:
+            d = decimal.Decimal(cleaned_num)
+        except (decimal.InvalidOperation, TypeError):
+            raise ValueError("Estimated cost must be a valid non-negative number")
+        if d.is_nan() or d.is_infinite():
+            raise ValueError("Estimated cost must be a valid finite number")
+        if d < 0:
+            raise ValueError("Estimated cost cannot be negative")
+        return f"{d:.2f}"
+
+
+class EmployeeRequestCreate(BaseModel):
+    request_type: RequestTypeValue = Field(default="Asset Request")
+    requested_item: str = Field(min_length=1, max_length=255)
+    category: str = Field(min_length=1, max_length=120)
+    sub_category: str | None = Field(default=None, max_length=120)
+    quantity: int = Field(default=1, ge=1)
+    priority: RequestPriorityValue = Field(default="Medium")
+    justification: str = Field(min_length=1, max_length=2000)
+    estimated_cost: str | None = Field(default=None, max_length=64)
+    department: str | None = Field(default=None, max_length=160)
+    processing_guidelines: str | None = Field(default=None, max_length=2000)
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            d = dict(data)
+            if "requested_item" not in d:
+                if "requestedItem" in d:
+                    d["requested_item"] = d["requestedItem"]
+                elif "itemName" in d:
+                    d["requested_item"] = d["itemName"]
+            if "request_type" not in d and "requestType" in d:
+                d["request_type"] = d["requestType"]
+            if "sub_category" not in d and "subCategory" in d:
+                d["sub_category"] = d["subCategory"]
+            if "estimated_cost" not in d and "estimatedCost" in d:
+                d["estimated_cost"] = d["estimatedCost"]
+            if "processing_guidelines" not in d and "processingGuidelines" in d:
+                d["processing_guidelines"] = d["processingGuidelines"]
+            return d
+        return data
+
+    @field_validator("requested_item")
+    @classmethod
+    def validate_requested_item(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Requested item cannot be empty")
+        return s
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Category cannot be empty")
+        return s
+
+    @field_validator("justification")
+    @classmethod
+    def validate_justification(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Justification cannot be empty")
         return s
 
     @field_validator("estimated_cost")
@@ -623,3 +716,288 @@ class ConsumableListResponse(BaseModel):
     page_size: int
     total_pages: int
     items: list[ConsumableOut]
+
+
+class EmployeeConsumableIssueOut(BaseModel):
+    id: str
+    issue_id: str
+    item_name: str
+    itemName: str
+    specification: str
+    category: str
+    category_key: str
+    categoryKey: str
+    quantity_issued: int
+    quantityIssued: int
+    fulfillment_date: str
+    fulfillmentDate: str
+    raw_date: str
+    rawDate: str
+    related_request_id: str
+    relatedRequestId: str
+    status: str = "Fulfilled / Issued"
+    reference: str
+    icon: str
+    is_current_month: bool
+    isCurrentMonth: bool
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class EmployeeConsumptionCategoryMetric(BaseModel):
+    name: str
+    category_key: str
+    categoryKey: str
+    units: int
+    percentage: float
+    color_class: str
+    colorClass: str
+    color: str
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class EmployeeConsumptionSummaryOut(BaseModel):
+    period: str
+    cycle_reference: str
+    cycleReference: str
+    total_issued: int
+    totalIssued: int
+    active_categories_count: int
+    activeCategoriesCount: int
+    distinct_categories_count: int
+    distinctCategoriesCount: int
+    categories: list[EmployeeConsumptionCategoryMetric]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class EmployeeConsumptionListResponse(BaseModel):
+    items: list[EmployeeConsumableIssueOut]
+    summary: EmployeeConsumptionSummaryOut
+    all_time_total_units: int
+    allTimeTotalUnits: int
+    this_month_total_units: int
+    thisMonthTotalUnits: int
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class EmployeeDashboardSummaryMetrics(BaseModel):
+    open_requests: int
+    openRequests: int
+    awaiting_approval: int
+    awaitingApproval: int
+    closed_requests: int
+    closedRequests: int
+    total_requests: int
+    totalRequests: int
+    assigned_assets_count: int
+    assignedAssetsCount: int
+    assets_in_maintenance_count: int
+    assetsInMaintenanceCount: int
+    consumables_received: int
+    consumablesReceived: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class EmployeeDashboardResponse(BaseModel):
+    summary: EmployeeDashboardSummaryMetrics
+    open_requests: int
+    openRequests: int
+    awaiting_approval: int
+    awaitingApproval: int
+    assigned_assets_count: int
+    assignedAssetsCount: int
+    assets_in_maintenance_count: int
+    assetsInMaintenanceCount: int
+    consumables_received: int
+    consumablesReceived: int
+    recent_requests: list[RequestListItemOut]
+    recentRequests: list[RequestListItemOut]
+    assigned_assets: list[AssetOut]
+    assignedAssets: list[AssetOut]
+    consumption: EmployeeConsumptionSummaryOut
+    consumption_summary: EmployeeConsumptionSummaryOut
+    consumptionSummary: EmployeeConsumptionSummaryOut
+    recent_consumable_issues: list[EmployeeConsumableIssueOut]
+    recentConsumableIssues: list[EmployeeConsumableIssueOut]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostKpiActiveGatePasses(BaseModel):
+    total: int = 0
+    outbound: int = 0
+    inboundScheduled: int = 0
+    inbound_scheduled: int = 0
+    badgeText: str = "Live"
+    badge_text: str = "Live"
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostKpiPendingActions(BaseModel):
+    total: int = 0
+    subtext: str = "Verification & check-in required"
+    badgeText: str = "Priority"
+    badge_text: str = "Priority"
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostKpiMovement(BaseModel):
+    total: int = 0
+    completed: int = 0
+    inTransit: int = 0
+    in_transit: int = 0
+    trend: str = "+0%"
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostKpiEscalated(BaseModel):
+    total: int = 0
+    subtext: str = "Security officer review queue"
+    badgeText: str = "Review"
+    badge_text: str = "Review"
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostDashboardKpis(BaseModel):
+    activeGatePasses: HostKpiActiveGatePasses
+    active_gate_passes: HostKpiActiveGatePasses
+    pendingHostActions: HostKpiPendingActions
+    pending_host_actions: HostKpiPendingActions
+    todaysMovement: HostKpiMovement
+    todays_movement: HostKpiMovement
+    escalatedGatePasses: HostKpiEscalated
+    escalated_gate_passes: HostKpiEscalated
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostGatePassActivityItemOut(BaseModel):
+    id: str
+    pass_id: str
+    passType: str
+    pass_type: str
+    assetName: str
+    asset_name: str
+    serialNumber: str
+    serial_number: str
+    requesterName: str
+    requester_name: str
+    department: str
+    schedule: str
+    status: str
+    destination: str | None = None
+    gateLocation: str | None = None
+    gate_location: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostMovementScanItemOut(BaseModel):
+    id: str
+    movement_id: str
+    status: str
+    assetTag: str
+    asset_tag: str
+    assetName: str
+    asset_name: str
+    route: str
+    station: str
+    timeAgo: str
+    time_ago: str
+    initiated_at: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostPendingActionItemOut(BaseModel):
+    id: str
+    passId: str
+    pass_id: str
+    title: str
+    requester: str
+    actionText: str
+    action_text: str
+    actionType: str
+    action_type: str
+    icon: str
+    isPrimary: bool
+    is_primary: bool
+    buttonText: str
+    button_text: str
+    assetName: str
+    asset_name: str
+    serialNumber: str
+    serial_number: str
+    destination: str
+    carrier: str
+    instructions: str
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostOperationalAlertItemOut(BaseModel):
+    id: str
+    title: str
+    description: str
+    location: str
+    timeAgo: str
+    time_ago: str
+    severity: str
+    icon: str
+    dotColor: str
+    dot_color: str
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostDashboardResponse(BaseModel):
+    kpis: HostDashboardKpis
+    summary: HostDashboardKpis
+    activeGatePasses: HostKpiActiveGatePasses
+    active_gate_passes: HostKpiActiveGatePasses
+    pendingHostActions: HostKpiPendingActions
+    pending_host_actions: HostKpiPendingActions
+    todaysMovement: HostKpiMovement
+    todays_movement: HostKpiMovement
+    escalatedGatePasses: HostKpiEscalated
+    escalated_gate_passes: HostKpiEscalated
+    gatePassActivity: list[HostGatePassActivityItemOut]
+    gate_pass_activity: list[HostGatePassActivityItemOut]
+    movementOverview: list[HostMovementScanItemOut]
+    movement_overview: list[HostMovementScanItemOut]
+    pendingActions: list[HostPendingActionItemOut]
+    pending_actions: list[HostPendingActionItemOut]
+    operationalAlerts: list[HostOperationalAlertItemOut]
+    operational_alerts: list[HostOperationalAlertItemOut]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostMovementListResponse(BaseModel):
+    items: list[HostMovementScanItemOut]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostAlertListResponse(BaseModel):
+    items: list[HostOperationalAlertItemOut]
+    total: int
+
+    model_config = ConfigDict(populate_by_name=True)
+

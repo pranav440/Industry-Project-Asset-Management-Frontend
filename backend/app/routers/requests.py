@@ -14,9 +14,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.deps import require_admin
-from app.models import AuditLog, Request, RequestAttachment, RequestHistory, RequestPriority, RequestStatus, RequestType, User
+from app.deps import require_admin, require_authenticated_user
+from app.models import AuditLog, Request, RequestAttachment, RequestHistory, RequestPriority, RequestStatus, RequestType, User, UserRole
 from app.schemas import (
+    EmployeeRequestCreate,
     ExternalRequestCreate,
     RequestAttachmentOut,
     RequestDetailOut,
@@ -238,6 +239,45 @@ def _find_request(db: Session, request_id: str, *, lock: bool = False) -> Reques
     if lock:
         query = query.with_for_update()
     return db.scalar(query)
+
+
+def _check_request_access(request: Request, user: User) -> None:
+    if user.role in (UserRole.admin, UserRole.superadmin):
+        return
+    user_email = (user.email or "").strip().lower()
+    req_email = (request.requester_email or "").strip().lower()
+    if user_email and req_email and user_email == req_email:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied: request belongs to another user",
+    )
+
+
+def _create_employee_audit_log(*, db: Session, request: Request, actor: User) -> AuditLog:
+    return AuditLog(
+        action="employee_request_created",
+        asset_id=None,
+        asset_identifier="",
+        consumable_id=None,
+        consumable_identifier=None,
+        request_id=request.id,
+        request_identifier=request.request_id,
+        actor_user_id=actor.id,
+        before_state=None,
+        after_state={
+            "status": RequestStatus.pending.value,
+            "request_source": "Internal",
+            "requested_item": request.requested_item,
+            "quantity": request.quantity,
+        },
+        metadata_json={
+            "request_id": request.request_id,
+            "request_source": "Internal",
+            "requester_email": request.requester_email,
+            "estimated_cost": request.estimated_cost,
+        },
+    )
 
 
 def _create_audit_log(*, db: Session, request: Request, actor: User, previous_status: RequestStatus, target_status: RequestStatus, operational_note: str | None) -> AuditLog:
@@ -484,16 +524,171 @@ def create_external_request(
         )
 
 
+@router.post("", response_model=RequestDetailOut, status_code=status.HTTP_201_CREATED)
+def create_employee_request(
+    body: EmployeeRequestCreate,
+    current_user: User = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> RequestDetailOut:
+    request_type = VALID_REQUEST_TYPE_VALUES.get(body.request_type)
+    if request_type is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid request type")
+
+    priority = VALID_PRIORITY_VALUES.get(body.priority)
+    if priority is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid priority")
+
+    department = getattr(current_user, "department", None)
+    if not department:
+        if body.department and body.department.strip():
+            department = body.department.strip()
+        elif current_user.role == UserRole.employee:
+            department = "Product Design"
+        else:
+            department = "General Operations"
+
+    category = body.category.strip()
+    if body.sub_category and body.sub_category.strip():
+        sub = body.sub_category.strip()
+        if sub not in category:
+            category = f"{category} • {sub}"[:120]
+
+    processing_guidelines = (
+        body.processing_guidelines.strip()
+        if body.processing_guidelines and body.processing_guidelines.strip()
+        else "Internal employee requisition submitted for review."
+    )
+
+    request_id = _request_id(db)
+
+    try:
+        new_request = Request(
+            request_id=request_id,
+            requester_name=current_user.full_name.strip(),
+            requester_email=current_user.email.strip().lower(),
+            department=department,
+            request_type=request_type,
+            requested_item=body.requested_item.strip(),
+            category=category,
+            quantity=body.quantity,
+            priority=priority,
+            request_date=date.today(),
+            status=RequestStatus.pending,
+            justification=body.justification.strip(),
+            processing_guidelines=processing_guidelines,
+            request_source="Internal",
+            date_received=None,
+            external_reference=None,
+            contact_info=None,
+            estimated_cost=body.estimated_cost,
+            procurement_reference=None,
+        )
+        db.add(new_request)
+        db.flush()
+
+        history = RequestHistory(
+            history_id=_history_id(db),
+            request_id=new_request.request_id,
+            stage=RequestStatus.pending.value,
+            action="Requisition submitted by employee",
+            performed_by=current_user.full_name,
+            note=body.justification.strip(),
+        )
+        db.add(history)
+
+        audit = _create_employee_audit_log(db=db, request=new_request, actor=current_user)
+        db.add(audit)
+
+        db.commit()
+        db.refresh(new_request)
+        return _request_response(db, new_request, include_history=True)
+    except HTTPException:
+        db.rollback()
+        raise
+    except (SQLAlchemyError, Exception):
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Employee request creation failed",
+        )
+
+
+@router.get("/my", response_model=RequestListResponse)
+def list_my_requests(
+    search: str | None = Query(default=None),
+    request_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    priority: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    current_user: User = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+) -> RequestListResponse:
+    user_email = (current_user.email or "").strip().lower()
+    query = select(Request).where(func.lower(Request.requester_email) == user_email)
+
+    if search:
+        pattern = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                Request.request_id.ilike(pattern),
+                Request.requested_item.ilike(pattern),
+                Request.category.ilike(pattern),
+                Request.department.ilike(pattern),
+            )
+        )
+    if request_type:
+        request_type_key = VALID_REQUEST_TYPE_VALUES.get(request_type)
+        if request_type_key is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid request type filter")
+        query = query.where(Request.request_type == request_type_key)
+    if status_filter and status_filter.lower() != "all":
+        status_normalized = {
+            "pending": RequestStatus.pending,
+            "in review": RequestStatus.in_review,
+            "fulfilled": RequestStatus.fulfilled,
+            "rejected": RequestStatus.rejected,
+        }.get(status_filter.lower().strip())
+        if status_normalized is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid status filter")
+        query = query.where(Request.status == status_normalized)
+    if priority and priority.lower() != "all":
+        priority_normalized = {
+            "high": RequestPriority.high,
+            "medium": RequestPriority.medium,
+            "low": RequestPriority.low,
+        }.get(priority.lower().strip())
+        if priority_normalized is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid priority filter")
+        query = query.where(Request.priority == priority_normalized)
+    if category and category.lower() != "all":
+        query = query.where(Request.category.ilike(f"%{category.strip()}%"))
+
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    rows = db.scalars(
+        query.order_by(Request.request_date.desc(), Request.created_at.desc(), Request.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return RequestListResponse(
+        items=[_request_response(db, row).model_dump(exclude={"history", "attachments"}) for row in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
 
 @router.get("/{request_id}", response_model=RequestDetailOut)
 def get_request(
     request_id: str,
-    _admin: User = Depends(require_admin),
+    current_user: User = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ) -> RequestDetailOut:
     request = _find_request(db, request_id)
     if request is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
+    _check_request_access(request, current_user)
     return _request_response(db, request, include_history=True)
 
 
@@ -554,7 +749,7 @@ def transition_request(
 async def upload_request_attachment(
     request_id: str,
     file: UploadFile = File(...),
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ) -> RequestAttachmentOut:
     request = _find_request(db, request_id)
@@ -563,6 +758,7 @@ async def upload_request_attachment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Request not found",
         )
+    _check_request_access(request, current_user)
 
     raw_name = file.filename or ""
     ext = Path(raw_name).suffix.lower()
@@ -616,7 +812,7 @@ async def upload_request_attachment(
             storage_key=storage_key,
             content_type=canonical_content_type,
             file_size=bytes_read,
-            uploader_user_id=admin.id,
+            uploader_user_id=current_user.id,
         )
         db.add(attachment)
         db.flush()
@@ -625,7 +821,7 @@ async def upload_request_attachment(
             db=db,
             request=request,
             attachment=attachment,
-            actor=admin,
+            actor=current_user,
         )
         db.add(audit)
         db.commit()
@@ -649,7 +845,7 @@ async def upload_request_attachment(
 @router.get("/{request_id}/attachments", response_model=list[RequestAttachmentOut])
 def list_request_attachments(
     request_id: str,
-    _admin: User = Depends(require_admin),
+    current_user: User = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ) -> list[RequestAttachmentOut]:
     request = _find_request(db, request_id)
@@ -658,6 +854,7 @@ def list_request_attachments(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Request not found",
         )
+    _check_request_access(request, current_user)
 
     attachments = db.scalars(
         select(RequestAttachment)
@@ -671,7 +868,7 @@ def list_request_attachments(
 def download_request_attachment(
     request_id: str,
     attachment_id: str,
-    _admin: User = Depends(require_admin),
+    current_user: User = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ):
     request = _find_request(db, request_id)
@@ -680,6 +877,7 @@ def download_request_attachment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Request not found",
         )
+    _check_request_access(request, current_user)
 
     attachment = db.scalar(
         select(RequestAttachment).where(
@@ -716,7 +914,7 @@ def download_request_attachment(
 def preview_request_attachment(
     request_id: str,
     attachment_id: str,
-    _admin: User = Depends(require_admin),
+    current_user: User = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ):
     request = _find_request(db, request_id)
@@ -725,6 +923,7 @@ def preview_request_attachment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Request not found",
         )
+    _check_request_access(request, current_user)
 
     attachment = db.scalar(
         select(RequestAttachment).where(
@@ -767,19 +966,19 @@ def get_request_attachment(
     request_id: str,
     attachment_id: str,
     disposition: str = Query("download", description="Attachment disposition: 'download'/'attachment' or 'preview'/'inline'"),
-    _admin: User = Depends(require_admin),
+    current_user: User = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ):
     if disposition.lower() in {"preview", "inline"}:
         return preview_request_attachment(
             request_id=request_id,
             attachment_id=attachment_id,
-            _admin=_admin,
+            current_user=current_user,
             db=db,
         )
     return download_request_attachment(
         request_id=request_id,
         attachment_id=attachment_id,
-        _admin=_admin,
+        current_user=current_user,
         db=db,
     )

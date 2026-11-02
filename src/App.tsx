@@ -306,6 +306,17 @@ export default function App() {
       return;
     }
 
+    if (currentUser?.role === 'host' && (subRoute === 'movement' || subRoute === 'movement-activity')) {
+      navigate('/dashboard');
+      setTimeout(() => {
+        const el = document.getElementById('panelMovementOverview');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 60);
+      return;
+    }
+
     if (subRoute === 'dashboard') {
       navigate('/dashboard');
     } else if (subRoute === 'assets') {
