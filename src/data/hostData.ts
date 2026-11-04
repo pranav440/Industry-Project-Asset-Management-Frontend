@@ -827,3 +827,498 @@ export const HOST_DETAILED_GATE_PASSES: HostDetailedGatePass[] = [
 ];
 
 
+
+
+// =====================================================================
+// Host Movement Activity Module Data & Types
+// =====================================================================
+
+export interface HostMovementKpis {
+  totalMovements: { total: number; badgeText: string; subtext: string };
+  inTransit: { total: number; badgeText: string; subtext: string };
+  completedToday: { total: number; badgeText: string; subtext: string };
+  movementExceptions: { total: number; badgeText: string; subtext: string };
+}
+
+export const HOST_MOVEMENT_KPIS_DATA: HostMovementKpis = {
+  totalMovements: {
+    total: 42,
+    badgeText: '+6 today',
+    subtext: 'Recorded across perimeter',
+  },
+  inTransit: {
+    total: 8,
+    badgeText: 'Active Movement',
+    subtext: 'Active between facility zones',
+  },
+  completedToday: {
+    total: 29,
+    badgeText: '96.7% Clearance',
+    subtext: 'Verified arrival & custody',
+  },
+  movementExceptions: {
+    total: 5,
+    badgeText: 'Attention Required',
+    subtext: 'Checkpoint delays or seal audit',
+  },
+};
+
+export type HostMovementStatus =
+  | 'Exception'
+  | 'Checkpoint Verified'
+  | 'In Transit'
+  | 'Received'
+  | 'Scheduled'
+  | 'Dispatched';
+
+export interface HostMovementTimelineEvent {
+  title: string;
+  time: string;
+  desc: string;
+  status: 'completed' | 'exception' | 'pending';
+  icon: string;
+}
+
+export interface HostMovementActivityRecord {
+  id: string;
+  gatePassId: string;
+  assetName: string;
+  assetTag: string;
+  serialNumber: string;
+  classification: string;
+  origin: string;
+  originZone: string;
+  originIcon: string;
+  destination: string;
+  destinationSegment: string;
+  destinationIcon: string;
+  corridor: string;
+  department: 'Engineering' | 'IT Operations' | 'Facilities' | 'QA Labs';
+  initiatedBy: string;
+  initiatorInitials: string;
+  initiatorBadge: string;
+  initiatorEmail: string;
+  movementDate: string;
+  status: HostMovementStatus;
+  carrierName: string;
+  carrierPlate: string;
+  carrierDriver: string;
+  justification: string;
+  ttl: string;
+  discrepancyAlert?: string;
+  manifestFiles: Array<{ name: string; size: string }>;
+  timeline: HostMovementTimelineEvent[];
+}
+
+export const HOST_DETAILED_MOVEMENT_RECORDS: HostMovementActivityRecord[] = [
+  {
+    id: 'MOV-2026-0182',
+    gatePassId: 'GP-2026-0418',
+    assetName: 'Cisco Catalyst 9300 Switch',
+    assetTag: 'AST-2024-0042',
+    serialNumber: 'CS-9300-8801',
+    classification: 'Network Infrastructure (Level 3)',
+    origin: 'Main Gate Checkpoint (Gate-04A)',
+    originZone: 'Zone 1 Perimeter Hub',
+    originIcon: 'meeting_room',
+    destination: 'Remote Datacenter Colocation #3',
+    destinationSegment: 'Rack Segment Bay 14-C',
+    destinationIcon: 'dns',
+    corridor: 'Gate-04A Main Corridor',
+    department: 'Engineering',
+    initiatedBy: 'Elena Rostova',
+    initiatorInitials: 'ER',
+    initiatorBadge: 'ENG-9042',
+    initiatorEmail: 'elena.rostova@enterprise.internal',
+    movementDate: '18 Feb 2026, 14:15',
+    status: 'Exception',
+    carrierName: 'Secure Logistics Van',
+    carrierPlate: 'CA-894-MX (GPS Monitored)',
+    carrierDriver: 'Marcus Vance (#DRV-202)',
+    justification:
+      'Urgent hardware maintenance dispatch under gate pass GP-2026-0418 for emergency core switch replacement.',
+    ttl: 'Authorization TTL: 4 hrs remaining',
+    discrepancyAlert:
+      'Missing secondary perimeter seal scan at East Checkpoint Corridor. Physical verification required before final carrier release into public transit corridor.',
+    manifestFiles: [
+      { name: 'Transfer_Manifest_GP0418.pdf', size: '1.4 MB' },
+      { name: 'Checkpoint_Scan_Log_0182.pdf', size: '420 KB' },
+    ],
+    timeline: [
+      {
+        title: 'Movement Initiated',
+        time: '09:15',
+        desc: 'Logged by requester Elena Rostova under Gate Pass GP-2026-0418.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Asset Dispatched',
+        time: '13:40',
+        desc: 'Released from Tech Hub Bldg B, Server Room 2 by IT Custodian.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Checkpoint Scan Verified',
+        time: '14:15',
+        desc: 'Verified at Main Gate Checkpoint 04A by Host Security Officer Sarah Jenkins (SJ). Serial CS-9300-8801 matched.',
+        status: 'completed',
+        icon: 'verified',
+      },
+      {
+        title: 'Corridor Transfer / East Checkpoint',
+        time: '14:45 • Not Logged',
+        desc: 'Checkpoint barcode scanner pending physical re-inspection. Tamper seal mismatch flag.',
+        status: 'exception',
+        icon: 'priority_high',
+      },
+      {
+        title: 'Destination Arrival',
+        time: 'Expected: 16:30 • Unrecorded',
+        desc: 'Pending carrier transit into Remote Datacenter Colocation #3 checkpoint gate.',
+        status: 'pending',
+        icon: 'schedule',
+      },
+      {
+        title: 'Custody Received',
+        time: 'Pending Acknowledgment',
+        desc: 'Final transfer acknowledgment awaiting Colocation Site Supervisor inspection.',
+        status: 'pending',
+        icon: 'radio_button_unchecked',
+      },
+    ],
+  },
+  {
+    id: 'MOV-2026-0181',
+    gatePassId: 'GP-2026-0415',
+    assetName: 'Dell UltraSharp 32" 4K Monitor',
+    assetTag: 'AST-2024-0118',
+    serialNumber: 'DL-3200-9941',
+    classification: 'Display & Ergonomic Peripherals',
+    origin: 'Server Room 2',
+    originZone: 'Zone 2 IT Depot',
+    originIcon: 'warehouse',
+    destination: 'Lab 4 Corridor',
+    destinationSegment: 'QA Engineering Bench 08',
+    destinationIcon: 'lan',
+    corridor: 'Server Room 2 Express',
+    department: 'IT Operations',
+    initiatedBy: 'Travis Henderson',
+    initiatorInitials: 'TH',
+    initiatorBadge: 'ITO-4420',
+    initiatorEmail: 'travis.henderson@enterprise.internal',
+    movementDate: '18 Feb 2026, 15:30',
+    status: 'Checkpoint Verified',
+    carrierName: 'Internal Facility Cart',
+    carrierPlate: 'INT-CART-04',
+    carrierDriver: 'David Kim (Infrastructure)',
+    justification: 'Relocation to QA Lab for high-resolution graphics compliance testing.',
+    ttl: 'Authorization TTL: 6 hrs remaining',
+    manifestFiles: [
+      { name: 'Internal_Transfer_GP0415.pdf', size: '820 KB' },
+    ],
+    timeline: [
+      {
+        title: 'Movement Initiated',
+        time: '14:00',
+        desc: 'Internal transfer request submitted by Travis Henderson.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Custody Handover',
+        time: '15:10',
+        desc: 'Released to Internal Facility Cart handler.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Checkpoint Scan Verified',
+        time: '15:30',
+        desc: 'Verified by Host Officer at Internal Station 03.',
+        status: 'completed',
+        icon: 'verified',
+      },
+      {
+        title: 'Destination Arrival',
+        time: 'Expected: 16:15 • Unrecorded',
+        desc: 'Pending arrival at Lab 4 Corridor entry.',
+        status: 'pending',
+        icon: 'schedule',
+      },
+    ],
+  },
+  {
+    id: 'MOV-2026-0179',
+    gatePassId: 'GP-2026-0412',
+    assetName: 'Fluke Networks Versiv DSX',
+    assetTag: 'AST-2025-1108',
+    serialNumber: 'FLK-789-PRO',
+    classification: 'Field Testing & Telemetry Equipment',
+    origin: 'Tech Hub Bldg B',
+    originZone: 'Facilities Maintenance Locker',
+    originIcon: 'domain',
+    destination: 'Loading Bay East',
+    destinationSegment: 'Logistics Dock Bay 2',
+    destinationIcon: 'forklift',
+    corridor: 'Tech Hub Building B Bay',
+    department: 'Facilities',
+    initiatedBy: 'Marcus Kane',
+    initiatorInitials: 'MK',
+    initiatorBadge: 'FAC-3109',
+    initiatorEmail: 'marcus.kane@enterprise.internal',
+    movementDate: '18 Feb 2026, 13:45',
+    status: 'In Transit',
+    carrierName: 'Facilities Maintenance Rover',
+    carrierPlate: 'FAC-ROV-02',
+    carrierDriver: 'Marcus Kane (#FAC-3109)',
+    justification: 'Scheduled fiber optic testing at Loading Bay East communications nexus.',
+    ttl: 'Authorization TTL: 3 hrs remaining',
+    manifestFiles: [
+      { name: 'Equipment_Movement_GP0412.pdf', size: '940 KB' },
+    ],
+    timeline: [
+      {
+        title: 'Movement Initiated',
+        time: '12:30',
+        desc: 'Check-out requisition logged by Marcus Kane.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Dispatched from Locker',
+        time: '13:15',
+        desc: 'Tools custody checked out with electronic signature.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'In Transit',
+        time: '13:45',
+        desc: 'En route via Tech Hub Corridor to East Logistics Dock.',
+        status: 'completed',
+        icon: 'near_me',
+      },
+      {
+        title: 'Arrival & Inspection',
+        time: 'Expected: 14:30 • Unrecorded',
+        desc: 'Awaiting checkpoint scanner log at Loading Bay East.',
+        status: 'pending',
+        icon: 'schedule',
+      },
+    ],
+  },
+  {
+    id: 'MOV-2026-0176',
+    gatePassId: 'GP-2026-0405',
+    assetName: 'NVIDIA DGX Station A100',
+    assetTag: 'AST-2023-3392',
+    serialNumber: 'NV-DGX-1024',
+    classification: 'High-Performance AI Compute Workstation',
+    origin: 'AI Research Lab',
+    originZone: 'Zone 4 Deep Learning Pod',
+    originIcon: 'biotech',
+    destination: 'Main Checkpoint Gate',
+    destinationSegment: 'Gate-04A Physical Inspection Bay',
+    destinationIcon: 'security',
+    corridor: 'Gate-04A Main Corridor',
+    department: 'Engineering',
+    initiatedBy: 'Chloe Lin',
+    initiatorInitials: 'CL',
+    initiatorBadge: 'ENG-7120',
+    initiatorEmail: 'chloe.lin@enterprise.internal',
+    movementDate: '18 Feb 2026, 11:20',
+    status: 'Received',
+    carrierName: 'Heavy Equipment Pallet Hauler',
+    carrierPlate: 'PLT-8820',
+    carrierDriver: 'Chloe Lin & Rigging Crew',
+    justification: 'Inbound intake return from university collaborative AI research pod.',
+    ttl: 'Completed and archived',
+    manifestFiles: [
+      { name: 'Inbound_Intake_Manifest_GP0405.pdf', size: '1.8 MB' },
+    ],
+    timeline: [
+      {
+        title: 'Movement Initiated',
+        time: '09:00',
+        desc: 'Inbound intake manifest created.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Loaded for Transit',
+        time: '10:15',
+        desc: 'Secure packing and vibration monitoring verified.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Received & Logged',
+        time: '11:20',
+        desc: 'Arrived at Main Checkpoint Gate. Physical seal verified and receipt logged by Host.',
+        status: 'completed',
+        icon: 'check_circle',
+      },
+    ],
+  },
+  {
+    id: 'MOV-2026-0174',
+    gatePassId: 'GP-2026-0401',
+    assetName: 'Keysight Infiniium Scope',
+    assetTag: 'AST-2023-7729',
+    serialNumber: 'KY-INF-4402',
+    classification: 'Precision Oscilloscope & Signal Analyzer',
+    origin: 'QA Calibration Bay',
+    originZone: 'Lab 2 Cleanroom',
+    originIcon: 'tune',
+    destination: 'Main Gate Checkpoint',
+    destinationSegment: 'Dispatch Vehicle Loading Zone',
+    destinationIcon: 'meeting_room',
+    corridor: 'East Checkpoint Transit',
+    department: 'QA Labs',
+    initiatedBy: 'Amina Latif',
+    initiatorInitials: 'AL',
+    initiatorBadge: 'QAL-8821',
+    initiatorEmail: 'amina.latif@enterprise.internal',
+    movementDate: '18 Feb 2026, 16:00',
+    status: 'Scheduled',
+    carrierName: 'Precision Instrument Courier',
+    carrierPlate: 'PIC-551-EX',
+    carrierDriver: 'Courier Agent #901',
+    justification: 'Annual ISO calibration dispatch to certified manufacturer facility.',
+    ttl: 'Authorization TTL: 5 hrs remaining',
+    manifestFiles: [
+      { name: 'Calibration_Dispatch_GP0401.pdf', size: '1.1 MB' },
+    ],
+    timeline: [
+      {
+        title: 'Calibration Requisition',
+        time: '10:00',
+        desc: 'Maintenance schedule approved by QA Director.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Pre-dispatch Packing',
+        time: '14:30',
+        desc: 'Placed in climate-controlled flight case with tamper-evident seal.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Scheduled Pickup Window',
+        time: '16:00 • Scheduled',
+        desc: 'Courier vehicle scheduled for arrival at Main Gate Checkpoint.',
+        status: 'pending',
+        icon: 'schedule',
+      },
+    ],
+  },
+  {
+    id: 'MOV-2026-0170',
+    gatePassId: 'GP-2026-0398',
+    assetName: 'HP LaserJet Enterprise',
+    assetTag: 'AST-2024-4421',
+    serialNumber: 'HP-ENT-4421',
+    classification: 'Departmental Printing System',
+    origin: 'Facilities Depot',
+    originZone: 'Storage Room B1',
+    originIcon: 'warehouse',
+    destination: 'Floor 3 Admin Hub',
+    destinationSegment: 'Executive Office Printing Bay',
+    destinationIcon: 'apartment',
+    corridor: 'Gate-04A Main Corridor',
+    department: 'Facilities',
+    initiatedBy: 'David Vance',
+    initiatorInitials: 'DV',
+    initiatorBadge: 'FAC-0941',
+    initiatorEmail: 'david.vance@enterprise.internal',
+    movementDate: '18 Feb 2026, 10:15',
+    status: 'Dispatched',
+    carrierName: 'Facilities Rolling Cart',
+    carrierPlate: 'CART-11',
+    carrierDriver: 'David Vance (#FAC-0941)',
+    justification: 'Replacement for decommissioned legacy multifunction unit.',
+    ttl: 'Authorization TTL: 2 hrs remaining',
+    manifestFiles: [
+      { name: 'Internal_Deployment_GP0398.pdf', size: '610 KB' },
+    ],
+    timeline: [
+      {
+        title: 'Requisition Filed',
+        time: '08:45',
+        desc: 'Facilities replacement request approved.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Dispatched',
+        time: '10:15',
+        desc: 'Loaded onto rolling cart and dispatched from Facilities Depot.',
+        status: 'completed',
+        icon: 'outbox',
+      },
+      {
+        title: 'Destination Delivery',
+        time: 'Pending • Unrecorded',
+        desc: 'Awaiting delivery receipt scan on Floor 3.',
+        status: 'pending',
+        icon: 'schedule',
+      },
+    ],
+  },
+  {
+    id: 'MOV-2026-0168',
+    gatePassId: 'GP-2026-0392',
+    assetName: 'SAN Storage Array Shelf 24-Bay',
+    assetTag: 'AST-2022-8902',
+    serialNumber: 'SN-ARR-9910',
+    classification: 'Datacenter Storage Enclosure',
+    origin: 'Datacenter Hall A',
+    originZone: 'Row 08 Storage Cage',
+    originIcon: 'dns',
+    destination: 'Main Gate Checkpoint',
+    destinationSegment: 'Decommissioning Staging Dock',
+    destinationIcon: 'meeting_room',
+    corridor: 'Server Room 2 Express',
+    department: 'IT Operations',
+    initiatedBy: 'Samantha Reed',
+    initiatorInitials: 'SR',
+    initiatorBadge: 'ITO-8012',
+    initiatorEmail: 'samantha.reed@enterprise.internal',
+    movementDate: '18 Feb 2026, 09:30',
+    status: 'Received',
+    carrierName: 'Secure Logistics Transport',
+    carrierPlate: 'SLT-4912',
+    carrierDriver: 'Transport Team Alpha',
+    justification: 'End-of-life hardware staging for certified cryptographic erasure.',
+    ttl: 'Completed and archived',
+    manifestFiles: [
+      { name: 'Decommission_Manifest_GP0392.pdf', size: '1.5 MB' },
+    ],
+    timeline: [
+      {
+        title: 'Decommission Authorized',
+        time: '07:30',
+        desc: 'Storage retirement signed off by IT Director.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Enclosure Unracked',
+        time: '08:45',
+        desc: 'Chassis unmounted from Datacenter Hall A Row 08.',
+        status: 'completed',
+        icon: 'check',
+      },
+      {
+        title: 'Received at Checkpoint',
+        time: '09:30',
+        desc: 'Delivered to Main Gate Checkpoint staging dock and scanned by Host.',
+        status: 'completed',
+        icon: 'check_circle',
+      },
+    ],
+  },
+];

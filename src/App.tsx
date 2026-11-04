@@ -30,6 +30,7 @@ import EmployeeMyAssignedAssetsPage from './pages/EmployeeMyAssignedAssets';
 import { EmployeeMyConsumptionPage } from './pages/EmployeeMyConsumption';
 import { HostDashboardPage } from './pages/HostDashboard';
 import { HostGatePassesPage } from './pages/HostGatePasses';
+import { HostMovementActivityPage } from './pages/HostMovementActivity';
 import { clearSession, getToken, getTokenExpiry, getUser, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -38,6 +39,7 @@ type Route =
   | 'login'
   | 'forgot-password'
   | 'dashboard'
+  | 'movement'
   | 'create-request'
   | 'my-requests'
   | 'my-requests-details'
@@ -116,6 +118,9 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
         return { name: 'gate-verification', passId: decodeURIComponent(id) };
       }
       return { name: 'gate-pass-details', passId: decodeURIComponent(rest) };
+    }
+    if (path === '/movement' || path === '/movement/' || path === '/movement-activity' || path === '/movement-activity/') {
+      return { name: 'movement' };
     }
     if (path === '/gate-pass' || path === '/gate-pass/') {
       return { name: 'gate-pass' };
@@ -308,13 +313,7 @@ export default function App() {
     }
 
     if (currentUser?.role === 'host' && (subRoute === 'movement' || subRoute === 'movement-activity')) {
-      navigate('/dashboard');
-      setTimeout(() => {
-        const el = document.getElementById('panelMovementOverview');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 60);
+      navigate('/movement');
       return;
     }
 
@@ -438,6 +437,18 @@ export default function App() {
         onSignOut={signOut}
       />
     );
+  }
+
+  // Host Movement Activity Route
+  if (route === 'movement' && getToken()) {
+    if (currentUser?.role === 'host') {
+      return (
+        <HostMovementActivityPage
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
   }
 
   // Gate Pass List Route
