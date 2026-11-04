@@ -29,6 +29,7 @@ import EmployeeRequestDetailsPage from './pages/EmployeeRequestDetails';
 import EmployeeMyAssignedAssetsPage from './pages/EmployeeMyAssignedAssets';
 import { EmployeeMyConsumptionPage } from './pages/EmployeeMyConsumption';
 import { HostDashboardPage } from './pages/HostDashboard';
+import { HostGatePassesPage } from './pages/HostGatePasses';
 import { clearSession, getToken, getTokenExpiry, getUser, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -441,6 +442,14 @@ export default function App() {
 
   // Gate Pass List Route
   if (route === 'gate-pass' && getToken()) {
+    if (currentUser?.role === 'host') {
+      return (
+        <HostGatePassesPage
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
     return (
       <GatePassPage
         onNavigate={handleSubRouteNav}
