@@ -34,6 +34,7 @@ import { HostMovementActivityPage } from './pages/HostMovementActivity';
 import { GuardDashboardPage } from './pages/GuardDashboard';
 import { GuardGateVerificationPage } from './pages/GuardGateVerification';
 import { GuardEntryExitLogsPage } from './pages/GuardEntryExitLogs';
+import { GuardSecurityIncidentsPage } from './pages/GuardSecurityIncidents';
 import { clearSession, getToken, getTokenExpiry, getUser, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -63,6 +64,7 @@ type Route =
   | 'gate-pass-details'
   | 'gate-verification'
   | 'entry-exit-logs'
+  | 'security-incidents'
   | 'reports'
   | 'reports-utilization'
   | 'reports-requests'
@@ -119,6 +121,9 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
     }
     if (path === '/entry-exit-logs' || path === '/entry-exit-logs/' || path === '/logs' || path === '/logs/') {
       return { name: 'entry-exit-logs' };
+    }
+    if (path === '/security-incidents' || path === '/security-incidents/') {
+      return { name: 'security-incidents' };
     }
     // Gate Pass Routes
     if (path.startsWith('/gate-pass/')) {
@@ -216,6 +221,7 @@ export default function App() {
       route !== 'gate-pass-details' &&
       route !== 'gate-verification' &&
       route !== 'entry-exit-logs' &&
+      route !== 'security-incidents' &&
       route !== 'reports' &&
       route !== 'reports-utilization' &&
       route !== 'reports-requests' &&
@@ -299,6 +305,7 @@ export default function App() {
         route !== 'dashboard' &&
         route !== 'gate-verification' &&
         route !== 'entry-exit-logs' &&
+        route !== 'security-incidents' &&
         route !== 'gate-pass' &&
         route !== 'gate-pass-details' &&
         route !== 'login' &&
@@ -343,6 +350,8 @@ export default function App() {
         navigate('/gate-pass/GP-2026-0422/verification');
       } else if (subRoute === 'entry-exit-logs' || subRoute === 'logs') {
         navigate('/entry-exit-logs');
+      } else if (subRoute === 'security-incidents' || subRoute === 'incidents') {
+        navigate('/security-incidents');
       } else if (subRoute === 'gate-pass' || subRoute === 'gate pass') {
         navigate('/gate-pass');
       } else if (subRoute.startsWith('gate-pass/')) {
@@ -427,6 +436,14 @@ export default function App() {
     if (route === 'entry-exit-logs') {
       return (
         <GuardEntryExitLogsPage
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
+    if (route === 'security-incidents') {
+      return (
+        <GuardSecurityIncidentsPage
           onNavigate={handleSubRouteNav}
           onSignOut={signOut}
         />
