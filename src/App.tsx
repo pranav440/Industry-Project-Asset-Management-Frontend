@@ -32,6 +32,7 @@ import { HostDashboardPage } from './pages/HostDashboard';
 import { HostGatePassesPage } from './pages/HostGatePasses';
 import { HostMovementActivityPage } from './pages/HostMovementActivity';
 import { GuardDashboardPage } from './pages/GuardDashboard';
+import { GuardGateVerificationPage } from './pages/GuardGateVerification';
 import { clearSession, getToken, getTokenExpiry, getUser, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -112,7 +113,7 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
       return { name: 'reports' };
     }
     if (path === '/gate-verification' || path === '/gate-verification/') {
-      return { name: 'gate-verification', passId: 'GP-2026-0012' };
+      return { name: 'gate-verification', passId: 'GP-2026-0422' };
     }
     // Gate Pass Routes
     if (path.startsWith('/gate-pass/')) {
@@ -332,7 +333,7 @@ export default function App() {
       if (subRoute === 'guard-dashboard' || subRoute === 'dashboard') {
         navigate('/dashboard');
       } else if (subRoute === 'gate-verification') {
-        navigate('/gate-pass/GP-2026-0012/verification');
+        navigate('/gate-pass/GP-2026-0422/verification');
       } else if (subRoute === 'gate-pass' || subRoute === 'gate pass') {
         navigate('/gate-pass');
       } else if (subRoute.startsWith('gate-pass/')) {
@@ -407,8 +408,8 @@ export default function App() {
     }
     if (route === 'gate-verification') {
       return (
-        <GateVerificationPage
-          passId={routeInfo.passId || 'GP-2026-0012'}
+        <GuardGateVerificationPage
+          passId={routeInfo.passId || 'GP-2026-0422'}
           onNavigate={handleSubRouteNav}
           onSignOut={signOut}
         />

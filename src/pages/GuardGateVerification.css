@@ -1,0 +1,1807 @@
+/* =====================================================================
+   AssetMX Guard Gate Verification Stylesheet
+   Matches approved Stitch screenshot & specification with pixel fidelity
+   ===================================================================== */
+
+.amx-ggv-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 4px 8px 32px 8px;
+  color: #191c1e;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-sizing: border-box;
+}
+
+/* -------------------------------------------------------------
+   Top Bar & Breadcrumbs
+   ------------------------------------------------------------- */
+.amx-ggv-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.amx-ggv-topbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-ggv-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #45464d;
+}
+
+.amx-ggv-crumb-link {
+  color: #45464d;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.amx-ggv-crumb-link:hover {
+  color: #0b1c30;
+}
+
+.amx-ggv-crumb-sep {
+  color: #c6c6cd;
+}
+
+.amx-ggv-crumb-active {
+  color: #191c1e;
+  font-weight: 600;
+}
+
+.amx-ggv-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.amx-ggv-title {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 700;
+  color: #191c1e;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.amx-ggv-node-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background-color: rgba(87, 223, 254, 0.18);
+  color: #006172;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.amx-ggv-node-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #00687a;
+}
+
+.amx-ggv-shift-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background-color: #e6e8ea;
+  color: #45464d;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.amx-ggv-subtitle {
+  font-size: 14px;
+  line-height: 20px;
+  color: #45464d;
+  margin: 0;
+  max-width: 820px;
+}
+
+.amx-ggv-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.amx-ggv-btn-report {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background-color: #ffffff;
+  border: 1px solid rgba(186, 26, 26, 0.25);
+  color: #ba1a1a;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-report:hover {
+  background-color: #ffdad6;
+}
+
+.amx-ggv-btn-scan-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  background-color: #0b1c30;
+  border: none;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(11, 28, 48, 0.25);
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-scan-top:hover {
+  background-color: #131b2e;
+  transform: translateY(-1px);
+}
+
+/* -------------------------------------------------------------
+   Hero Lookup Panel (Manifest Ingestion)
+   ------------------------------------------------------------- */
+.amx-ggv-hero-card {
+  position: relative;
+  border-radius: 12px;
+  background-color: #ffffff;
+  border: 1px solid #e0e3e5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow: hidden;
+}
+
+.amx-ggv-hero-gradient {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 400px;
+  height: 100%;
+  background: radial-gradient(circle at top right, rgba(87, 223, 254, 0.15), transparent 70%);
+  pointer-events: none;
+}
+
+.amx-ggv-hero-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.amx-ggv-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #00687a;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.amx-ggv-hero-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #191c1e;
+  margin: 2px 0 0 0;
+}
+
+.amx-ggv-rfid-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background-color: #f2f4f6;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #45464d;
+}
+
+.amx-ggv-rfid-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #00687a;
+  box-shadow: 0 0 0 3px rgba(87, 223, 254, 0.4);
+  animation: amxRfidPulse 2s infinite ease-in-out;
+}
+
+@keyframes amxRfidPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 0.6;
+  }
+}
+
+.amx-ggv-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.amx-ggv-search-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.amx-ggv-search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #76777d;
+  font-size: 22px;
+  pointer-events: none;
+}
+
+.amx-ggv-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px 12px 48px;
+  border-radius: 8px;
+  background-color: #f2f4f6;
+  border: 1px solid #c6c6cd;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  color: #191c1e;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-search-input:focus {
+  background-color: #ffffff;
+  border-color: #00687a;
+  box-shadow: 0 0 0 3px rgba(0, 104, 122, 0.12);
+}
+
+.amx-ggv-btn-search {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: 8px;
+  background-color: #0b1c30;
+  border: none;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(11, 28, 48, 0.15);
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-search:hover {
+  background-color: #131b2e;
+}
+
+.amx-ggv-btn-scan-qr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  background-color: #e6e8ea;
+  border: 1px solid #c6c6cd;
+  color: #191c1e;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-scan-qr:hover {
+  background-color: #e0e3e5;
+}
+
+.amx-ggv-recent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.amx-ggv-recent-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.amx-ggv-recent-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #76777d;
+}
+
+.amx-ggv-pill {
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background-color: #eceef0;
+  border: 1px solid #e0e3e5;
+  color: #191c1e;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-pill:hover {
+  background-color: #e6e8ea;
+  border-color: #c6c6cd;
+}
+
+.amx-ggv-pill.active {
+  background-color: #0b1c30;
+  color: #ffffff;
+  border-color: #0b1c30;
+}
+
+.amx-ggv-pill-flagged {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background-color: rgba(186, 26, 26, 0.12);
+  border: 1px solid rgba(186, 26, 26, 0.3);
+  color: #ba1a1a;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-pill-flagged:hover {
+  background-color: #ffdad6;
+}
+
+.amx-ggv-recent-subtext {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #76777d;
+}
+
+/* -------------------------------------------------------------
+   Active Gate Pass Metadata Card
+   ------------------------------------------------------------- */
+.amx-ggv-manifest-card {
+  border-radius: 12px;
+  background-color: #ffffff;
+  border: 1px solid #e0e3e5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-ggv-manifest-header {
+  padding: 16px 24px;
+  background-color: #f2f4f6;
+  border-bottom: 1px solid #e0e3e5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.amx-ggv-manifest-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.amx-ggv-pass-id-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.amx-ggv-pass-id-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 20px;
+  font-weight: 700;
+  color: #191c1e;
+  letter-spacing: -0.01em;
+}
+
+.amx-ggv-direction-pill {
+  padding: 4px 10px;
+  border-radius: 4px;
+  background-color: #57dffe;
+  color: #006172;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.amx-ggv-direction-pill.inward {
+  background-color: #d3e4fe;
+  color: #0b1c30;
+}
+
+.amx-ggv-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background-color: #e6e8ea;
+  color: #191c1e;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.amx-ggv-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #00687a;
+}
+
+.amx-ggv-status-dot.flagged {
+  background-color: #ba1a1a;
+}
+
+.amx-ggv-manifest-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.amx-ggv-approver-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  background-color: #e0e3e5;
+  color: #191c1e;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.amx-ggv-approver-icon {
+  font-size: 16px;
+  color: #00687a;
+}
+
+.amx-ggv-btn-cert {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  background-color: #eceef0;
+  border: 1px solid #c6c6cd;
+  color: #45464d;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-cert:hover {
+  background-color: #e6e8ea;
+  color: #191c1e;
+}
+
+.amx-ggv-metadata-grid {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .amx-ggv-metadata-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .amx-ggv-metadata-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.amx-ggv-meta-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amx-ggv-meta-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #76777d;
+}
+
+.amx-ggv-meta-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.amx-ggv-meta-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #e6e8ea;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #191c1e;
+}
+
+.amx-ggv-meta-name-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-ggv-meta-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #191c1e;
+}
+
+.amx-ggv-meta-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #45464d;
+}
+
+.amx-ggv-meta-sub {
+  font-size: 13px;
+  color: #45464d;
+  margin-top: 4px;
+}
+
+.amx-ggv-route-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #191c1e;
+}
+
+.amx-ggv-route-arrow {
+  color: #00687a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.amx-ggv-plate-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: #eceef0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #191c1e;
+  border: 1px solid #c6c6cd;
+}
+
+/* -------------------------------------------------------------
+   Asset Verification & Manifest Table Section
+   ------------------------------------------------------------- */
+.amx-ggv-table-card {
+  border-radius: 12px;
+  background-color: #ffffff;
+  border: 1px solid #e0e3e5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-ggv-table-header {
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  border-bottom: 1px solid #eceef0;
+}
+
+.amx-ggv-table-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.amx-ggv-table-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #191c1e;
+  margin: 0;
+}
+
+.amx-ggv-manifest-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  background-color: rgba(87, 223, 254, 0.2);
+  color: #006172;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.amx-ggv-manifest-summary-badge.all-verified {
+  background-color: #57dffe;
+  color: #006172;
+}
+
+.amx-ggv-table-subtitle {
+  font-size: 14px;
+  color: #45464d;
+  margin: 2px 0 0 0;
+}
+
+.amx-ggv-table-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.amx-ggv-btn-match-all {
+  padding: 6px 14px;
+  border-radius: 8px;
+  background-color: #f2f4f6;
+  border: 1px solid #c6c6cd;
+  color: #191c1e;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-match-all:hover {
+  background-color: #e6e8ea;
+}
+
+.amx-ggv-table-tool-divider {
+  width: 1px;
+  height: 20px;
+  background-color: #e0e3e5;
+}
+
+.amx-ggv-table-hint-pill {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: #eceef0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #45464d;
+}
+
+.amx-ggv-table-lane-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #76777d;
+}
+
+.amx-ggv-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.amx-ggv-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.amx-ggv-table th {
+  padding: 14px 16px;
+  background-color: #f2f4f6;
+  color: #45464d;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e0e3e5;
+  white-space: nowrap;
+}
+
+.amx-ggv-table th.highlight-col {
+  background-color: rgba(230, 232, 234, 0.6);
+  color: #191c1e;
+  font-weight: 700;
+}
+
+.amx-ggv-table td {
+  padding: 16px;
+  border-bottom: 1px solid #eceef0;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.amx-ggv-table tbody tr:hover {
+  background-color: rgba(242, 244, 246, 0.6);
+}
+
+.amx-ggv-table tbody tr.pending-row {
+  background-color: rgba(242, 244, 246, 0.35);
+}
+
+.amx-ggv-tag-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: #191c1e;
+  white-space: nowrap;
+}
+
+.amx-ggv-tag-icon {
+  font-size: 18px;
+  color: #00687a;
+}
+
+.amx-ggv-spec-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-ggv-spec-name {
+  font-weight: 600;
+  color: #191c1e;
+}
+
+.amx-ggv-spec-desc {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #45464d;
+}
+
+.amx-ggv-serial-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.amx-ggv-serial-val {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background-color: #e6e8ea;
+  color: #191c1e;
+}
+
+.amx-ggv-qty-val {
+  padding: 3px 10px;
+  border-radius: 4px;
+  background-color: #eceef0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #191c1e;
+}
+
+.amx-ggv-qty-input {
+  width: 48px;
+  text-align: center;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background-color: #ffffff;
+  border: 1px solid #c6c6cd;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #191c1e;
+  outline: none;
+}
+
+.amx-ggv-qty-input:focus {
+  border-color: #00687a;
+  box-shadow: 0 0 0 2px rgba(0, 104, 122, 0.15);
+}
+
+.amx-ggv-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background-color: rgba(87, 223, 254, 0.2);
+  color: #006172;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.amx-ggv-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background-color: #e6e8ea;
+  color: #45464d;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.amx-ggv-flagged-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background-color: #ffdad6;
+  color: #ba1a1a;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.amx-ggv-btn-rescan {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background-color: #e6e8ea;
+  border: none;
+  color: #45464d;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-rescan:hover {
+  background-color: #e0e3e5;
+  color: #191c1e;
+}
+
+.amx-ggv-pending-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-ggv-btn-verify-asset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 8px;
+  background-color: #0b1c30;
+  border: none;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(11, 28, 48, 0.2);
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-verify-asset:hover:not(:disabled) {
+  background-color: #131b2e;
+}
+
+.amx-ggv-btn-verify-asset:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.amx-ggv-btn-flag-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #76777d;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-flag-item:hover {
+  background-color: rgba(186, 26, 26, 0.15);
+  color: #ba1a1a;
+}
+
+.amx-ggv-table-footer-notice {
+  padding: 14px 24px;
+  background-color: rgba(242, 244, 246, 0.6);
+  border-top: 1px solid #eceef0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #45464d;
+}
+
+.amx-ggv-footer-crypto {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* -------------------------------------------------------------
+   Two-Column Operational Security Inspection & Decision Console
+   ------------------------------------------------------------- */
+.amx-ggv-two-col {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .amx-ggv-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Left: Perimeter Inspection Checklist */
+.amx-ggv-checklist-card {
+  border-radius: 12px;
+  background-color: #ffffff;
+  border: 1px solid #e0e3e5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.amx-ggv-checklist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amx-ggv-checklist-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-ggv-checklist-title-icon {
+  font-size: 22px;
+  color: #00687a;
+}
+
+.amx-ggv-checklist-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #191c1e;
+  margin: 0;
+}
+
+.amx-ggv-checklist-subtitle {
+  font-size: 14px;
+  color: #45464d;
+  margin: 0;
+}
+
+.amx-ggv-checklist-counter {
+  padding: 4px 12px;
+  border-radius: 4px;
+  background-color: #e6e8ea;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #191c1e;
+}
+
+.amx-ggv-checklist-counter.complete {
+  background-color: #57dffe;
+  color: #006172;
+}
+
+.amx-ggv-checklist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.amx-ggv-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background-color: #f2f4f6;
+  border: 1px solid #eceef0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-check-item:hover {
+  background-color: #eceef0;
+}
+
+.amx-ggv-check-item.locked {
+  cursor: not-allowed;
+  opacity: 0.95;
+}
+
+.amx-ggv-check-item input[type='checkbox'] {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  accent-color: #00687a;
+  cursor: pointer;
+}
+
+.amx-ggv-check-item input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+
+.amx-ggv-check-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.amx-ggv-check-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #191c1e;
+}
+
+.amx-ggv-check-desc {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #45464d;
+  margin-top: 2px;
+}
+
+.amx-ggv-check-icon {
+  font-size: 20px;
+  margin-left: auto;
+  color: #76777d;
+}
+
+.amx-ggv-check-icon.checked {
+  color: #00687a;
+}
+
+/* Right: Barrier Release Console */
+.amx-ggv-barrier-card {
+  border-radius: 12px;
+  background-color: #ffffff;
+  border: 1px solid #e0e3e5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.amx-ggv-barrier-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f2f4f6;
+  padding-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.amx-ggv-decision-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #76777d;
+}
+
+.amx-ggv-barrier-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #191c1e;
+  margin: 2px 0 0 0;
+}
+
+.amx-ggv-barrier-head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amx-ggv-barrier-dir-pill {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: #eceef0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #191c1e;
+}
+
+.amx-ggv-decision-pill {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.amx-ggv-decision-pill.in-progress {
+  background-color: #e6e8ea;
+  color: #45464d;
+}
+
+.amx-ggv-decision-pill.ready {
+  background-color: #57dffe;
+  color: #006172;
+}
+
+.amx-ggv-decision-pill.open {
+  background-color: #d3e4fe;
+  color: #0b1c30;
+}
+
+.amx-ggv-barrier-widget {
+  padding: 16px;
+  border-radius: 12px;
+  background-color: #f2f4f6;
+  border: 1px solid #e0e3e5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-ggv-barrier-status-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.amx-ggv-barrier-light {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.amx-ggv-barrier-light.locked {
+  background-color: #ba1a1a;
+  box-shadow: 0 0 0 4px rgba(186, 26, 26, 0.25);
+  animation: amxPulseRed 1.8s infinite ease-in-out;
+}
+
+.amx-ggv-barrier-light.ready {
+  background-color: #00687a;
+  box-shadow: 0 0 0 4px rgba(0, 104, 122, 0.25);
+}
+
+.amx-ggv-barrier-light.open {
+  background-color: #57dffe;
+  box-shadow: 0 0 0 6px rgba(87, 223, 254, 0.4);
+  animation: amxPulseTeal 1.2s infinite ease-in-out;
+}
+
+@keyframes amxPulseRed {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(186, 26, 26, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(186, 26, 26, 0.4);
+  }
+}
+
+@keyframes amxPulseTeal {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(87, 223, 254, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(87, 223, 254, 0.6);
+  }
+}
+
+.amx-ggv-barrier-name-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-ggv-barrier-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #191c1e;
+}
+
+.amx-ggv-barrier-state-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #45464d;
+}
+
+.amx-ggv-barrier-relay {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #76777d;
+}
+
+.amx-ggv-remarks-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amx-ggv-remarks-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-ggv-remarks-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #76777d;
+}
+
+.amx-ggv-remarks-hint {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #ba1a1a;
+}
+
+.amx-ggv-remarks-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: 8px;
+  background-color: #f2f4f6;
+  border: 1px solid #c6c6cd;
+  font-size: 14px;
+  line-height: 20px;
+  color: #191c1e;
+  outline: none;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 72px;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-remarks-textarea:focus {
+  background-color: #ffffff;
+  border-color: #00687a;
+  box-shadow: 0 0 0 3px rgba(0, 104, 122, 0.12);
+}
+
+.amx-ggv-remarks-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #76777d;
+}
+
+.amx-ggv-barrier-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.amx-ggv-btn-release {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background-color: #0b1c30;
+  border: none;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(11, 28, 48, 0.2);
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-release:hover:not(:disabled) {
+  background-color: #131b2e;
+  transform: translateY(-1px);
+}
+
+.amx-ggv-btn-release:disabled {
+  background-color: rgba(11, 28, 48, 0.4);
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.amx-ggv-release-hint {
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #76777d;
+}
+
+.amx-ggv-sub-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.amx-ggv-btn-flag-barrier {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background-color: rgba(186, 26, 26, 0.12);
+  border: 1px solid rgba(186, 26, 26, 0.3);
+  color: #ba1a1a;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-flag-barrier:hover {
+  background-color: #ffdad6;
+}
+
+.amx-ggv-flag-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 400;
+  color: #93000a;
+}
+
+.amx-ggv-btn-cancel-barrier {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background-color: #eceef0;
+  border: 1px solid #c6c6cd;
+  color: #45464d;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.amx-ggv-btn-cancel-barrier:hover {
+  background-color: #e6e8ea;
+  color: #191c1e;
+}
+
+.amx-ggv-safety-prompt {
+  padding: 12px;
+  border-radius: 8px;
+  background-color: rgba(242, 244, 246, 0.8);
+  border: 1px solid #e0e3e5;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #45464d;
+}
+
+.amx-ggv-safety-icon {
+  font-size: 18px;
+  color: #00687a;
+  margin-top: 2px;
+}
+
+.amx-ggv-safety-text {
+  font-size: 12px;
+  line-height: 18px;
+  color: #45464d;
+}
+
+/* -------------------------------------------------------------
+   Recent Verification Audit Trail Section
+   ------------------------------------------------------------- */
+.amx-ggv-audit-card {
+  border-radius: 12px;
+  background-color: #ffffff;
+  border: 1px solid #e0e3e5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-ggv-audit-head {
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom: 1px solid #eceef0;
+}
+
+.amx-ggv-audit-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #191c1e;
+  margin: 0;
+}
+
+.amx-ggv-audit-subtitle {
+  font-size: 14px;
+  color: #45464d;
+  margin: 2px 0 0 0;
+}
+
+.amx-ggv-audit-total-chip {
+  padding: 4px 12px;
+  border-radius: 4px;
+  background-color: #eceef0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #45464d;
+}
+
+.amx-ggv-audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.amx-ggv-audit-table th {
+  padding: 14px 16px;
+  background-color: #f2f4f6;
+  color: #45464d;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e0e3e5;
+}
+
+.amx-ggv-audit-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #eceef0;
+  font-size: 14px;
+}
+
+.amx-ggv-audit-table tbody tr:hover {
+  background-color: rgba(242, 244, 246, 0.4);
+}
+
+.amx-ggv-audit-pass-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #191c1e;
+}
+
+.amx-ggv-audit-dir {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #45464d;
+}
+
+.amx-ggv-audit-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #191c1e;
+}
+
+.amx-ggv-audit-guard {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #45464d;
+  text-align: right;
+}
+
+/* -------------------------------------------------------------
+   Role Boundary Disclaimer Banner
+   ------------------------------------------------------------- */
+.amx-ggv-boundary-banner {
+  border-radius: 12px;
+  background-color: rgba(230, 232, 234, 0.4);
+  border: 1px solid #e0e3e5;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.amx-ggv-boundary-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.amx-ggv-boundary-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #e0e3e5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #45464d;
+}
+
+.amx-ggv-boundary-text-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.amx-ggv-boundary-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #191c1e;
+}
+
+.amx-ggv-boundary-desc {
+  font-size: 12px;
+  line-height: 18px;
+  color: #45464d;
+  max-width: 900px;
+  margin-top: 2px;
+}
+
+.amx-ggv-boundary-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #76777d;
+}
+
+.amx-ggv-boundary-tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #57dffe;
+}
+
+/* -------------------------------------------------------------
+   Toast Notification
+   ------------------------------------------------------------- */
+.amx-ggv-toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  background-color: #0b1c30;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(11, 28, 48, 0.35);
+  animation: amxToastSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.amx-ggv-toast-container.error {
+  background-color: #93000a;
+}
+
+.amx-ggv-toast-icon {
+  font-size: 20px;
+  color: #57dffe;
+}
+
+.amx-ggv-toast-icon.error {
+  color: #ffdad6;
+}
+
+@keyframes amxToastSlideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* -------------------------------------------------------------
+   Modals (Scanner & Auth Cert)
+   ------------------------------------------------------------- */
+.amx-ggv-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(11, 28, 48, 0.65);
+  backdrop-filter: blur(3px);
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.amx-ggv-modal {
+  width: 100%;
+  max-width: 540px;
+  background-color: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e0e3e5;
+  box-shadow: 0 16px 48px rgba(11, 28, 48, 0.25);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: amxModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes amxModalPop {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.amx-ggv-modal-header {
+  padding: 18px 24px;
+  background-color: #f2f4f6;
+  border-bottom: 1px solid #e0e3e5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-ggv-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #191c1e;
+  margin: 0;
+}
+
+.amx-ggv-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  color: #76777d;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.amx-ggv-modal-close:hover {
+  background-color: #e6e8ea;
+  color: #191c1e;
+}
+
+.amx-ggv-modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.amx-ggv-scanner-frame {
+  height: 220px;
+  border-radius: 12px;
+  background-color: #0b1c30;
+  border: 2px dashed #00687a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+}
+
+.amx-ggv-scanner-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #57dffe;
+  box-shadow: 0 0 8px #57dffe;
+  animation: amxScanLaser 2s infinite linear;
+}
+
+@keyframes amxScanLaser {
+  0% {
+    top: 10%;
+  }
+  50% {
+    top: 90%;
+  }
+  100% {
+    top: 10%;
+  }
+}
+
+.amx-ggv-modal-footer {
+  padding: 16px 24px;
+  background-color: #f2f4f6;
+  border-top: 1px solid #e0e3e5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
