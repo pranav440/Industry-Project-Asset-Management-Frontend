@@ -31,28 +31,28 @@ export const Header: React.FC<HeaderProps> = ({
     resolvedRole === 'employee'
       ? (currentUser?.full_name || 'Marcus Vance')
       : resolvedRole === 'host'
-        ? (currentUser?.full_name || 'Sarah Jenkins')
-        : resolvedRole === 'guard'
-          ? (currentUser?.full_name || 'Security Guard')
-          : currentUser?.full_name
+      ? (currentUser?.full_name || 'Sarah Jenkins')
+      : resolvedRole === 'guard'
+      ? (currentUser?.full_name || 'Marcus Vance')
+      : currentUser?.full_name
   );
   const resolvedSubtitle = userRoleSubtitle ?? (
     resolvedRole === 'employee'
       ? 'Product Design (Employee)'
       : resolvedRole === 'host'
-        ? 'Host Security Officer'
-        : resolvedRole === 'guard'
-          ? 'Security Officer (Guard)'
-          : 'Administrator (Admin)'
+      ? 'Host Security Officer'
+      : resolvedRole === 'guard'
+      ? 'Checkpoint Security Guard (Gate 1)'
+      : 'Administrator (Admin)'
   );
   const resolvedPlaceholder = searchPlaceholder ?? (
-    resolvedRole === 'host'
+    resolvedRole === 'guard'
+      ? 'Search gate passes, badges, license plates, assets...'
+      : resolvedRole === 'host'
       ? 'Search gate passes, assets, movement...'
       : resolvedRole === 'employee'
-        ? 'Search my requests, assets...'
-        : resolvedRole === 'guard'
-          ? 'Search gate passes by ID, requester, destination...'
-          : 'Search assets, requests...'
+      ? 'Search my requests, assets...'
+      : 'Search assets, requests...'
   );
 
   useEffect(() => {
@@ -162,7 +162,7 @@ export const Header: React.FC<HeaderProps> = ({
           {resolvedRole === 'host' ? (
             <span style={{ letterSpacing: '0.04em' }}>SJ</span>
           ) : resolvedRole === 'guard' ? (
-            <span style={{ letterSpacing: '0.04em' }}>GD</span>
+            <span style={{ letterSpacing: '0.04em' }}>MV</span>
           ) : (
             <img
               src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_gJW4-CiPC6EvQEY0S7_1SjwP3YwK8dtCA94bMz6dNHkDEJvQQXGRnVBF6vaL-qVwSdQn1hmhw_OkKiEMTxo-2zPwn8E0U-d1KXH9wsXNkN_xhPX4c-CnzrwSanbjSh4U2QysBM8wosable9WgGubS-OS0fgNgQwgirHge94FKuGZfwVx4-KtZC7Uy8-VhEajhmCA_jOaXSK3hoU1S-PUHIbbeY0MMyx-Sm5Pb25C_eqf01L-IJgMmw"

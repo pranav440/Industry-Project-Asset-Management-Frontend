@@ -48,16 +48,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const guardNavItems = [
-    { label: 'Gate Passes', path: 'gate-pass', icon: 'confirmation_number', fill: true },
+    { label: 'Guard Dashboard', path: 'dashboard', icon: 'security', fill: true },
+    { label: 'Gate Verification', path: 'gate-verification', icon: 'verified_user' },
+    { label: 'Entry / Exit Logs', path: 'entry-exit-logs', icon: 'swap_horiz' },
+    { label: 'Security Incidents', path: 'security-incidents', icon: 'report_problem' },
   ];
 
   const navItems = isEmployee
     ? employeeNavItems
     : isHost
-      ? hostNavItems
-      : isGuard
-        ? guardNavItems
-        : adminNavItems;
+    ? hostNavItems
+    : isGuard
+    ? guardNavItems
+    : adminNavItems;
 
   const handleNavClick = (e: React.MouseEvent, path: string) => {
     e.preventDefault();
@@ -78,7 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Brand Header */}
       <div className="amx-sidebar-brand">
         <span className="material-symbols-outlined amx-brand-logo-icon" aria-hidden="true">
-          {isEmployee ? 'inventory_2' : isGuard ? 'local_police' : 'dataset'}
+          {isEmployee ? 'inventory_2' : isGuard ? 'security' : 'dataset'}
         </span>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -110,9 +113,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   letterSpacing: '0.06em',
                   padding: '2px 7px',
                   borderRadius: '4px',
-                  backgroundColor: 'rgba(56, 189, 248, 0.16)',
-                  color: '#38bdf8',
-                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  backgroundColor: 'rgba(87, 223, 254, 0.16)',
+                  color: 'var(--amx-dash-cyan-bright, #57dffe)',
+                  border: '1px solid rgba(87, 223, 254, 0.3)',
                   lineHeight: 1.2,
                 }}
               >
@@ -121,18 +124,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
           <p className="amx-brand-subtitle">
-            {isEmployee
-              ? 'Employee Portal'
-              : isGuard
-                ? 'Security Checkpoint'
-                : isHost
-                  ? 'Operations Portal'
-                  : 'Enterprise Management'}
+            {isEmployee ? 'Employee Portal' : isGuard ? 'Checkpoint Security' : 'Enterprise Management'}
           </p>
         </div>
       </div>
 
-      {/* Action CTA for Admin or Section Label for Host / Employee */}
+      {/* Action CTA for Admin or Section Label for Host / Guard / Employee */}
       {isHost ? (
         <div className="amx-sidebar-section-header" style={{ padding: '6px 24px 10px 24px' }}>
           <span
@@ -158,7 +155,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               color: 'var(--amx-dash-navy-muted, #8b95ad)',
             }}
           >
-            Security Checkpoint
+            Checkpoint Operations
           </span>
         </div>
       ) : !isEmployee ? (
@@ -225,7 +222,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Utility Footer */}
       <div className="amx-sidebar-footer">
-        {isHost && (
+        {(isHost || isGuard) && (
           <div className="amx-sidebar-section-header" style={{ padding: '0 24px 8px 24px' }}>
             <span
               style={{
@@ -249,7 +246,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={(e) => handleNavClick(e, 'support')}
               data-path="support"
             >
-              <span className="material-symbols-outlined" aria-hidden="true">contact_support</span>
+              <span className="material-symbols-outlined" aria-hidden="true">help_outline</span>
               <span>Support</span>
             </a>
           </li>
@@ -266,7 +263,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </a>
           </li>
         </ul>
-        {isHost && (
+        {isGuard ? (
+          <div
+            className="amx-sidebar-guard-version"
+            style={{
+              padding: '12px 24px 8px 24px',
+              borderTop: '1px solid rgba(139, 149, 173, 0.15)',
+              marginTop: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--amx-dash-cyan-bright, #57dffe)',
+                  display: 'inline-block',
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: 'JetBrains Mono, monospace',
+                  fontSize: '11px',
+                  color: 'var(--amx-dash-navy-muted, #8b95ad)',
+                }}
+              >
+                Checkpoint Gate-01
+              </span>
+            </div>
+            <span
+              style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: '10px',
+                color: 'rgba(139, 149, 173, 0.7)',
+                paddingLeft: '12px',
+              }}
+            >
+              v2.4.12-ent
+            </span>
+          </div>
+        ) : isHost && (
           <div
             className="amx-sidebar-host-version"
             style={{

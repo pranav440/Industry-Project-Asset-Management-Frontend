@@ -31,6 +31,7 @@ import { EmployeeMyConsumptionPage } from './pages/EmployeeMyConsumption';
 import { HostDashboardPage } from './pages/HostDashboard';
 import { HostGatePassesPage } from './pages/HostGatePasses';
 import { HostMovementActivityPage } from './pages/HostMovementActivity';
+import { GuardDashboardPage } from './pages/GuardDashboard';
 import { clearSession, getToken, getTokenExpiry, getUser, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -109,6 +110,9 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
     }
     if (path === '/reports' || path === '/reports/') {
       return { name: 'reports' };
+    }
+    if (path === '/gate-verification' || path === '/gate-verification/') {
+      return { name: 'gate-verification', passId: 'GP-2026-0012' };
     }
     // Gate Pass Routes
     if (path.startsWith('/gate-pass/')) {
@@ -283,15 +287,17 @@ export default function App() {
         window.history.replaceState({}, '', '/dashboard');
         setRouteInfo({ name: 'dashboard' });
       }
-
       if (
         user?.role === 'guard' &&
+        route !== 'dashboard' &&
+        route !== 'gate-verification' &&
         route !== 'gate-pass' &&
         route !== 'gate-pass-details' &&
-        route !== 'gate-verification'
+        route !== 'login' &&
+        route !== 'forgot-password'
       ) {
-        window.history.replaceState({}, '', '/gate-pass');
-        setRouteInfo({ name: 'gate-pass' });
+        window.history.replaceState({}, '', '/dashboard');
+        setRouteInfo({ name: 'dashboard' });
       }
     }
   }, [route, sessionChecked]);
@@ -323,14 +329,18 @@ export default function App() {
     }
 
     if (currentUser?.role === 'guard') {
-      if (subRoute === 'gate-pass' || subRoute === 'gate pass' || subRoute === 'dashboard') {
+      if (subRoute === 'guard-dashboard' || subRoute === 'dashboard') {
+        navigate('/dashboard');
+      } else if (subRoute === 'gate-verification') {
+        navigate('/gate-pass/GP-2026-0012/verification');
+      } else if (subRoute === 'gate-pass' || subRoute === 'gate pass') {
         navigate('/gate-pass');
       } else if (subRoute.startsWith('gate-pass/')) {
         navigate(`/${subRoute}`);
-      } else if (subRoute === 'signout' || subRoute === 'login') {
+      } else if (subRoute === 'signout' || subRoute === 'login' || subRoute === 'sign-out') {
         signOut();
       } else {
-        navigate('/gate-pass');
+        navigate('/dashboard');
       }
       return;
     }
@@ -385,8 +395,16 @@ export default function App() {
     return null;
   }
 
-  // Guard Role Route Boundary: Guard is restricted to Gate Pass workflows
+  // Guard Role Route Boundary: Guard Dashboard and Gate Pass workflows
   if (currentUser?.role === 'guard' && getToken()) {
+    if (route === 'dashboard') {
+      return (
+        <GuardDashboardPage
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
     if (route === 'gate-verification') {
       return (
         <GateVerificationPage
@@ -405,8 +423,16 @@ export default function App() {
         />
       );
     }
+    if (route === 'gate-pass') {
+      return (
+        <GatePassPage
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
     return (
-      <GatePassPage
+      <GuardDashboardPage
         onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />
@@ -664,6 +690,15 @@ export default function App() {
       );
     }
 
+    if (currentUser?.role === 'guard') {
+      return (
+        <GuardDashboardPage
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
+
     return (
       <DashboardPage
         onNavigate={handleSubRouteNav}
@@ -727,14 +762,7 @@ export default function App() {
   return (
     <LoginPage
       onForgot={() => navigate('/forgot-password')}
-      onSignIn={() => {
-        const user = getUser();
-        if (user?.role === 'guard') {
-          navigate('/gate-pass');
-        } else {
-          navigate('/dashboard');
-        }
-      }}
+      onSignIn={() => navigate('/dashboard')}
     />
   );
 }
