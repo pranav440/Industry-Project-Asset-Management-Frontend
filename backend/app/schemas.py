@@ -133,6 +133,15 @@ class AssetTransferRequest(BaseModel):
     destination_location: str = Field(min_length=1, max_length=255)
     new_custodian: str = Field(min_length=1, max_length=255)
     transfer_reason: str | None = Field(default=None, max_length=500)
+    qr_code: str = Field(min_length=1, max_length=500)
+
+    @field_validator("qr_code")
+    @classmethod
+    def validate_qr_code(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("QR code cannot be empty")
+        return s
 
 
 class AssetMovementOut(BaseModel):
@@ -462,6 +471,8 @@ class GatePassOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     history: list[GatePassHistoryOut] = Field(default_factory=list)
+    qr_code_value: str | None = None
+    qr_code_data_url: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -492,6 +503,36 @@ class GatePassVerificationRequest(BaseModel):
     exit_notes: str | None = Field(default=None, max_length=2000)
     entry_gate: str | None = Field(default=None, min_length=1, max_length=120)
     entry_notes: str | None = Field(default=None, max_length=2000)
+    qr_code: str = Field(min_length=1, max_length=500)
+
+    @field_validator("qr_code")
+    @classmethod
+    def validate_qr_code(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("QR code cannot be empty")
+        return s
+
+class GatePassQRValidateRequest(BaseModel):
+    qr_code: str = Field(min_length=1, max_length=500)
+    expected_pass_id: str | None = Field(default=None, max_length=64)
+    target_action: Literal["exit", "entry", "inspect"] = "inspect"
+
+
+class GatePassQRValidationOut(BaseModel):
+    valid: bool
+    pass_id: str | None = None
+    pass_type: str | None = None
+    status: str | None = None
+    asset_or_item: str | None = None
+    quantity: int | None = None
+    destination: str | None = None
+    requester_name: str | None = None
+    action_eligible: bool = False
+    eligibility_reason: str | None = None
+    resolved_format: str | None = None
+    message: str
+
 
 
 class GatePassEscalationRequest(BaseModel):

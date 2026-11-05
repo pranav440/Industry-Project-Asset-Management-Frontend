@@ -283,6 +283,16 @@ export default function App() {
         window.history.replaceState({}, '', '/dashboard');
         setRouteInfo({ name: 'dashboard' });
       }
+
+      if (
+        user?.role === 'guard' &&
+        route !== 'gate-pass' &&
+        route !== 'gate-pass-details' &&
+        route !== 'gate-verification'
+      ) {
+        window.history.replaceState({}, '', '/gate-pass');
+        setRouteInfo({ name: 'gate-pass' });
+      }
     }
   }, [route, sessionChecked]);
 
@@ -308,6 +318,19 @@ export default function App() {
       } else {
         // Unimplemented employee subroutes remain on dashboard for this phase
         navigate('/dashboard');
+      }
+      return;
+    }
+
+    if (currentUser?.role === 'guard') {
+      if (subRoute === 'gate-pass' || subRoute === 'gate pass' || subRoute === 'dashboard') {
+        navigate('/gate-pass');
+      } else if (subRoute.startsWith('gate-pass/')) {
+        navigate(`/${subRoute}`);
+      } else if (subRoute === 'signout' || subRoute === 'login') {
+        signOut();
+      } else {
+        navigate('/gate-pass');
       }
       return;
     }
@@ -360,6 +383,34 @@ export default function App() {
 
   if (!sessionChecked) {
     return null;
+  }
+
+  // Guard Role Route Boundary: Guard is restricted to Gate Pass workflows
+  if (currentUser?.role === 'guard' && getToken()) {
+    if (route === 'gate-verification') {
+      return (
+        <GateVerificationPage
+          passId={routeInfo.passId || 'GP-2026-0012'}
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
+    if (route === 'gate-pass-details') {
+      return (
+        <GatePassDetailsPage
+          passId={routeInfo.passId || 'GP-2026-0012'}
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
+    return (
+      <GatePassPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
   }
 
   // Reports Routes
@@ -676,7 +727,14 @@ export default function App() {
   return (
     <LoginPage
       onForgot={() => navigate('/forgot-password')}
-      onSignIn={() => navigate('/dashboard')}
+      onSignIn={() => {
+        const user = getUser();
+        if (user?.role === 'guard') {
+          navigate('/gate-pass');
+        } else {
+          navigate('/dashboard');
+        }
+      }}
     />
   );
 }

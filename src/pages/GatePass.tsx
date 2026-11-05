@@ -24,6 +24,8 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
   onSignOut,
 }) => {
   const currentUser = getUser();
+  const isGuard = currentUser?.role === 'guard';
+  const canCreate = !isGuard && (currentUser?.role === 'admin' || currentUser?.role === 'superadmin');
   const [passes, setPasses] = useState<GatePassItemData[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [passTypeFilter, setPassTypeFilter] = useState('');
@@ -176,6 +178,18 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
   };
 
   const handleNav = (subRoute: string) => {
+    if (isGuard) {
+      if (subRoute === 'gate-pass' || subRoute === 'gate pass' || subRoute === 'dashboard') {
+        onNavigate?.('gate-pass');
+      } else if (subRoute.startsWith('gate-pass/')) {
+        onNavigate?.(subRoute);
+      } else if (subRoute === 'signout' || subRoute === 'login') {
+        onSignOut?.();
+      } else {
+        onNavigate?.('gate-pass');
+      }
+      return;
+    }
     if (subRoute === 'dashboard') {
       onNavigate?.('dashboard');
     } else if (subRoute === 'assets') {
@@ -196,6 +210,10 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
 
   const handleCreateGatePass = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCreate) {
+      showToast('Permission restricted: Gate pass creation requires Administrator authorization.');
+      return;
+    }
     if (!createAsset.trim() || !createDestination.trim() || !createMovementDate) {
       showToast('Please complete all required fields.');
       return;
@@ -243,7 +261,7 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
       currentNav="Gate Pass"
       role={currentUser?.role}
       userName={currentUser?.full_name}
-      userRoleSubtitle={currentUser?.role === 'host' ? 'Host Security Officer' : currentUser?.role === 'guard' ? 'Security Guard' : undefined}
+      userRoleSubtitle={currentUser?.role === 'host' ? 'Host Security Officer' : currentUser?.role === 'guard' ? 'Security Officer (Guard)' : undefined}
       onNavigate={handleNav}
       onSignOut={onSignOut}
       onSearch={(q) => {
@@ -252,13 +270,13 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
       }}
       searchValue={searchQuery}
       searchPlaceholder="Search gate passes by ID, requester, asset, destination..."
-      onAddAsset={() => onNavigate?.('assets/new')}
+      onAddAsset={canCreate ? () => onNavigate?.('assets/new') : undefined}
       onNotificationsClick={() =>
         showToast('1 Alert: 1 Gate pass pending clearance review.')
       }
       onHelpClick={() => showToast('AssetMX Gate Pass Verification Manual.')}
       onProfileClick={() =>
-        showToast(`Signed in as: ${currentUser?.full_name || 'Administrator'} (${currentUser?.email || ''}) — Role: ${currentUser?.role || 'admin'}`)
+        showToast(`Signed in as: ${currentUser?.full_name || (isGuard ? 'Security Guard' : 'Administrator')} (${currentUser?.email || ''}) — Role: ${currentUser?.role || 'admin'}`)
       }
     >
       {/* Toast Notification */}
@@ -298,7 +316,7 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
           <div className="amx-gatepass-title-area">
             <h2 className="amx-gatepass-title">Gate Pass</h2>
             <p className="amx-gatepass-subtitle">
-              Monitor and manage organizational gate passes.
+              {isGuard ? 'Inspect and verify organizational gate passes at perimeter checkpoints.' : 'Monitor and manage organizational gate passes.'}
             </p>
           </div>
           <div className="amx-gatepass-header-actions">
@@ -313,17 +331,19 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
               </span>
               <span>Export</span>
             </button>
-            <button
-              type="button"
-              className="amx-btn-primary"
-              onClick={() => setIsCreateModalOpen(true)}
-              aria-label="Create Gate Pass"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
-                add
-              </span>
-              <span>Create Gate Pass</span>
-            </button>
+            {canCreate && (
+              <button
+                type="button"
+                className="amx-btn-primary"
+                onClick={() => setIsCreateModalOpen(true)}
+                aria-label="Create Gate Pass"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
+                  add
+                </span>
+                <span>Create Gate Pass</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -669,7 +689,7 @@ export const GatePassPage: React.FC<GatePassPageProps> = ({
       {/* ================================================================= */}
       {/* CREATE GATE PASS MODAL (Minimal per spec) */}
       {/* ================================================================= */}
-      {isCreateModalOpen && (
+      {canCreate && isCreateModalOpen && (
         <div className="amx-modal-backdrop" onClick={() => setIsCreateModalOpen(false)}>
           <div
             className="amx-modal-dialog"

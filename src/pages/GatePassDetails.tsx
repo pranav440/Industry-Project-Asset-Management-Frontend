@@ -58,6 +58,18 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
   };
 
   const handleNav = (subRoute: string) => {
+    if (isGuard) {
+      if (subRoute === 'gate-pass' || subRoute === 'gate pass' || subRoute === 'dashboard') {
+        onNavigate?.('gate-pass');
+      } else if (subRoute.startsWith('gate-pass/')) {
+        onNavigate?.(subRoute);
+      } else if (subRoute === 'signout' || subRoute === 'login') {
+        onSignOut?.();
+      } else {
+        onNavigate?.('gate-pass');
+      }
+      return;
+    }
     if (subRoute === 'dashboard') {
       onNavigate?.('dashboard');
     } else if (subRoute === 'assets') {
@@ -100,9 +112,9 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
       const updated = modalMode === 'Override'
         ? await overrideGatePass(passId, { note: note || undefined })
         : await decideGatePass(passId, {
-            target_status: modalMode === 'Approve' ? 'Approved' : 'Rejected',
-            note: note || undefined,
-          });
+          target_status: modalMode === 'Approve' ? 'Approved' : 'Rejected',
+          note: note || undefined,
+        });
 
       setGatePass(mapGatePassApiRecord(updated));
       setIsDecisionModalOpen(false);
@@ -112,10 +124,10 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
       showToast(status === 409
         ? 'This gate pass state change is not allowed.'
         : status === 422
-        ? 'The decision payload is invalid.'
-        : error instanceof Error
-        ? error.message
-        : 'Unable to update the gate pass.');
+          ? 'The decision payload is invalid.'
+          : error instanceof Error
+            ? error.message
+            : 'Unable to update the gate pass.');
     }
   };
 
@@ -124,16 +136,16 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
       currentNav="Gate Pass"
       role={currentUser?.role}
       userName={currentUser?.full_name}
-      userRoleSubtitle={currentUser?.role === 'host' ? 'Host Security Officer' : currentUser?.role === 'guard' ? 'Security Guard' : undefined}
+      userRoleSubtitle={currentUser?.role === 'host' ? 'Host Security Officer' : currentUser?.role === 'guard' ? 'Security Officer (Guard)' : undefined}
       onNavigate={handleNav}
       onSignOut={onSignOut}
-      onAddAsset={() => onNavigate?.('assets/new')}
+      onAddAsset={isAdmin ? () => onNavigate?.('assets/new') : undefined}
       onNotificationsClick={() =>
         showToast('1 Alert: Gate pass record notification.')
       }
       onHelpClick={() => showToast('AssetMX Gate Pass Verification Manual.')}
       onProfileClick={() =>
-        showToast(`Signed in as: ${currentUser?.full_name || 'Administrator'} (${currentUser?.email || ''}) — Role: ${currentUser?.role || 'admin'}`)
+        showToast(`Signed in as: ${currentUser?.full_name || (isGuard ? 'Security Guard' : 'Administrator')} (${currentUser?.email || ''}) — Role: ${currentUser?.role || 'admin'}`)
       }
     >
       {/* Toast Notification */}
@@ -407,6 +419,28 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
                   <span className="amx-kv-value">{gatePass.department}</span>
                 </div>
               </div>
+
+              {gatePass.qrCodeDataUrl && (
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--amx-dash-border-light)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <img
+                    src={gatePass.qrCodeDataUrl}
+                    alt={`QR Code for ${gatePass.id}`}
+                    style={{ width: '92px', height: '92px', borderRadius: '4px', border: '1px solid var(--amx-dash-border-light)' }}
+                  />
+                  <div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--amx-dash-text)' }}>
+                      Official Gate Pass QR Tag
+                    </div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: 'var(--amx-dash-text-muted)', marginTop: '2px' }}>
+                      {gatePass.qrCodeValue || `assetmx:pass:${gatePass.id}`}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#059669', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>verified</span>
+                      <span>Bound to Pass (SRS QR-03 Checkpoint Authenticated)</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -567,16 +601,16 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
                       {evt.action.includes('Approved') || evt.action.includes('Approval')
                         ? 'check'
                         : evt.action.includes('Reject')
-                        ? 'close'
-                        : evt.action.includes('Override')
-                        ? 'rule'
-                        : evt.action.includes('Escalation')
-                        ? 'warning'
-                        : evt.action.includes('Exit')
-                        ? 'output'
-                        : evt.action.includes('Entry')
-                        ? 'input'
-                        : 'schedule'}
+                          ? 'close'
+                          : evt.action.includes('Override')
+                            ? 'rule'
+                            : evt.action.includes('Escalation')
+                              ? 'warning'
+                              : evt.action.includes('Exit')
+                                ? 'output'
+                                : evt.action.includes('Entry')
+                                  ? 'input'
+                                  : 'schedule'}
                     </span>
                   </div>
                   <div className="amx-timeline-content">
@@ -634,11 +668,10 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
                       arrow_forward
                     </span>
                     <span
-                      className={`amx-gp-status-badge ${
-                        modalMode === 'Approve' || modalMode === 'Override'
+                      className={`amx-gp-status-badge ${modalMode === 'Approve' || modalMode === 'Override'
                           ? 'approved'
                           : 'rejected'
-                      }`}
+                        }`}
                     >
                       {modalMode === 'Approve' || modalMode === 'Override'
                         ? 'Approved'
@@ -687,15 +720,15 @@ export const GatePassDetailsPage: React.FC<GatePassDetailsPageProps> = ({
                     modalMode === 'Approve'
                       ? 'amx-btn-approve'
                       : modalMode === 'Reject'
-                      ? 'amx-btn-reject'
-                      : 'amx-btn-override'
+                        ? 'amx-btn-reject'
+                        : 'amx-btn-override'
                   }
                 >
                   {modalMode === 'Approve'
                     ? 'Confirm Approval'
                     : modalMode === 'Reject'
-                    ? 'Confirm Rejection'
-                    : 'Confirm Override'}
+                      ? 'Confirm Rejection'
+                      : 'Confirm Override'}
                 </button>
               </div>
             </form>

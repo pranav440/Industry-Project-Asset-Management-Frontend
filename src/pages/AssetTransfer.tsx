@@ -16,11 +16,13 @@ interface TransferFormState {
   destinationLocation: string;
   newCustodian: string;
   transferReason: string;
+  qrCode: string;
 }
 
 interface FormErrors {
   destinationLocation?: string;
   newCustodian?: string;
+  qrCode?: string;
 }
 
 export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
@@ -40,6 +42,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
     destinationLocation: '',
     newCustodian: '',
     transferReason: '',
+    qrCode: '',
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -70,6 +73,11 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
     getAsset(assetId)
       .then((record) => {
         if (!active) return;
+        const loadedQr = record.qr_code_value || `assetmx:${record.asset_id}`;
+        setFormData((prev) => ({
+          ...prev,
+          qrCode: prev.qrCode || loadedQr,
+        }));
         setAsset({
           id: record.asset_id,
           name: record.name,
@@ -157,6 +165,9 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
     if (!formData.newCustodian.trim()) {
       nextErrors.newCustodian = 'New custodian is required.';
     }
+    if (!formData.qrCode.trim()) {
+      nextErrors.qrCode = 'Asset QR code is required for movement transfer under SRS QR-03.';
+    }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -178,6 +189,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
       const response = await initiateTransfer(assetId, {
         destination_location: formData.destinationLocation,
         new_custodian: formData.newCustodian,
+        qr_code: formData.qrCode.trim(),
         ...(formData.transferReason.trim() ? { transfer_reason: formData.transferReason.trim() } : {}),
       });
       setAsset((current) => current ? {
@@ -667,6 +679,22 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                   )}
                 </div>
 
+                <div className="amx-transfer-form-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="amx-transfer-label" htmlFor="qrCodeInput">
+                    Asset QR Code / Tag <span className="amx-required">*</span> (Mandatory SRS QR-03 Validation)
+                  </label>
+                  <input
+                    type="text"
+                    id="qrCodeInput"
+                    className={`amx-transfer-input ${errors.qrCode ? 'has-error' : ''}`}
+                    placeholder="Scan asset QR code or enter URN (e.g. assetmx:AST-...)"
+                    value={formData.qrCode}
+                    onChange={(e) => handleInputChange('qrCode', e.target.value)}
+                  />
+                  {errors.qrCode && (
+                    <span className="amx-transfer-field-error">{errors.qrCode}</span>
+                  )}
+                </div>
                 <div className="amx-transfer-form-group" style={{ gridColumn: 'span 2' }}>
                   <label className="amx-transfer-label" htmlFor="transferReasonInput">
                     Transfer Reason / Operational Justification

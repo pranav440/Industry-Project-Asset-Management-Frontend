@@ -1,5 +1,9 @@
+import base64
+import io
 import uuid
 from datetime import date, datetime, timezone
+
+import qrcode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
@@ -16,6 +20,7 @@ from app.deps import (
     require_roles,
 )
 from app.models import (
+    Asset,
     AuditLog,
     GatePass,
     GatePassHistory,
@@ -26,6 +31,8 @@ from app.models import (
 )
 from app.schemas import (
     GatePassCreateRequest,
+    GatePassQRValidateRequest,
+    GatePassQRValidationOut,
     GatePassDecisionRequest,
     GatePassEscalationRequest,
     GatePassListResponse,
@@ -84,6 +91,106 @@ def _history_response(history: GatePassHistory) -> GatePassHistoryOut:
         note=history.note,
         status_snapshot=history.status_snapshot,
     )
+
+
+def _qr_data_url(value: str) -> str:
+    image = qrcode.make(value)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _resolve_and_validate_qr(
+    db: Session,
+    qr_code: str,
+    expected_pass_id: str | None = None,
+    target_action: str = "inspect",
+) -> tuple[bool, GatePass | None, str, bool, str, str | None]:
+    """
+    Resolves a scanned QR code payload to a legitimate GatePass record.
+    Returns: (is_valid, gate_pass, message, is_action_eligible, eligibility_reason, resolved_format)
+    """
+    qr_str = (qr_code or "").strip()
+    if not qr_str:
+        return False, None, "Empty QR code payload", False, "Missing QR data", None
+
+    gp: GatePass | None = None
+    resolved_format: str | None = None
+
+    if qr_str.startswith("assetmx:pass:") or qr_str.startswith("assetmx:gate-pass:"):
+        extracted_id = qr_str.split(":", 2)[2].strip()
+        gp = _find_gate_pass(db, extracted_id)
+        resolved_format = "pass_urn"
+    elif qr_str.startswith("GP-"):
+        gp = _find_gate_pass(db, qr_str)
+        resolved_format = "pass_id"
+    elif qr_str.startswith("assetmx:"):
+        asset = db.scalar(select(Asset).where(Asset.qr_code_value == qr_str))
+        if asset is None:
+            parts = qr_str.split(":")
+            if len(parts) >= 2:
+                candidate_asset_id = parts[1]
+                asset = db.scalar(select(Asset).where(Asset.asset_id == candidate_asset_id))
+        if asset is not None:
+            resolved_format = "asset_tag"
+            gp_query = select(GatePass).where(
+                or_(
+                    GatePass.asset_or_item.ilike(f"%{asset.asset_id}%"),
+                    GatePass.asset_or_item.ilike(f"%{asset.name}%"),
+                )
+            )
+            if expected_pass_id:
+                gp_query = gp_query.where(GatePass.pass_id == expected_pass_id.strip())
+            gp = db.scalar(gp_query.order_by(GatePass.created_at.desc()).limit(1))
+    else:
+        gp = _find_gate_pass(db, qr_str)
+        resolved_format = "pass_id" if gp else None
+
+    if gp is None:
+        return False, None, "Invalid QR code: No matching gate pass or asset found", False, "No corresponding record", None
+
+    if expected_pass_id and expected_pass_id.strip():
+        if gp.pass_id != expected_pass_id.strip():
+            return False, gp, f"Mismatched QR code: Scanned code belongs to {gp.pass_id}, expected {expected_pass_id.strip()}", False, "Mismatched gate pass record", resolved_format
+
+    if target_action == "exit":
+        if gp.status == GatePassStatus.approved:
+            eligible = True
+            reason = "Gate pass is Approved and eligible for exit verification."
+        elif gp.status == GatePassStatus.active:
+            eligible = False
+            reason = "Gate pass is already Active (exit already verified)."
+        elif gp.status == GatePassStatus.completed:
+            eligible = False
+            reason = "Gate pass is already Completed."
+        elif gp.status == GatePassStatus.escalated:
+            eligible = False
+            reason = "Gate pass is Escalated. Administrative clearance required before exit."
+        else:
+            eligible = False
+            reason = f"Gate pass is currently in '{gp.status.value}' status. Exit verification requires 'Approved' status."
+    elif target_action == "entry":
+        if gp.pass_type == GatePassType.non_returnable:
+            eligible = False
+            reason = "Non-returnable gate pass: Inbound entry verification is not permitted."
+        elif gp.status == GatePassStatus.active:
+            eligible = True
+            reason = "Gate pass is Active in Transit and eligible for inbound entry verification."
+        elif gp.status in (GatePassStatus.pending, GatePassStatus.approved):
+            eligible = False
+            reason = f"Gate pass has not exited facility yet (status: {gp.status.value})."
+        elif gp.status == GatePassStatus.completed:
+            eligible = False
+            reason = "Gate pass is already Completed (entry already verified)."
+        else:
+            eligible = False
+            reason = f"Gate pass is currently in '{gp.status.value}' status. Entry verification requires 'Active' status."
+    else:
+        eligible = True
+        reason = f"Gate pass is valid (Status: {gp.status.value})"
+
+    return True, gp, f"QR validated successfully ({resolved_format})", eligible, reason, resolved_format
 
 
 def _serialize_gate_pass(gate_pass: GatePass) -> dict:
@@ -208,6 +315,8 @@ def _gate_pass_response(db: Session, gate_pass: GatePass, *, include_history: bo
         created_at=gate_pass.created_at,
         updated_at=gate_pass.updated_at,
         history=history,
+        qr_code_value=f"assetmx:pass:{gate_pass.pass_id}",
+        qr_code_data_url=_qr_data_url(f"assetmx:pass:{gate_pass.pass_id}"),
     )
 
 
@@ -451,6 +560,29 @@ def verify_exit_gate_pass(
         if gate_pass.status != GatePassStatus.approved:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
 
+        qr_str = (body.qr_code or "").strip()
+        if not qr_str:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="qr_code is mandatory for gate-pass exit verification under SRS QR-03",
+            )
+        valid, _gp, msg, eligible, reason, _fmt = _resolve_and_validate_qr(
+            db=db,
+            qr_code=qr_str,
+            expected_pass_id=pass_id,
+            target_action="exit",
+        )
+        if not valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"QR validation failed: {msg}",
+            )
+        if not eligible:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"QR validation ineligible: {reason}",
+            )
+
         before_state = _serialize_gate_pass(gate_pass)
         gate_pass.status = GatePassStatus.active
         gate_pass.exit_status = "Verified"
@@ -460,12 +592,14 @@ def verify_exit_gate_pass(
         gate_pass.exit_officer = officer.full_name
         gate_pass.authorization_state = "Active in Transit"
 
+        history_note = (body.exit_notes or "Exit verification completed.") + " [QR Validated]"
+
         history = _create_history_entry(
             db=db,
             gate_pass=gate_pass,
             actor=officer,
             action="Exit Verification",
-            note=body.exit_notes or "Exit verification completed.",
+            note=history_note,
             status_snapshot=gate_pass.status.value,
         )
         audit = _create_audit_log(
@@ -475,7 +609,13 @@ def verify_exit_gate_pass(
             action="gate_pass_exit_verified",
             before_state=before_state,
             after_state=_serialize_gate_pass(gate_pass),
-            metadata={"pass_id": gate_pass.pass_id, "exit_gate": gate_pass.exit_gate, "exit_officer": gate_pass.exit_officer},
+            metadata={
+                "pass_id": gate_pass.pass_id,
+                "exit_gate": gate_pass.exit_gate,
+                "exit_officer": gate_pass.exit_officer,
+                "qr_validated": True,
+                "qr_code": qr_str,
+            },
         )
         db.add(audit)
         db.commit()
@@ -511,6 +651,29 @@ def verify_entry_gate_pass(
                 detail="Non-returnable gate passes cannot undergo entry verification",
             )
 
+        qr_str = (body.qr_code or "").strip()
+        if not qr_str:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="qr_code is mandatory for gate-pass entry verification under SRS QR-03",
+            )
+        valid, _gp, msg, eligible, reason, _fmt = _resolve_and_validate_qr(
+            db=db,
+            qr_code=qr_str,
+            expected_pass_id=pass_id,
+            target_action="entry",
+        )
+        if not valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"QR validation failed: {msg}",
+            )
+        if not eligible:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"QR validation ineligible: {reason}",
+            )
+
         before_state = _serialize_gate_pass(gate_pass)
         gate_pass.status = GatePassStatus.completed
         gate_pass.entry_status = "Verified"
@@ -520,12 +683,14 @@ def verify_entry_gate_pass(
         gate_pass.entry_officer = officer.full_name
         gate_pass.authorization_state = "Completed"
 
+        history_note = (body.entry_notes or "Entry verification completed.") + " [QR Validated]"
+
         history = _create_history_entry(
             db=db,
             gate_pass=gate_pass,
             actor=officer,
             action="Entry Verification",
-            note=body.entry_notes or "Entry verification completed.",
+            note=history_note,
             status_snapshot=gate_pass.status.value,
         )
         audit = _create_audit_log(
@@ -535,7 +700,13 @@ def verify_entry_gate_pass(
             action="gate_pass_entry_verified",
             before_state=before_state,
             after_state=_serialize_gate_pass(gate_pass),
-            metadata={"pass_id": gate_pass.pass_id, "entry_gate": gate_pass.entry_gate, "entry_officer": gate_pass.entry_officer},
+            metadata={
+                "pass_id": gate_pass.pass_id,
+                "entry_gate": gate_pass.entry_gate,
+                "entry_officer": gate_pass.entry_officer,
+                "qr_validated": True,
+                "qr_code": qr_str,
+            },
         )
         db.add(audit)
         db.commit()
@@ -601,6 +772,50 @@ def escalate_gate_pass(
     except SQLAlchemyError:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Escalation failed")
+
+
+@router.post("/validate-qr", response_model=GatePassQRValidationOut)
+def validate_gate_pass_qr(
+    body: GatePassQRValidateRequest,
+    _user: User = Depends(require_gate_staff),
+    db: Session = Depends(get_db),
+) -> GatePassQRValidationOut:
+    valid, gp, msg, eligible, reason, fmt = _resolve_and_validate_qr(
+        db=db,
+        qr_code=body.qr_code,
+        expected_pass_id=body.expected_pass_id,
+        target_action=body.target_action,
+    )
+    if not valid or gp is None:
+        return GatePassQRValidationOut(
+            valid=False,
+            pass_id=gp.pass_id if gp else None,
+            pass_type=gp.pass_type.value if gp else None,
+            status=gp.status.value if gp else None,
+            asset_or_item=gp.asset_or_item if gp else None,
+            quantity=gp.quantity if gp else None,
+            destination=gp.destination if gp else None,
+            requester_name=gp.requester_name if gp else None,
+            action_eligible=False,
+            eligibility_reason=reason,
+            resolved_format=fmt,
+            message=msg,
+        )
+
+    return GatePassQRValidationOut(
+        valid=True,
+        pass_id=gp.pass_id,
+        pass_type=gp.pass_type.value,
+        status=gp.status.value,
+        asset_or_item=gp.asset_or_item,
+        quantity=gp.quantity,
+        destination=gp.destination,
+        requester_name=gp.requester_name,
+        action_eligible=eligible,
+        eligibility_reason=reason,
+        resolved_format=fmt,
+        message=msg,
+    )
 
 
 @router.post("/{pass_id}/override", response_model=GatePassOut)

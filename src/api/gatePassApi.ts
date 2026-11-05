@@ -48,7 +48,25 @@ export interface GatePassApiRecord {
   created_at: string;
   updated_at: string;
   history: GatePassHistoryApiRecord[];
+  qr_code_value?: string | null;
+  qr_code_data_url?: string | null;
 }
+
+export interface GatePassQRValidationResult {
+  valid: boolean;
+  pass_id: string | null;
+  pass_type: string | null;
+  status: string | null;
+  asset_or_item: string | null;
+  quantity: number | null;
+  destination: string | null;
+  requester_name: string | null;
+  action_eligible: boolean;
+  eligibility_reason: string | null;
+  resolved_format: string | null;
+  message: string;
+}
+
 
 export interface GatePassListResponse {
   items: GatePassApiRecord[];
@@ -91,7 +109,7 @@ function formatDateTime(value: string | null | undefined): string {
 
 export function mapGatePassApiRecord(apiRecord: GatePassApiRecord): GatePassItemData {
   const exitStatus = apiRecord.exit_status === 'Verified' ? 'Verified' : apiRecord.exit_status === 'N/A' ? 'N/A' : 'Pending';
-  const entryStatus = apiRecord.entry_status === 'Verified' ? 'Verified' : apiRecord.entry_status === 'N/A' ? 'N/A' : 'Pending';
+  const entryStatus = apiRecord.pass_type === 'Non-Returnable' ? 'N/A' : apiRecord.entry_status === 'Verified' ? 'Verified' : apiRecord.entry_status === 'N/A' ? 'N/A' : 'Pending';
 
   return {
     id: apiRecord.pass_id,
@@ -137,6 +155,8 @@ export function mapGatePassApiRecord(apiRecord: GatePassApiRecord): GatePassItem
       note: entry.note ?? undefined,
       statusSnapshot: entry.status_snapshot as GatePassStatus,
     })),
+    qrCodeValue: apiRecord.qr_code_value ?? undefined,
+    qrCodeDataUrl: apiRecord.qr_code_data_url ?? undefined,
   };
 }
 
@@ -217,7 +237,7 @@ export function decideGatePass(
 
 export function verifyExitGatePass(
   passId: string,
-  payload: { exit_gate: string; exit_notes?: string },
+  payload: { exit_gate: string; exit_notes?: string; qr_code: string },
 ): Promise<GatePassApiRecord> {
   return request<GatePassApiRecord>(`/api/gate-passes/${encodeURIComponent(passId)}/exit-verification`, {
     method: 'POST',
@@ -227,7 +247,7 @@ export function verifyExitGatePass(
 
 export function verifyEntryGatePass(
   passId: string,
-  payload: { entry_gate: string; entry_notes?: string },
+  payload: { entry_gate: string; entry_notes?: string; qr_code: string },
 ): Promise<GatePassApiRecord> {
   return request<GatePassApiRecord>(`/api/gate-passes/${encodeURIComponent(passId)}/entry-verification`, {
     method: 'POST',
@@ -250,6 +270,17 @@ export function overrideGatePass(
   payload: { note?: string },
 ): Promise<GatePassApiRecord> {
   return request<GatePassApiRecord>(`/api/gate-passes/${encodeURIComponent(passId)}/override`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function validateGatePassQR(payload: {
+  qr_code: string;
+  expected_pass_id?: string;
+  target_action?: 'exit' | 'entry' | 'inspect';
+}): Promise<GatePassQRValidationResult> {
+  return request<GatePassQRValidationResult>('/api/gate-passes/validate-qr', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

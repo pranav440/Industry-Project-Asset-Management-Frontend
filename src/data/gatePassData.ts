@@ -56,6 +56,8 @@ export interface GatePassItemData {
   gateActivity: GateActivity;
   escalation: EscalationRecord;
   history: GatePassHistoryEntry[];
+  qrCodeValue?: string;
+  qrCodeDataUrl?: string;
 }
 
 export const INITIAL_GATE_PASSES: GatePassItemData[] = [

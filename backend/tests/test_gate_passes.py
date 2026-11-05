@@ -241,21 +241,30 @@ def test_exit_and_entry_verification_transition_and_invalid_status():
         )
         db.commit()
 
-    response = client.post("/api/gate-passes/GP-2026-0201/exit-verification", json={"exit_gate": "Gate 5", "exit_notes": "Loaded and departed."})
+    response = client.post(
+        "/api/gate-passes/GP-2026-0201/exit-verification",
+        json={"exit_gate": "Gate 5", "exit_notes": "Loaded and departed.", "qr_code": "assetmx:pass:GP-2026-0201"},
+    )
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "Active"
     assert body["exit_status"] == "Verified"
     assert body["exit_officer"] == admin.full_name
 
-    response = client.post("/api/gate-passes/GP-2026-0201/entry-verification", json={"entry_gate": "Gate 8", "entry_notes": "Received at destination."})
+    response = client.post(
+        "/api/gate-passes/GP-2026-0201/entry-verification",
+        json={"entry_gate": "Gate 8", "entry_notes": "Received at destination.", "qr_code": "assetmx:pass:GP-2026-0201"},
+    )
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "Completed"
     assert body["entry_status"] == "Verified"
     assert body["entry_officer"] == admin.full_name
 
-    response = client.post("/api/gate-passes/GP-2026-0201/entry-verification", json={"entry_gate": "Gate 8", "entry_notes": "Again"})
+    response = client.post(
+        "/api/gate-passes/GP-2026-0201/entry-verification",
+        json={"entry_gate": "Gate 8", "entry_notes": "Again", "qr_code": "assetmx:pass:GP-2026-0201"},
+    )
     assert response.status_code == 409
 
 

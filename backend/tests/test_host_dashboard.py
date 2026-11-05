@@ -288,14 +288,14 @@ def test_host_cannot_perform_exit_entry_or_manual_escalate():
     # 1. Host exit verification -> 403 Forbidden
     res_exit = client.post(
         "/api/gate-passes/GP-HOST-V01/exit-verification",
-        json={"exit_gate": "Gate 1", "exit_notes": "Host verification attempt"},
+        json={"exit_gate": "Gate 1", "exit_notes": "Host verification attempt", "qr_code": "assetmx:pass:GP-HOST-V01"},
     )
     assert res_exit.status_code == status.HTTP_403_FORBIDDEN
 
     # 2. Host entry verification -> 403 Forbidden
     res_entry = client.post(
         "/api/gate-passes/GP-HOST-V02/entry-verification",
-        json={"entry_gate": "Gate 1", "entry_notes": "Host verification attempt"},
+        json={"entry_gate": "Gate 1", "entry_notes": "Host verification attempt", "qr_code": "assetmx:pass:GP-HOST-V02"},
     )
     assert res_entry.status_code == status.HTTP_403_FORBIDDEN
 
@@ -439,7 +439,7 @@ def test_guard_verification_issuance_and_escalation():
     # 1. Guard exit verification
     res_exit = client.post(
         "/api/gate-passes/GP-GRD-001/exit-verification",
-        json={"exit_gate": "Gate 1", "exit_notes": "Physical goods & seal verified by Guard"},
+        json={"exit_gate": "Gate 1", "exit_notes": "Physical goods & seal verified by Guard", "qr_code": "assetmx:pass:GP-GRD-001"},
     )
     assert res_exit.status_code == status.HTTP_200_OK
     data_exit = res_exit.json()
@@ -450,7 +450,7 @@ def test_guard_verification_issuance_and_escalation():
     # 2. Guard entry verification
     res_entry = client.post(
         "/api/gate-passes/GP-GRD-002/entry-verification",
-        json={"entry_gate": "Gate 1", "entry_notes": "Return intake verified by Guard"},
+        json={"entry_gate": "Gate 1", "entry_notes": "Return intake verified by Guard", "qr_code": "assetmx:pass:GP-GRD-002"},
     )
     assert res_entry.status_code == status.HTTP_200_OK
     data_entry = res_entry.json()
@@ -498,7 +498,7 @@ def test_entry_verification_rejects_non_returnable_pass():
 
     res = client.post(
         "/api/gate-passes/GP-NONRET-001/entry-verification",
-        json={"entry_gate": "Gate 1", "entry_notes": "Erroneous return attempt"},
+        json={"entry_gate": "Gate 1", "entry_notes": "Erroneous return attempt", "qr_code": "assetmx:pass:GP-NONRET-001"},
     )
     assert res.status_code == status.HTTP_409_CONFLICT
     assert "cannot undergo entry verification" in res.json()["detail"]
@@ -532,7 +532,7 @@ def test_entry_verification_allows_returnable_pass():
 
     res = client.post(
         "/api/gate-passes/GP-RET-001/entry-verification",
-        json={"entry_gate": "Gate 1", "entry_notes": "Returned in good condition"},
+        json={"entry_gate": "Gate 1", "entry_notes": "Returned in good condition", "qr_code": "assetmx:pass:GP-RET-001"},
     )
     assert res.status_code == status.HTTP_200_OK
     assert res.json()["status"] == "Completed"
@@ -585,14 +585,14 @@ def test_invalid_verification_transitions_for_guard():
     # 1. Exit verification on Pending pass -> 409 Conflict
     res_exit = client.post(
         "/api/gate-passes/GP-TRANS-PND/exit-verification",
-        json={"exit_gate": "Gate 1"},
+        json={"exit_gate": "Gate 1", "qr_code": "assetmx:pass:GP-TRANS-PND"},
     )
     assert res_exit.status_code == status.HTTP_409_CONFLICT
 
     # 2. Entry verification on Completed pass -> 409 Conflict
     res_entry = client.post(
         "/api/gate-passes/GP-TRANS-CMP/entry-verification",
-        json={"entry_gate": "Gate 1"},
+        json={"entry_gate": "Gate 1", "qr_code": "assetmx:pass:GP-TRANS-CMP"},
     )
     assert res_entry.status_code == status.HTTP_409_CONFLICT
 

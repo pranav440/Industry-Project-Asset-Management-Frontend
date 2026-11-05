@@ -121,7 +121,7 @@ def test_admin_transfer_persists_history_and_preserves_current_assignment():
     created = client.post("/api/assets", json=asset_payload()).json()
     response = client.post(
         f"/api/assets/{created['asset_id']}/transfer",
-        json={"destination_location": "Regional Annex", "new_custodian": "Operations"},
+        json={"destination_location": "Regional Annex", "new_custodian": "Operations", "qr_code": created["qr_code_value"]},
     )
 
     assert response.status_code == 201, response.text
@@ -155,11 +155,12 @@ def test_transfer_validation_authorization_and_active_conflict():
 
     assert client.post(f"/api/assets/{asset_id}/transfer", json={"new_custodian": "Ops"}).status_code == 422
     assert client.post(f"/api/assets/{asset_id}/transfer", json={"destination_location": "HQ"}).status_code == 422
+    assert client.post(f"/api/assets/{asset_id}/transfer", json={"destination_location": "HQ", "new_custodian": "Ops"}).status_code == 422
 
     client.app.dependency_overrides[get_current_user] = lambda: employee
     assert client.post(
         f"/api/assets/{asset_id}/transfer",
-        json={"destination_location": "Remote", "new_custodian": "Ops"},
+        json={"destination_location": "Remote", "new_custodian": "Ops", "qr_code": created["qr_code_value"]},
     ).status_code == 403
     client.app.dependency_overrides[get_current_user] = lambda: User(
         id=1, full_name="Admin", email="admin@example.com", employee_id="ADM001", role=UserRole.admin, password_hash="x"
@@ -167,13 +168,13 @@ def test_transfer_validation_authorization_and_active_conflict():
 
     first = client.post(
         f"/api/assets/{asset_id}/transfer",
-        json={"destination_location": "Remote", "new_custodian": "Ops", "transfer_reason": "Project move"},
+        json={"destination_location": "Remote", "new_custodian": "Ops", "transfer_reason": "Project move", "qr_code": created["qr_code_value"]},
     )
     assert first.status_code == 201
     assert first.json()["movement"]["reason"] == "Project move"
     second = client.post(
         f"/api/assets/{asset_id}/transfer",
-        json={"destination_location": "Warehouse", "new_custodian": "Facilities"},
+        json={"destination_location": "Warehouse", "new_custodian": "Facilities", "qr_code": created["qr_code_value"]},
     )
     assert second.status_code == 409
 
@@ -191,7 +192,7 @@ def test_unauthenticated_disposed_and_missing_transfer_assets():
     client.app.dependency_overrides.pop(get_current_user)
     assert client.post(
         "/api/assets/AST-MISSING/transfer",
-        json={"destination_location": "Remote", "new_custodian": "Ops"},
+        json={"destination_location": "Remote", "new_custodian": "Ops", "qr_code": "assetmx:AST-MISSING"},
     ).status_code == 401
 
     client.app.dependency_overrides[get_current_user] = lambda: User(
@@ -199,7 +200,7 @@ def test_unauthenticated_disposed_and_missing_transfer_assets():
     )
     assert client.post(
         "/api/assets/AST-MISSING/transfer",
-        json={"destination_location": "Remote", "new_custodian": "Ops"},
+        json={"destination_location": "Remote", "new_custodian": "Ops", "qr_code": "assetmx:AST-MISSING"},
     ).status_code == 404
 
     disposed = client.post("/api/assets", json=asset_payload("Disposed Laptop")).json()
@@ -209,7 +210,7 @@ def test_unauthenticated_disposed_and_missing_transfer_assets():
         db.commit()
     assert client.post(
         f"/api/assets/{disposed['asset_id']}/transfer",
-        json={"destination_location": "Remote", "new_custodian": "Ops"},
+        json={"destination_location": "Remote", "new_custodian": "Ops", "qr_code": disposed["qr_code_value"]},
     ).status_code == 409
 
 
@@ -238,7 +239,7 @@ def test_transfer_transaction_rolls_back_on_movement_persistence_failure(monkeyp
     monkeypatch.setattr(assets_router.uuid, "uuid4", lambda: FixedUuid())
     response = client.post(
         f"/api/assets/{created['asset_id']}/transfer",
-        json={"destination_location": "Remote", "new_custodian": "Ops"},
+        json={"destination_location": "Remote", "new_custodian": "Ops", "qr_code": created["qr_code_value"]},
     )
     assert response.status_code == 500
 

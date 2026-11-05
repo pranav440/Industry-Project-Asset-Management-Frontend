@@ -501,11 +501,37 @@ def initiate_transfer(
     if not new_custodian:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="New custodian is required")
 
+    qr_str = (body.qr_code or "").strip()
+    if not qr_str:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="qr_code is mandatory for asset transfer under SRS QR-03",
+        )
+
     asset = db.scalar(select(Asset).where(Asset.asset_id == asset_id).with_for_update())
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
     if asset.status == AssetStatus.disposed:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Disposed assets cannot be transferred")
+
+    # Real-time QR validation per SRS QR-03
+    is_valid_qr = False
+    if qr_str == asset.qr_code_value:
+        is_valid_qr = True
+    elif qr_str == f"assetmx:{asset.asset_id}":
+        is_valid_qr = True
+    elif qr_str == asset.asset_id:
+        is_valid_qr = True
+    elif qr_str.startswith("assetmx:"):
+        parts = qr_str.split(":")
+        if len(parts) >= 2 and parts[1] == asset.asset_id:
+            is_valid_qr = True
+
+    if not is_valid_qr:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"QR validation failed: Scanned QR code does not match asset '{asset.asset_id}'",
+        )
 
     active_transfer = db.scalar(
         select(AssetMovement.id).where(
@@ -542,7 +568,12 @@ def initiate_transfer(
         before_state=before_state,
         after_state={"status": asset.status.value},
         movement_id=movement_id,
-        metadata_json={"destination_location": destination, "new_custodian": new_custodian},
+        metadata_json={
+            "destination_location": destination,
+            "new_custodian": new_custodian,
+            "qr_validated": True,
+            "qr_code": qr_str,
+        },
     )
     db.add_all((movement, audit))
     db.commit()

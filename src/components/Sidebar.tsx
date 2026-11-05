@@ -19,6 +19,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const activeRole = role ?? getUser()?.role ?? 'admin';
   const isEmployee = activeRole === 'employee';
   const isHost = activeRole === 'host';
+  const isGuard = activeRole === 'guard';
 
   const adminNavItems = [
     { label: 'Dashboard', path: 'dashboard', icon: 'dashboard', fill: true },
@@ -46,7 +47,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { label: 'Movement Activity', path: 'movement', icon: 'swap_horiz' },
   ];
 
-  const navItems = isEmployee ? employeeNavItems : isHost ? hostNavItems : adminNavItems;
+  const guardNavItems = [
+    { label: 'Gate Passes', path: 'gate-pass', icon: 'confirmation_number', fill: true },
+  ];
+
+  const navItems = isEmployee
+    ? employeeNavItems
+    : isHost
+      ? hostNavItems
+      : isGuard
+        ? guardNavItems
+        : adminNavItems;
 
   const handleNavClick = (e: React.MouseEvent, path: string) => {
     e.preventDefault();
@@ -67,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Brand Header */}
       <div className="amx-sidebar-brand">
         <span className="material-symbols-outlined amx-brand-logo-icon" aria-hidden="true">
-          {isEmployee ? 'inventory_2' : 'dataset'}
+          {isEmployee ? 'inventory_2' : isGuard ? 'local_police' : 'dataset'}
         </span>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -90,9 +101,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 HOST
               </span>
             )}
+            {isGuard && (
+              <span
+                className="amx-guard-badge"
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  letterSpacing: '0.06em',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
+                  backgroundColor: 'rgba(56, 189, 248, 0.16)',
+                  color: '#38bdf8',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  lineHeight: 1.2,
+                }}
+              >
+                GUARD
+              </span>
+            )}
           </div>
           <p className="amx-brand-subtitle">
-            {isEmployee ? 'Employee Portal' : 'Enterprise Management'}
+            {isEmployee
+              ? 'Employee Portal'
+              : isGuard
+                ? 'Security Checkpoint'
+                : isHost
+                  ? 'Operations Portal'
+                  : 'Enterprise Management'}
           </p>
         </div>
       </div>
@@ -110,6 +145,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
           >
             Operations
+          </span>
+        </div>
+      ) : isGuard ? (
+        <div className="amx-sidebar-section-header" style={{ padding: '6px 24px 10px 24px' }}>
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: 'var(--amx-dash-navy-muted, #8b95ad)',
+            }}
+          >
+            Security Checkpoint
           </span>
         </div>
       ) : !isEmployee ? (

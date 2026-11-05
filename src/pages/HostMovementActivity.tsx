@@ -1,16 +1,187 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import {
-  HOST_MOVEMENT_KPIS_DATA,
-  HOST_DETAILED_MOVEMENT_RECORDS,
-  type HostMovementActivityRecord,
-  type HostMovementStatus,
-} from '../data/hostData';
+  getHostMovements,
+  getHostDashboard,
+  type HostMovementScanItem,
+} from '../services/dashboardApi';
 import './HostMovementActivity.css';
+
+export interface HostMovementTimelineEvent {
+  title: string;
+  time: string;
+  desc: string;
+  status: 'completed' | 'exception' | 'pending';
+  icon: string;
+}
+
+export interface HostMovementActivityRecord {
+  id: string;
+  gatePassId: string;
+  assetName: string;
+  assetTag: string;
+  serialNumber: string;
+  classification: string;
+  origin: string;
+  originZone: string;
+  originIcon: string;
+  destination: string;
+  destinationSegment: string;
+  destinationIcon: string;
+  corridor: string;
+  department: string;
+  initiatedBy: string;
+  initiatorInitials: string;
+  initiatorBadge: string;
+  initiatorEmail: string;
+  movementDate: string;
+  status: string;
+  carrierName: string;
+  carrierPlate: string;
+  carrierDriver: string;
+  justification: string;
+  ttl: string;
+  manifestFiles: Array<{
+    name: string;
+    size: string;
+  }>;
+  discrepancyAlert?: string;
+  timeline: HostMovementTimelineEvent[];
+}
 
 interface HostMovementActivityPageProps {
   onNavigate?: (subRoute: string) => void;
   onSignOut?: () => void;
+}
+
+interface HostMovementKpisState {
+  totalMovements: {
+    total: number | string;
+    badgeText: string;
+    subtext: string;
+  };
+  inTransit: {
+    total: number | string;
+    badgeText: string;
+    subtext: string;
+  };
+  completedToday: {
+    total: number | string;
+    badgeText: string;
+    subtext: string;
+  };
+  movementExceptions: {
+    total: number | string;
+    badgeText: string;
+    subtext: string;
+  };
+}
+
+function formatDateDisplay(isoStr?: string | null): string {
+  if (!isoStr) return 'Recent';
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return isoStr;
+  }
+}
+
+function formatTimeDisplay(isoStr?: string | null): string {
+  if (!isoStr) return 'Active';
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    return `${time} · ${date}`;
+  } catch {
+    return isoStr;
+  }
+}
+
+function mapScanItemToActivityRecord(item: HostMovementScanItem): HostMovementActivityRecord {
+  const movId = item.movement_id || item.movementId || item.id;
+  const rawStatus = item.status || 'Initiated';
+
+  let origin = 'Facility Origin';
+  let destination = 'Facility Destination';
+  if (item.route) {
+    const parts = item.route.split(/\u2192|->|—/).map((s) => s.trim());
+    if (parts.length >= 2) {
+      origin = parts[0] || origin;
+      destination = parts[1] || destination;
+    } else if (parts.length === 1 && parts[0]) {
+      origin = parts[0];
+    }
+  } else if (item.station) {
+    origin = item.station.replace(/^Station:\s*/i, '');
+  }
+
+  // Preserve the original backend status directly in the UI
+  const status = rawStatus;
+  const movDate = formatDateDisplay(item.initiated_at) || item.timeAgo || item.time_ago || 'Recent';
+
+  const isCompleted =
+    rawStatus.toLowerCase().includes('completed') ||
+    rawStatus.toLowerCase().includes('return') ||
+    rawStatus.toLowerCase().includes('check-in');
+
+  // Timeline representation:
+  // 1. Genuine initiation event using initiated_at (actual recorded event)
+  // 2. Current status telemetry (clearly distinguished as current-state telemetry)
+  const timeline: HostMovementTimelineEvent[] = [];
+  if (item.initiated_at) {
+    timeline.push({
+      time: formatTimeDisplay(item.initiated_at),
+      title: 'Movement Initiated (Recorded Event)',
+      desc: `Transfer initiated from ${origin} to ${destination}`,
+      icon: 'outbox',
+      status: 'completed',
+    });
+  }
+  timeline.push({
+    time: item.timeAgo || item.time_ago ? `Current Telemetry (${item.timeAgo || item.time_ago})` : 'Current Telemetry',
+    title: 'Current Status Telemetry',
+    desc: `Current recorded telemetry: ${rawStatus}`,
+    icon: isCompleted ? 'check_circle' : 'sensors',
+    status: isCompleted ? 'completed' : 'pending',
+  });
+
+  return {
+    id: movId,
+    gatePassId: 'Not linked',
+    assetName: item.assetName || item.asset_name || 'Hardware Asset',
+    assetTag: item.assetTag || item.asset_tag || 'Not available',
+    serialNumber: 'Not available',
+    // Classification is not available in backend AssetMovement model; marked Not available
+    classification: 'Not available',
+    origin,
+    originZone: `${origin} Zone`,
+    originIcon: 'warehouse',
+    destination,
+    destinationSegment: `${destination} Sector`,
+    destinationIcon: 'domain',
+    corridor: `${origin} to ${destination} Corridor`,
+    department: 'Operations',
+    initiatedBy: 'Authorized Custodian',
+    initiatorInitials: 'AC',
+    initiatorBadge: 'Not available',
+    initiatorEmail: 'Not available',
+    movementDate: movDate,
+    status,
+    carrierName: 'Not assigned',
+    carrierPlate: 'Not available',
+    carrierDriver: 'Not available',
+    justification: item.station
+      ? `Transferred via ${item.station}`
+      : 'Perimeter movement transfer recorded in registry',
+    ttl: 'Not specified',
+    manifestFiles: [],
+    discrepancyAlert: undefined,
+    timeline,
+  };
 }
 
 export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> = ({
@@ -19,35 +190,56 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
 }) => {
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [corridorFilter, setCorridorFilter] = useState<string>('All');
   const [deptFilter, setDeptFilter] = useState<string>('All');
-  const [dateFilter] = useState<string>('18 Feb 2026');
+  const [dateFilter, setDateFilter] = useState<string>('');
 
-  // Selected Record State (defaults to MOV-2026-0182 from Stitch screen)
-  const [selectedMovementId, setSelectedMovementId] = useState<string>('MOV-2026-0182');
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Selected Record State
+  const [selectedMovementId, setSelectedMovementId] = useState<string | null>(null);
   const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(true);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalRecords, setTotalRecords] = useState(0);
 
-  // Modal States
+  // Loading & Error States
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  // Real Movement Records
+  const [records, setRecords] = useState<HostMovementActivityRecord[]>([]);
+
+  // KPI Metrics State
+  const [kpis, setKpis] = useState<HostMovementKpisState | null>(null);
+
+  // Modal States (Host Audit Previews)
   const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [isEscalateModalOpen, setIsEscalateModalOpen] = useState(false);
 
-  // Verification Checklist State
+  // Verification Checklist State (Preview only for Host)
   const [verifySerialCheck, setVerifySerialCheck] = useState(false);
   const [verifySealCheck, setVerifySealCheck] = useState(false);
   const [verifyBearerCheck, setVerifyBearerCheck] = useState(false);
   const [verifyNotes, setVerifyNotes] = useState('');
 
-  // Checkpoint Issue State
+  // Checkpoint Issue State (Preview only for Host)
   const [issueCategory, setIssueCategory] = useState('Missing secondary perimeter seal scan');
   const [issueNotes, setIssueNotes] = useState('');
 
-  // Escalation State
+  // Escalation State (Preview only for Host)
   const [escalateReason, setEscalateReason] = useState('Corridor Routing Discrepancy');
   const [escalateNotes, setEscalateNotes] = useState('');
 
@@ -58,7 +250,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
-    }, 3200);
+    }, 3500);
   };
 
   const handleNav = (path: string) => {
@@ -77,62 +269,155 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
     }
   };
 
-  // Filtered Movement Records
+  // Fetch KPI cards data from real backend endpoints
+  const fetchKpis = useCallback(async () => {
+    try {
+      const [dashRes, totalRes] = await Promise.allSettled([
+        getHostDashboard(),
+        getHostMovements({ pageSize: 1 }),
+      ]);
+
+      const dashKpis =
+        dashRes.status === 'fulfilled' ? dashRes.value.kpis || dashRes.value.summary : null;
+      const allTotal = totalRes.status === 'fulfilled' ? totalRes.value.total : null;
+
+      setKpis({
+        totalMovements: {
+          total: allTotal !== null ? allTotal : '—',
+          badgeText: 'Active Registry',
+          subtext: 'All movement records in system',
+        },
+        inTransit: {
+          total: dashKpis?.todaysMovement?.inTransit ?? '—',
+          badgeText: 'Live Telemetry',
+          subtext: 'Active perimeter transfers today',
+        },
+        completedToday: {
+          total: dashKpis?.todaysMovement?.completed ?? '—',
+          badgeText: dashKpis?.todaysMovement?.trend ?? 'Completed',
+          subtext: 'Transfers completed today',
+        },
+        movementExceptions: {
+          total: '—',
+          badgeText: 'Unavailable',
+          subtext: 'Exception telemetry not tracked on movements',
+        },
+      });
+    } catch {
+      setKpis({
+        totalMovements: { total: '—', badgeText: 'Unavailable', subtext: 'Data unavailable' },
+        inTransit: { total: '—', badgeText: 'Unavailable', subtext: 'Data unavailable' },
+        completedToday: { total: '—', badgeText: 'Unavailable', subtext: 'Data unavailable' },
+        movementExceptions: { total: '—', badgeText: 'Unavailable', subtext: 'Data unavailable' },
+      });
+    }
+  }, []);
+
+  // Fetch real movement records from backend
+  const fetchMovements = useCallback(async () => {
+    setIsLoading(true);
+    setApiError(null);
+    try {
+      // Align status filter directly with backend AssetMovementStatus values
+      let apiStatus: string | undefined = undefined;
+      if (statusFilter === 'In Transit') {
+        apiStatus = 'in-transit';
+      } else if (statusFilter === 'Completed') {
+        apiStatus = 'completed';
+      } else if (statusFilter === 'Initiated') {
+        apiStatus = 'initiated';
+      } else if (statusFilter === 'Cancelled') {
+        apiStatus = 'cancelled';
+      }
+
+      const res = await getHostMovements({
+        search: debouncedSearch.trim() || undefined,
+        status: apiStatus,
+        date: dateFilter.trim() || undefined,
+        page: currentPage,
+        pageSize: rowsPerPage,
+      });
+
+      const mapped = (res.items || []).map(mapScanItemToActivityRecord);
+      setRecords(mapped);
+      setTotalRecords(res.total || 0);
+
+      if (mapped.length > 0) {
+        setSelectedMovementId((prevId) => {
+          if (prevId && mapped.some((r) => r.id === prevId)) return prevId;
+          return mapped[0].id;
+        });
+      } else {
+        setSelectedMovementId(null);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load movement records';
+      setApiError(msg);
+      setRecords([]);
+      setTotalRecords(0);
+      setSelectedMovementId(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [debouncedSearch, statusFilter, dateFilter, currentPage, rowsPerPage]);
+
+  useEffect(() => {
+    fetchMovements();
+  }, [fetchMovements]);
+
+  useEffect(() => {
+    fetchKpis();
+  }, [fetchKpis]);
+
+  // Client-side refinements for filters
   const filteredRecords = useMemo(() => {
-    return HOST_DETAILED_MOVEMENT_RECORDS.filter((item) => {
-      // Search
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matches =
-          item.id.toLowerCase().includes(q) ||
-          item.assetName.toLowerCase().includes(q) ||
-          item.assetTag.toLowerCase().includes(q) ||
-          item.serialNumber.toLowerCase().includes(q) ||
-          item.initiatedBy.toLowerCase().includes(q) ||
-          item.origin.toLowerCase().includes(q) ||
-          item.destination.toLowerCase().includes(q);
-        if (!matches) return false;
+    return records.filter((item) => {
+      if (statusFilter !== 'All') {
+        const s = item.status.toLowerCase();
+        if (statusFilter === 'In Transit' && !s.includes('transit')) return false;
+        if (
+          statusFilter === 'Completed' &&
+          !s.includes('return') &&
+          !s.includes('completed') &&
+          !s.includes('check-in')
+        ) {
+          return false;
+        }
+        if (statusFilter === 'Initiated' && !s.includes('initiated')) return false;
+        if (statusFilter === 'Cancelled' && !s.includes('cancel')) return false;
       }
-
-      // Status
-      if (statusFilter !== 'All' && item.status !== statusFilter) {
+      if (
+        corridorFilter !== 'All' &&
+        !item.corridor.toLowerCase().includes(corridorFilter.toLowerCase())
+      ) {
         return false;
       }
-
-      // Corridor
-      if (corridorFilter !== 'All' && item.corridor !== corridorFilter) {
+      if (deptFilter !== 'All' && item.department.toLowerCase() !== deptFilter.toLowerCase()) {
         return false;
       }
-
-      // Department
-      if (deptFilter !== 'All' && item.department !== deptFilter) {
-        return false;
-      }
-
       return true;
     });
-  }, [searchQuery, statusFilter, corridorFilter, deptFilter]);
+  }, [records, statusFilter, corridorFilter, deptFilter]);
 
   // Selected Record
-  const selectedMovement: HostMovementActivityRecord | undefined = useMemo(() => {
-    return (
-      HOST_DETAILED_MOVEMENT_RECORDS.find((r) => r.id === selectedMovementId) ||
-      filteredRecords[0] ||
-      HOST_DETAILED_MOVEMENT_RECORDS[0]
-    );
-  }, [selectedMovementId, filteredRecords]);
+  const selectedMovement: HostMovementActivityRecord | null = useMemo(() => {
+    if (selectedMovementId) {
+      const found = records.find((r) => r.id === selectedMovementId);
+      if (found) return found;
+    }
+    return filteredRecords[0] || null;
+  }, [selectedMovementId, records, filteredRecords]);
 
-  // Pagination Calculations
-  const totalRecords = filteredRecords.length;
   const totalPages = Math.max(1, Math.ceil(totalRecords / rowsPerPage));
-  const startIndex = (currentPage - 1) * rowsPerPage;
-  const paginatedRecords = filteredRecords.slice(startIndex, startIndex + rowsPerPage);
+  const paginatedRecords = filteredRecords;
 
   const handleResetFilters = () => {
     setSearchQuery('');
+    setDebouncedSearch('');
     setStatusFilter('All');
     setCorridorFilter('All');
     setDeptFilter('All');
+    setDateFilter('');
     setCurrentPage(1);
     showToast('Movement filters reset to default view.');
   };
@@ -143,72 +428,91 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
   };
 
   const handleExportLog = () => {
-    showToast('Exporting Host Movement Activity log (CSV/PDF) — Download initiated.');
-  };
-
-  const handleCompleteVerification = () => {
-    if (!verifySerialCheck) {
-      showToast('Attention: Physical serial number check must be confirmed.');
+    if (filteredRecords.length === 0) {
+      showToast('No movement records available to export.');
       return;
     }
-    setIsVerifyModalOpen(false);
-    setVerifySerialCheck(false);
-    setVerifySealCheck(false);
-    setVerifyBearerCheck(false);
-    setVerifyNotes('');
-    showToast(`Checkpoint scan verified for ${selectedMovement?.id} at Checkpoint Gate-04A.`);
+    const headers = [
+      'Movement ID',
+      'Asset Name',
+      'Asset Tag',
+      'Origin',
+      'Destination',
+      'Corridor',
+      'Movement Date',
+      'Status',
+    ];
+    const rows = filteredRecords.map((r) => [
+      `"${r.id.replace(/"/g, '""')}"`,
+      `"${r.assetName.replace(/"/g, '""')}"`,
+      `"${r.assetTag.replace(/"/g, '""')}"`,
+      `"${r.origin.replace(/"/g, '""')}"`,
+      `"${r.destination.replace(/"/g, '""')}"`,
+      `"${r.corridor.replace(/"/g, '""')}"`,
+      `"${r.movementDate.replace(/"/g, '""')}"`,
+      `"${r.status.replace(/"/g, '""')}"`,
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      `host-movements-page-${currentPage}-${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${filteredRecords.length} currently loaded movement records to CSV.`);
   };
 
-  const handleLogIssueSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsIssueModalOpen(false);
-    setIssueNotes('');
-    showToast(`Checkpoint issue logged for ${selectedMovement?.id} (${issueCategory}).`);
+  // Host Permission Notice Handlers (Enforce Guard/Admin restriction)
+  const handleRestrictedAction = (actionName: string) => {
+    showToast(
+      `Permission restricted: ${actionName} requires Security Guard or Admin authorization.`
+    );
   };
 
-  const handleEscalationSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsEscalateModalOpen(false);
-    setEscalateNotes('');
-    showToast(`Movement ${selectedMovement?.id} escalated to Security Supervisor (${escalateReason}).`);
-  };
-
-  const getStatusClass = (status: HostMovementStatus): string => {
-    switch (status) {
-      case 'Exception':
-        return 'exception';
-      case 'Checkpoint Verified':
-        return 'verified';
-      case 'In Transit':
-        return 'transit';
-      case 'Received':
-        return 'received';
-      case 'Scheduled':
-        return 'scheduled';
-      case 'Dispatched':
-        return 'dispatched';
-      default:
-        return 'received';
+  const getStatusClass = (status: string): string => {
+    const s = status.toLowerCase();
+    if (s.includes('in-transit') || s.includes('in transit') || s.includes('transit')) {
+      return 'transit';
     }
+    if (s.includes('check-in') || s.includes('completed') || s.includes('return') || s.includes('received')) {
+      return 'received';
+    }
+    if (s.includes('initiated') || s.includes('scheduled')) {
+      return 'scheduled';
+    }
+    if (s.includes('cancel') || s.includes('exception')) {
+      return 'exception';
+    }
+    if (s.includes('verified')) {
+      return 'verified';
+    }
+    return 'transit';
   };
 
-  const getStatusIcon = (status: HostMovementStatus): string => {
-    switch (status) {
-      case 'Exception':
-        return 'error_outline';
-      case 'Checkpoint Verified':
-        return 'verified';
-      case 'In Transit':
-        return 'near_me';
-      case 'Received':
-        return 'check';
-      case 'Scheduled':
-        return 'schedule';
-      case 'Dispatched':
-        return 'outbox';
-      default:
-        return 'info';
+  const getStatusIcon = (status: string): string => {
+    const s = status.toLowerCase();
+    if (s.includes('in-transit') || s.includes('in transit') || s.includes('transit')) {
+      return 'near_me';
     }
+    if (s.includes('check-in') || s.includes('completed') || s.includes('return') || s.includes('received')) {
+      return 'check_circle';
+    }
+    if (s.includes('initiated') || s.includes('scheduled')) {
+      return 'schedule';
+    }
+    if (s.includes('cancel') || s.includes('exception')) {
+      return 'cancel';
+    }
+    if (s.includes('verified')) {
+      return 'verified';
+    }
+    return 'info';
   };
 
   return (
@@ -250,11 +554,11 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                 <h1 className="amx-hma-headline">Movement Activity</h1>
                 <span className="amx-hma-active-perimeter-badge">
                   <span className="amx-hma-active-dot" />
-                  Active Perimeter Logs • Checkpoint Node Gate-04A
+                  Active Perimeter Logs · Checkpoint Registry
                 </span>
               </div>
               <p className="amx-hma-subtitle">
-                Track asset movements, checkpoint verification and custody transitions.
+                Track asset movements, checkpoint telemetry, and perimeter custody transitions.
               </p>
             </div>
 
@@ -273,13 +577,16 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
               <button
                 type="button"
                 className="amx-hma-btn-scan-primary"
-                onClick={() => setIsVerifyModalOpen(true)}
+                disabled
+                style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                title="Restricted: Checkpoint scan verification requires Security Guard authorization"
+                onClick={() => handleRestrictedAction('Checkpoint scan verification')}
                 aria-label="Verify Checkpoint Scan"
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
                   qr_code_scanner
                 </span>
-                <span>Verify Checkpoint Scan</span>
+                <span>Verify Checkpoint Scan (Guard Only)</span>
               </button>
             </div>
           </div>
@@ -293,7 +600,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
               <div>
                 <span className="amx-hma-kpi-title">Total Movements</span>
                 <div className="amx-hma-kpi-number">
-                  {HOST_MOVEMENT_KPIS_DATA.totalMovements.total}
+                  {kpis?.totalMovements.total ?? '—'}
                 </div>
               </div>
               <div className="amx-hma-kpi-icon-box">
@@ -304,10 +611,10 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
             </div>
             <div className="amx-hma-kpi-bottom">
               <span className="amx-hma-kpi-subtext">
-                {HOST_MOVEMENT_KPIS_DATA.totalMovements.subtext}
+                {kpis?.totalMovements.subtext ?? 'All movement records in system'}
               </span>
               <span className="amx-hma-kpi-badge">
-                {HOST_MOVEMENT_KPIS_DATA.totalMovements.badgeText}
+                {kpis?.totalMovements.badgeText ?? 'Active Registry'}
               </span>
             </div>
           </div>
@@ -318,7 +625,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
               <div>
                 <span className="amx-hma-kpi-title">In Transit</span>
                 <div className="amx-hma-kpi-number">
-                  {HOST_MOVEMENT_KPIS_DATA.inTransit.total}
+                  {kpis?.inTransit.total ?? '—'}
                 </div>
               </div>
               <div className="amx-hma-kpi-icon-box cyan">
@@ -329,10 +636,10 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
             </div>
             <div className="amx-hma-kpi-bottom">
               <span className="amx-hma-kpi-subtext">
-                {HOST_MOVEMENT_KPIS_DATA.inTransit.subtext}
+                {kpis?.inTransit.subtext ?? 'Active perimeter transfers today'}
               </span>
               <span className="amx-hma-kpi-badge cyan">
-                {HOST_MOVEMENT_KPIS_DATA.inTransit.badgeText}
+                {kpis?.inTransit.badgeText ?? 'Live Telemetry'}
               </span>
             </div>
           </div>
@@ -343,7 +650,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
               <div>
                 <span className="amx-hma-kpi-title">Completed Today</span>
                 <div className="amx-hma-kpi-number">
-                  {HOST_MOVEMENT_KPIS_DATA.completedToday.total}
+                  {kpis?.completedToday.total ?? '—'}
                 </div>
               </div>
               <div className="amx-hma-kpi-icon-box">
@@ -354,10 +661,10 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
             </div>
             <div className="amx-hma-kpi-bottom">
               <span className="amx-hma-kpi-subtext">
-                {HOST_MOVEMENT_KPIS_DATA.completedToday.subtext}
+                {kpis?.completedToday.subtext ?? 'Transfers completed today'}
               </span>
               <span className="amx-hma-kpi-badge">
-                {HOST_MOVEMENT_KPIS_DATA.completedToday.badgeText}
+                {kpis?.completedToday.badgeText ?? 'Completed'}
               </span>
             </div>
           </div>
@@ -368,7 +675,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
               <div>
                 <span className="amx-hma-kpi-title">Movement Exceptions</span>
                 <div className="amx-hma-kpi-number error">
-                  {HOST_MOVEMENT_KPIS_DATA.movementExceptions.total}
+                  {kpis?.movementExceptions.total ?? '—'}
                 </div>
               </div>
               <div className="amx-hma-kpi-icon-box error">
@@ -379,10 +686,10 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
             </div>
             <div className="amx-hma-kpi-bottom">
               <span className="amx-hma-kpi-subtext">
-                {HOST_MOVEMENT_KPIS_DATA.movementExceptions.subtext}
+                {kpis?.movementExceptions.subtext ?? 'Exception telemetry not tracked on movements'}
               </span>
               <span className="amx-hma-kpi-badge error">
-                {HOST_MOVEMENT_KPIS_DATA.movementExceptions.badgeText}
+                {kpis?.movementExceptions.badgeText ?? 'Unavailable'}
               </span>
             </div>
           </div>
@@ -399,13 +706,31 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
               <input
                 type="text"
                 className="amx-hma-search-input"
-                placeholder="Search by Movement ID, Asset ID, serial or custodian..."
+                placeholder="Search by Movement ID, Asset Name, Tag or Location..."
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search Movements"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--amx-hma-text-muted)',
+                    cursor: 'pointer',
+                    padding: '0 4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear search"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                    close
+                  </span>
+                </button>
+              )}
             </div>
 
             {/* Status Filter */}
@@ -420,12 +745,10 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                 aria-label="Filter by Status"
               >
                 <option value="All">Status: All Statuses</option>
-                <option value="Exception">Exception</option>
-                <option value="Checkpoint Verified">Checkpoint Verified</option>
                 <option value="In Transit">In Transit</option>
-                <option value="Received">Received</option>
-                <option value="Scheduled">Scheduled</option>
-                <option value="Dispatched">Dispatched</option>
+                <option value="Completed">Completed (Return Check-In)</option>
+                <option value="Initiated">Initiated</option>
+                <option value="Cancelled">Cancelled</option>
               </select>
               <span className="material-symbols-outlined amx-hma-filter-select-icon">
                 expand_more
@@ -444,10 +767,10 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                 aria-label="Filter by Corridor"
               >
                 <option value="All">Corridor: All Checkpoints</option>
-                <option value="Gate-04A Main Corridor">Gate-04A Main Corridor</option>
-                <option value="Server Room 2 Express">Server Room 2 Express</option>
-                <option value="Tech Hub Building B Bay">Tech Hub Building B Bay</option>
-                <option value="East Checkpoint Transit">East Checkpoint Transit</option>
+                <option value="Server Room 2">Server Room 2</option>
+                <option value="Lab 4">Lab 4 Corridor</option>
+                <option value="Loading Bay">Loading Bay</option>
+                <option value="Design Lab">Design Lab</option>
               </select>
               <span className="material-symbols-outlined amx-hma-filter-select-icon">
                 expand_more
@@ -466,6 +789,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                 aria-label="Filter by Department"
               >
                 <option value="All">Dept: All Departments</option>
+                <option value="Operations">Operations</option>
                 <option value="Engineering">Engineering</option>
                 <option value="IT Operations">IT Operations</option>
                 <option value="Facilities">Facilities</option>
@@ -476,23 +800,54 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
               </span>
             </div>
 
-            {/* Date Range & Reset */}
-            <button
-              type="button"
-              className="amx-hma-date-btn"
-              onClick={() => showToast('Date filter: Showing movement entries for 18 Feb 2026.')}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-                calendar_today
-              </span>
-              <span>{dateFilter}</span>
-            </button>
+            {/* Server-Side Date Filter Input */}
+            <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+              <input
+                type="date"
+                className="amx-hma-date-btn"
+                value={dateFilter}
+                onChange={(e) => {
+                  setDateFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                title="Filter movements by date (YYYY-MM-DD)"
+                aria-label="Filter by Date"
+                style={{ colorScheme: 'dark', outline: 'none' }}
+              />
+              {dateFilter && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFilter('');
+                    setCurrentPage(1);
+                  }}
+                  title="Clear date filter"
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--amx-hma-text-muted)',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  aria-label="Clear date filter"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                    close
+                  </span>
+                </button>
+              )}
+            </div>
 
             <button
               type="button"
               className="amx-hma-reset-btn"
               onClick={handleResetFilters}
               title="Reset Filters"
+              aria-label="Reset Filters"
             >
               <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
                 refresh
@@ -505,10 +860,10 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
             <div className="amx-hma-indicator-left">
               <span className="amx-hma-indicator-dot" />
               <span>
-                Showing {filteredRecords.length} of {HOST_MOVEMENT_KPIS_DATA.totalMovements.total} Movement Records • Illustrative Operational Dataset
+                Showing {filteredRecords.length} of {totalRecords} Movement Records · Host Checkpoint Scope
               </span>
             </div>
-            <span>Checkpoints Active: Gate-04A, Hub-B1, Bay-East</span>
+            <span>Checkpoints Active: Node Gate-04A · Perimeter Telemetry</span>
           </div>
         </div>
 
@@ -529,102 +884,40 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                 </tr>
               </thead>
               <tbody>
-                {paginatedRecords.map((record) => {
-                  const isSelected = selectedMovement?.id === record.id;
-                  const statusClass = getStatusClass(record.status);
-                  const statusIcon = getStatusIcon(record.status);
-
-                  return (
-                    <tr
-                      key={record.id}
-                      className={`amx-hma-row ${isSelected ? 'selected' : ''}`}
-                      onClick={() => handleSelectMovement(record)}
-                    >
-                      <td>
-                        <div className="amx-hma-cell-id">
-                          <span className={`amx-hma-id-dot ${statusClass}`} />
-                          <span>{record.id}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="amx-hma-asset-info">
-                          <span className="amx-hma-asset-title">{record.assetName}</span>
-                          <span className="amx-hma-asset-sub">
-                            {record.assetTag} • SN: {record.serialNumber}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="amx-hma-location-cell">
-                          <span className="material-symbols-outlined amx-hma-location-icon">
-                            {record.originIcon}
-                          </span>
-                          <span>{record.origin}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="amx-hma-location-cell">
-                          <span className="material-symbols-outlined amx-hma-location-icon">
-                            {record.destinationIcon}
-                          </span>
-                          <span>{record.destination}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="amx-hma-initiator-cell">
-                          <div className={`amx-hma-avatar ${isSelected ? 'dark' : ''}`}>
-                            {record.initiatorInitials}
-                          </div>
-                          <div className="amx-hma-initiator-meta">
-                            <span className="amx-hma-initiator-name">{record.initiatedBy}</span>
-                            <span className="amx-hma-initiator-dept">{record.department}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="amx-hma-date-cell">{record.movementDate}</td>
-                      <td>
-                        <span className={`amx-hma-status-pill ${statusClass}`}>
-                          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>
-                            {statusIcon}
-                          </span>
-                          <span>{record.status}</span>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--amx-hma-text-muted)' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+                        <span className="material-symbols-outlined" style={{ animation: 'spin 1s linear infinite' }}>
+                          progress_activity
                         </span>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        {isSelected ? (
-                          <button
-                            type="button"
-                            className="amx-hma-btn-selected"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setIsDetailPanelOpen(true);
-                            }}
-                          >
-                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
-                              visibility
-                            </span>
-                            <span>Selected</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="amx-hma-btn-view"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectMovement(record);
-                            }}
-                          >
-                            View Details
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {paginatedRecords.length === 0 && (
+                        <span>Loading movement activity from perimeter telemetry...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : apiError ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--amx-hma-error)' }}>
+                      <p style={{ margin: 0, fontWeight: 600 }}>{apiError}</p>
+                      <button
+                        type="button"
+                        className="amx-hma-btn-view"
+                        style={{ marginTop: '12px' }}
+                        onClick={() => {
+                          fetchMovements();
+                          fetchKpis();
+                        }}
+                      >
+                        Retry
+                      </button>
+                    </td>
+                  </tr>
+                ) : paginatedRecords.length === 0 ? (
                   <tr>
                     <td colSpan={8} style={{ textAlign: 'center', padding: '36px 16px' }}>
-                      <p style={{ margin: 0, fontWeight: 600 }}>No movement records match the selected filters.</p>
+                      <p style={{ margin: 0, fontWeight: 600, color: 'var(--amx-hma-text)' }}>
+                        No movement records match the selected filters.
+                      </p>
                       <button
                         type="button"
                         className="amx-hma-btn-view"
@@ -635,6 +928,99 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                       </button>
                     </td>
                   </tr>
+                ) : (
+                  paginatedRecords.map((record) => {
+                    const isSelected = selectedMovement?.id === record.id;
+                    const statusClass = getStatusClass(record.status);
+                    const statusIcon = getStatusIcon(record.status);
+
+                    return (
+                      <tr
+                        key={record.id}
+                        className={`amx-hma-row ${isSelected ? 'selected' : ''}`}
+                        onClick={() => handleSelectMovement(record)}
+                      >
+                        <td>
+                          <div className="amx-hma-cell-id">
+                            <span className={`amx-hma-id-dot ${statusClass}`} />
+                            <span>{record.id}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="amx-hma-asset-info">
+                            <span className="amx-hma-asset-title">{record.assetName}</span>
+                            <span className="amx-hma-asset-sub">
+                              {record.assetTag}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="amx-hma-location-cell">
+                            <span className="material-symbols-outlined amx-hma-location-icon">
+                              {record.originIcon}
+                            </span>
+                            <span>{record.origin}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="amx-hma-location-cell">
+                            <span className="material-symbols-outlined amx-hma-location-icon">
+                              {record.destinationIcon}
+                            </span>
+                            <span>{record.destination}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="amx-hma-initiator-cell">
+                            <div className={`amx-hma-avatar ${isSelected ? 'dark' : ''}`}>
+                              {record.initiatorInitials}
+                            </div>
+                            <div className="amx-hma-initiator-meta">
+                              <span className="amx-hma-initiator-name">{record.initiatedBy}</span>
+                              <span className="amx-hma-initiator-dept">{record.department}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="amx-hma-date-cell">{record.movementDate}</td>
+                        <td>
+                          <span className={`amx-hma-status-pill ${statusClass}`}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>
+                              {statusIcon}
+                            </span>
+                            <span>{record.status}</span>
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {isSelected ? (
+                            <button
+                              type="button"
+                              className="amx-hma-btn-selected"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsDetailPanelOpen(true);
+                              }}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                                visibility
+                              </span>
+                              <span>Selected</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="amx-hma-btn-view"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectMovement(record);
+                              }}
+                            >
+                              View Details
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -651,14 +1037,15 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                   setRowsPerPage(Number(e.target.value));
                   setCurrentPage(1);
                 }}
+                aria-label="Rows per page"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
               </select>
               <span style={{ marginLeft: '6px' }}>
-                Showing {totalRecords === 0 ? 0 : startIndex + 1}-
-                {Math.min(startIndex + rowsPerPage, totalRecords)} of {totalRecords} records
+                Showing {totalRecords === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1}-
+                {Math.min(currentPage * rowsPerPage, totalRecords)} of {totalRecords} records
               </span>
             </div>
 
@@ -828,7 +1215,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ fontSize: '13px', fontWeight: 600 }}>{selectedMovement.initiatedBy}</span>
                           <span style={{ fontSize: '11px', color: 'var(--amx-hma-text-subtle)' }}>
-                            Badge #{selectedMovement.initiatorBadge} • {selectedMovement.department}
+                            Badge #{selectedMovement.initiatorBadge} · {selectedMovement.department}
                           </span>
                         </div>
                       </div>
@@ -878,30 +1265,36 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
 
                   <div className="amx-hma-card-block">
                     <span className="amx-hma-spec-label">Attached Manifest Files</span>
-                    <div className="amx-hma-manifest-list">
-                      {selectedMovement.manifestFiles.map((file, idx) => (
-                        <div
-                          key={idx}
-                          className="amx-hma-manifest-item"
-                          onClick={() => showToast(`Downloaded: ${file.name}`)}
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`Download ${file.name}`}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--amx-hma-text-subtle)' }}>
-                              picture_as_pdf
-                            </span>
-                            <span style={{ fontFamily: 'var(--amx-hma-font-mono)', fontSize: '12px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                              {file.name}
+                    {selectedMovement.manifestFiles && selectedMovement.manifestFiles.length > 0 ? (
+                      <div className="amx-hma-manifest-list">
+                        {selectedMovement.manifestFiles.map((file, idx) => (
+                          <div
+                            key={idx}
+                            className="amx-hma-manifest-item"
+                            onClick={() => showToast(`Downloaded: ${file.name}`)}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Download ${file.name}`}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--amx-hma-text-subtle)' }}>
+                                picture_as_pdf
+                              </span>
+                              <span style={{ fontFamily: 'var(--amx-hma-font-mono)', fontSize: '12px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                {file.name}
+                              </span>
+                            </div>
+                            <span style={{ fontFamily: 'var(--amx-hma-font-mono)', fontSize: '11px', color: 'var(--amx-hma-text-subtle)', flexShrink: 0 }}>
+                              {file.size}
                             </span>
                           </div>
-                          <span style={{ fontFamily: 'var(--amx-hma-font-mono)', fontSize: '11px', color: 'var(--amx-hma-text-subtle)', flexShrink: 0 }}>
-                            {file.size}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '12px', color: 'var(--amx-hma-text-muted)', margin: '4px 0 0 0' }}>
+                        No manifest files attached to this movement record.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -941,7 +1334,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                   admin_panel_settings
                 </span>
                 <span>
-                  Host role active. Master inventory edits, asset modifications, and admin approvals restricted. All events logged to local perimeter registry.
+                  <strong>Host Audit Scope:</strong> Checkpoint scan verification, issue logging, and incident escalation require Security Guard or Admin authorization.
                 </span>
               </div>
 
@@ -949,26 +1342,35 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                 <button
                   type="button"
                   className="amx-hma-btn-escalate"
-                  onClick={() => setIsEscalateModalOpen(true)}
+                  disabled
+                  style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                  title="Restricted: Movement exception escalation requires Security Guard authorization"
+                  onClick={() => handleRestrictedAction('Movement exception escalation')}
                 >
-                  Escalate to Security Supervisor
+                  Escalate to Security Supervisor (Guard Only)
                 </button>
                 <button
                   type="button"
                   className="amx-hma-btn-issue"
-                  onClick={() => setIsIssueModalOpen(true)}
+                  disabled
+                  style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                  title="Restricted: Checkpoint issue logging requires Security Guard authorization"
+                  onClick={() => handleRestrictedAction('Checkpoint issue logging')}
                 >
-                  Log Checkpoint Issue
+                  Log Checkpoint Issue (Guard Only)
                 </button>
                 <button
                   type="button"
                   className="amx-hma-btn-verify-primary"
-                  onClick={() => setIsVerifyModalOpen(true)}
+                  disabled
+                  style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                  title="Restricted: Checkpoint scan verification requires Security Guard authorization"
+                  onClick={() => handleRestrictedAction('Checkpoint scan verification')}
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
                     qr_code_scanner
                   </span>
-                  <span>Verify Checkpoint Scan</span>
+                  <span>Verify Checkpoint Scan (Guard Only)</span>
                 </button>
               </div>
             </div>
@@ -976,7 +1378,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
         )}
       </div>
 
-      {/* VERIFY CHECKPOINT SCAN MODAL */}
+      {/* VERIFY CHECKPOINT SCAN MODAL (Host Audit Preview) */}
       {isVerifyModalOpen && selectedMovement && (
         <div className="amx-hma-modal-backdrop" onClick={() => setIsVerifyModalOpen(false)}>
           <div className="amx-hma-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -997,12 +1399,26 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
               </button>
             </div>
             <div className="amx-hma-modal-body">
+              <div
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: 'var(--amx-hma-surface-high)',
+                  borderRadius: '6px',
+                  marginBottom: '12px',
+                  fontSize: '12px',
+                  lineHeight: '1.4',
+                  color: 'var(--amx-hma-text-muted)',
+                }}
+              >
+                <strong>Host Audit Preview:</strong> Checkpoint clearance checklist can be reviewed for audit tracking, but confirmation is restricted to Security Guard personnel.
+              </div>
+
               <div style={{ padding: '10px 12px', background: 'var(--amx-hma-surface-low)', borderRadius: '8px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 700 }}>
                   {selectedMovement.id} — {selectedMovement.assetName}
                 </div>
                 <div style={{ fontFamily: 'var(--amx-hma-font-mono)', fontSize: '11.5px', color: 'var(--amx-hma-text-muted)', marginTop: '2px' }}>
-                  Tag: {selectedMovement.assetTag} | Serial: {selectedMovement.serialNumber} | Gate Pass: {selectedMovement.gatePassId}
+                  Origin: {selectedMovement.origin} | Destination: {selectedMovement.destination}
                 </div>
               </div>
 
@@ -1051,27 +1467,30 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                 className="amx-hma-btn-export"
                 onClick={() => setIsVerifyModalOpen(false)}
               >
-                Cancel
+                Close
               </button>
               <button
                 type="button"
                 className="amx-hma-btn-verify-primary"
-                onClick={handleCompleteVerification}
+                disabled
+                style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                title="Checkpoint clearance is restricted to Security Guard personnel"
+                onClick={() => handleRestrictedAction('Checkpoint clearance verification')}
               >
-                Confirm Checkpoint Clearance
+                Confirm Checkpoint Clearance (Guard Only)
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* LOG CHECKPOINT ISSUE MODAL */}
+      {/* LOG CHECKPOINT ISSUE MODAL (Host Audit Preview) */}
       {isIssueModalOpen && selectedMovement && (
         <div className="amx-hma-modal-backdrop" onClick={() => setIsIssueModalOpen(false)}>
           <div className="amx-hma-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="amx-hma-modal-header">
-              <h3 className="amx-hma-modal-title">
-                <span className="material-symbols-outlined" style={{ color: 'var(--amx-hma-error)' }}>
+              <h3 className="amx-hma-modal-title" style={{ color: 'var(--amx-hma-error)' }}>
+                <span className="material-symbols-outlined">
                   report_problem
                 </span>
                 Log Checkpoint Discrepancy / Exception
@@ -1085,8 +1504,27 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <form onSubmit={handleLogIssueSubmit}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleRestrictedAction('Checkpoint issue logging');
+              }}
+            >
               <div className="amx-hma-modal-body">
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: 'var(--amx-hma-surface-high)',
+                    borderRadius: '6px',
+                    marginBottom: '12px',
+                    fontSize: '12px',
+                    lineHeight: '1.4',
+                    color: 'var(--amx-hma-text-muted)',
+                  }}
+                >
+                  <strong>Host Notice:</strong> Checkpoint issue logging requires Security Guard or Admin authorization.
+                </div>
+
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
                     Issue Type:
@@ -1097,23 +1535,22 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                     onChange={(e) => setIssueCategory(e.target.value)}
                   >
                     <option value="Missing secondary perimeter seal scan">Missing secondary perimeter seal scan</option>
-                    <option value="Packaging Tampered or Breached">Packaging Tampered or Breached</option>
-                    <option value="Corrupted / Unreadable Barcode">Corrupted / Unreadable Barcode</option>
-                    <option value="Routing Deviation From Manifest">Routing Deviation From Manifest</option>
-                    <option value="Unscheduled Checkpoint Arrival">Unscheduled Checkpoint Arrival</option>
+                    <option value="Packaging Tampered In-Transit">Packaging Tampered In-Transit</option>
+                    <option value="Bearer Route Diversion Detected">Bearer Route Diversion Detected</option>
+                    <option value="Corridor Transit Delay / TTL Exceeded">Corridor Transit Delay / TTL Exceeded</option>
+                    <option value="Hardware Serial Mismatch">Hardware Serial Mismatch</option>
                   </select>
                 </div>
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                    Observations & Description:
+                    Checkpoint Exception Details:
                   </label>
                   <textarea
                     style={{ width: '100%', minHeight: '80px', padding: '8px', borderRadius: '6px', border: '1px solid var(--amx-hma-border)', fontSize: '13px', boxSizing: 'border-box' }}
                     placeholder="Describe the discrepancy observed during corridor check-in..."
                     value={issueNotes}
                     onChange={(e) => setIssueNotes(e.target.value)}
-                    required
                   />
                 </div>
               </div>
@@ -1123,13 +1560,16 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                   className="amx-hma-btn-export"
                   onClick={() => setIsIssueModalOpen(false)}
                 >
-                  Cancel
+                  Close
                 </button>
                 <button
                   type="submit"
                   className="amx-hma-btn-verify-primary"
+                  disabled
+                  style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                  title="Checkpoint issue logging is restricted to Security Guard personnel"
                 >
-                  Log Issue to Registry
+                  Log Issue to Registry (Guard Only)
                 </button>
               </div>
             </form>
@@ -1137,7 +1577,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
         </div>
       )}
 
-      {/* ESCALATE TO SECURITY SUPERVISOR MODAL */}
+      {/* ESCALATE TO SECURITY SUPERVISOR MODAL (Host Audit Preview) */}
       {isEscalateModalOpen && selectedMovement && (
         <div className="amx-hma-modal-backdrop" onClick={() => setIsEscalateModalOpen(false)}>
           <div className="amx-hma-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -1157,11 +1597,26 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <form onSubmit={handleEscalationSubmit}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleRestrictedAction('Movement exception escalation');
+              }}
+            >
               <div className="amx-hma-modal-body">
-                <p style={{ fontSize: '13px', color: 'var(--amx-hma-text-muted)', margin: 0 }}>
-                  Host role records perimeter security escalations. Escalation does not grant approval or override permissions. Master asset modifications remain restricted.
-                </p>
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: 'var(--amx-hma-surface-high)',
+                    borderRadius: '6px',
+                    marginBottom: '12px',
+                    fontSize: '12px',
+                    lineHeight: '1.4',
+                    color: 'var(--amx-hma-text-muted)',
+                  }}
+                >
+                  <strong>Host Notice:</strong> Movement exception escalation requires Security Guard or Admin authorization.
+                </div>
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
@@ -1189,7 +1644,6 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                     placeholder="Provide details for Security Administration review..."
                     value={escalateNotes}
                     onChange={(e) => setEscalateNotes(e.target.value)}
-                    required
                   />
                 </div>
               </div>
@@ -1199,14 +1653,16 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
                   className="amx-hma-btn-export"
                   onClick={() => setIsEscalateModalOpen(false)}
                 >
-                  Cancel
+                  Close
                 </button>
                 <button
                   type="submit"
                   className="amx-hma-btn-escalate"
-                  style={{ backgroundColor: 'var(--amx-hma-error)', color: '#ffffff', border: 'none' }}
+                  disabled
+                  style={{ backgroundColor: 'var(--amx-hma-error)', color: '#ffffff', border: 'none', opacity: 0.55, cursor: 'not-allowed' }}
+                  title="Movement exception escalation is restricted to Security Guard personnel"
                 >
-                  Submit Escalation
+                  Submit Escalation (Guard Only)
                 </button>
               </div>
             </form>
@@ -1216,4 +1672,3 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
     </DashboardLayout>
   );
 };
-

@@ -374,13 +374,16 @@ export function issueConsumable(consumableId: string, payload: {
   });
 }
 
+export interface AssetTransferPayload {
+  destination_location: string;
+  new_custodian: string;
+  transfer_reason?: string | null;
+  qr_code: string;
+}
+
 export function initiateTransfer(
   assetId: string,
-  payload: {
-    destination_location: string;
-    new_custodian: string;
-    transfer_reason?: string | null;
-  },
+  payload: AssetTransferPayload,
 ): Promise<AssetTransferResponse> {
   return request<AssetTransferResponse>(`/api/assets/${encodeURIComponent(assetId)}/transfer`, {
     method: 'POST',
