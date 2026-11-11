@@ -1150,3 +1150,66 @@
   to { transform: translateY(0); opacity: 1; }
 }
 
+/* -------------------------------------------------------------
+   Loading, Error & Empty States
+   ------------------------------------------------------------- */
+.amx-guard-loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  background-color: #ffffff;
+  border: 1px solid #c6c6cd;
+  border-radius: 8px;
+  color: #45464d;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.amx-guard-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  background-color: #ffdad6;
+  border: 1px solid #ba1a1a;
+  border-radius: 8px;
+  color: #410002;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.amx-guard-error-message {
+  flex: 1;
+}
+
+.amx-guard-btn-retry {
+  padding: 6px 14px;
+  background-color: #ba1a1a;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.amx-guard-btn-retry:hover {
+  background-color: #93000a;
+}
+
+.amx-guard-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  color: #76777d;
+  font-size: 13px;
+  font-style: italic;
+  text-align: center;
+}
+
+

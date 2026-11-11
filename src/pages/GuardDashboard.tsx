@@ -1,14 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
-import {
-  GUARD_KPIS_DATA,
-  GUARD_VERIFICATION_QUEUE_DATA,
-  GUARD_RECENT_ACTIVITY_DATA,
-  GUARD_UPCOMING_MOVEMENTS_DATA,
-  GUARD_CHECKPOINT_ALERTS_DATA,
-  type GuardVerificationQueueItem,
-  type GuardRecentActivityItem,
-  type GuardCheckpointAlertItem,
+import { fetchGuardDashboard } from '../api/guardDashboardApi';
+import type {
+  GuardKpis,
+  GuardVerificationQueueItem,
+  GuardRecentActivityItem,
+  GuardUpcomingMovementItem,
+  GuardCheckpointAlertItem,
 } from '../data/guardData';
 import './GuardDashboard.css';
 
@@ -21,24 +19,23 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
-  // Verification Queue State
-  const [queueItems, setQueueItems] = useState<GuardVerificationQueueItem[]>(
-    GUARD_VERIFICATION_QUEUE_DATA
-  );
+  // Loading & Error State
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Live Dashboard Data State
+  const [kpis, setKpis] = useState<GuardKpis>({
+    expectedInbound: { total: 0, badgeText: '0 awaiting return', subtext: 'Active returnable passes' },
+    expectedOutbound: { total: 0, badgeText: '0 pending clearance', subtext: 'Authorized dispatches' },
+    pendingVerification: { total: 0, badgeText: 'Queue Clear', subtext: 'Physical barrier queue' },
+    todaysCompletedEntries: { total: 0, badgeText: 'Verified Today', subtext: 'Cleared checkpoint logs' },
+  });
+
+  const [queueItems, setQueueItems] = useState<GuardVerificationQueueItem[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
-
-  // Activity Feed & Alerts State
-  const [activityFeed, setActivityFeed] = useState<GuardRecentActivityItem[]>(
-    GUARD_RECENT_ACTIVITY_DATA
-  );
-  const [alerts, setAlerts] = useState<GuardCheckpointAlertItem[]>(
-    GUARD_CHECKPOINT_ALERTS_DATA
-  );
-
-  // KPIs State (derived or live)
-  const [completedEntriesCount, setCompletedEntriesCount] = useState(
-    GUARD_KPIS_DATA.todaysCompletedEntries.total
-  );
+  const [activityFeed, setActivityFeed] = useState<GuardRecentActivityItem[]>([]);
+  const [upcomingMovements, setUpcomingMovements] = useState<GuardUpcomingMovementItem[]>([]);
+  const [alerts, setAlerts] = useState<GuardCheckpointAlertItem[]>([]);
 
   // Modal States
   const [verifyingItem, setVerifyingItem] = useState<GuardVerificationQueueItem | null>(null);
@@ -68,6 +65,27 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
     }, 3600);
   };
 
+  const loadDashboardData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchGuardDashboard();
+      setKpis(data.kpis);
+      setQueueItems(data.verificationQueue);
+      setActivityFeed(data.recentActivity);
+      setUpcomingMovements(data.upcomingMovements);
+      setAlerts(data.checkpointAlerts);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load guard dashboard data.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
   // Filtered Queue
   const filteredQueue = useMemo(() => {
     const q = filterQuery.toLowerCase().trim();
@@ -83,9 +101,13 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
     );
   }, [queueItems, filterQuery]);
 
-  // Active items count (passes requiring action or in progress)
-  const activeCount = useMemo(() => {
-    return queueItems.filter((i) => i.status !== 'Cleared').length;
+  // Active items count (actionable passes requiring Guard verification vs on-hold)
+  const pendingActionableCount = useMemo(() => {
+    return queueItems.filter((i) => i.action === 'verify').length;
+  }, [queueItems]);
+
+  const onHoldCount = useMemo(() => {
+    return queueItems.filter((i) => i.action === 'flagged').length;
   }, [queueItems]);
 
   const activeAlertsCount = useMemo(() => {
@@ -95,6 +117,10 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
   // Handlers for Gate Pass Verification
   const openVerifyModal = (item?: GuardVerificationQueueItem) => {
     const target = item || queueItems.find((i) => i.action === 'verify') || queueItems[0];
+    if (!target) {
+      showToast('No gate pass selected for verification.');
+      return;
+    }
     setVerifyingItem(target);
     setTagVerified(false);
     setSealIntact(false);
@@ -118,8 +144,14 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
       )
     );
 
-    // Update Completed count
-    setCompletedEntriesCount((c) => c + 1);
+    // Update Completed count in KPIs
+    setKpis((prev) => ({
+      ...prev,
+      todaysCompletedEntries: {
+        ...prev.todaysCompletedEntries,
+        total: prev.todaysCompletedEntries.total + 1,
+      },
+    }));
 
     // Prepend to Activity Feed
     const now = new Date();
@@ -133,13 +165,13 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
       passId: verifyingItem.id,
       plateOrBadge: verifyingItem.carrier || verifyingItem.requesterBadge,
       assetName: verifyingItem.assetName,
-      notes: checkpointNotes || 'Physical barrier clearance authorized by Guard',
+      notes: checkpointNotes || 'Physical checkpoint inspection completed by Guard',
       badgeText: 'Barrier Cleared',
       type: verifyingItem.type.includes('Inbound') ? 'entry' : 'exit',
     };
-    setActivityFeed((prev) => [newActivity, ...prev.slice(0, 5)]);
+    setActivityFeed((prev) => [newActivity, ...prev.slice(0, 9)]);
 
-    showToast(`Gate Pass ${verifyingItem.id} authorized. Physical barrier cleared.`);
+    showToast(`Gate Pass ${verifyingItem.id} authorized. Physical clearance logged.`);
     closeVerifyModal();
   };
 
@@ -169,13 +201,13 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
       passId: verifyingItem.id,
       serialNumber: verifyingItem.serialNumber,
       description: `${verifyingItem.id}: Physical verification flagged for ${verifyingItem.assetName}. ${
-        checkpointNotes || 'Secondary inspection required prior to barrier release.'
+        checkpointNotes || 'Secondary inspection required prior to clearance.'
       }`,
       acknowledged: false,
     };
     setAlerts((prev) => [newAlert, ...prev]);
 
-    showToast(`Pass ${verifyingItem.id} flagged. Barrier locked for secondary inspection.`);
+    showToast(`Pass ${verifyingItem.id} flagged. Secondary inspection required.`);
     closeVerifyModal();
   };
 
@@ -184,15 +216,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
     setAlerts((prev) =>
       prev.map((a) => (a.id === alertId ? { ...a, acknowledged: true } : a))
     );
-    showToast('Alert acknowledged by Guard.');
-  };
-
-  const handleEscalateAlert = (passId?: string) => {
-    showToast(
-      passId
-        ? `Incident on ${passId} escalated to Security Supervisor.`
-        : 'Discrepancy escalated to Security Supervisor on duty.'
-    );
+    showToast('Discrepancy alert acknowledged.');
   };
 
   // Incident Modal Handler
@@ -238,7 +262,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
               <span className="amx-guard-crumb-current">Guard Dashboard</span>
               <span className="amx-guard-node-chip">
                 <span className="amx-guard-node-dot"></span>
-                Active Perimeter Node • Main Gate Checkpoint (Gate-01A)
+                Active Perimeter Node • Main Checkpoint
               </span>
             </div>
             <h1 className="amx-guard-title">Guard Dashboard</h1>
@@ -264,7 +288,13 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
               type="button"
               className="amx-guard-btn-primary"
               title="Inspect and verify physical asset movement"
-              onClick={() => openVerifyModal()}
+              onClick={() => {
+                if (onNavigate) {
+                  onNavigate('gate-verification');
+                } else {
+                  openVerifyModal();
+                }
+              }}
             >
               <span className="material-symbols-outlined text-[18px]">
                 qr_code_scanner
@@ -273,6 +303,33 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Error Banner with Retry */}
+        {error && (
+          <div className="amx-guard-error-banner" role="alert">
+            <span className="material-symbols-outlined text-[20px] text-[#ba1a1a]">error</span>
+            <div className="amx-guard-error-message">
+              <strong>Failed to load dashboard data:</strong> {error}
+            </div>
+            <button
+              type="button"
+              className="amx-guard-btn-retry"
+              onClick={loadDashboardData}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading Spinner / Indicator */}
+        {loading && (
+          <div className="amx-guard-loading-state" role="status" aria-live="polite">
+            <span className="material-symbols-outlined animate-spin text-[20px] text-[#00687a]">
+              progress_activity
+            </span>
+            <span>Loading checkpoint operational data...</span>
+          </div>
+        )}
 
         {/* ==============================================================
             KPI SUMMARY CARDS
@@ -284,7 +341,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
               <div>
                 <span className="amx-guard-kpi-label">Expected Inbound</span>
                 <div className="amx-guard-kpi-value">
-                  {GUARD_KPIS_DATA.expectedInbound.total}
+                  {kpis.expectedInbound.total}
                 </div>
               </div>
               <div className="amx-guard-kpi-icon-box amx-guard-kpi-icon-default">
@@ -293,10 +350,10 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
             </div>
             <div className="amx-guard-kpi-bottom">
               <span className="amx-guard-kpi-subtext">
-                {GUARD_KPIS_DATA.expectedInbound.subtext}
+                {kpis.expectedInbound.subtext}
               </span>
               <span className="amx-guard-kpi-pill amx-guard-kpi-pill-neutral">
-                {GUARD_KPIS_DATA.expectedInbound.badgeText}
+                {kpis.expectedInbound.badgeText}
               </span>
             </div>
           </div>
@@ -307,7 +364,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
               <div>
                 <span className="amx-guard-kpi-label">Expected Outbound</span>
                 <div className="amx-guard-kpi-value">
-                  {GUARD_KPIS_DATA.expectedOutbound.total}
+                  {kpis.expectedOutbound.total}
                 </div>
               </div>
               <div className="amx-guard-kpi-icon-box amx-guard-kpi-icon-cyan">
@@ -316,10 +373,10 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
             </div>
             <div className="amx-guard-kpi-bottom">
               <span className="amx-guard-kpi-subtext">
-                {GUARD_KPIS_DATA.expectedOutbound.subtext}
+                {kpis.expectedOutbound.subtext}
               </span>
               <span className="amx-guard-kpi-pill amx-guard-kpi-pill-cyan">
-                {GUARD_KPIS_DATA.expectedOutbound.badgeText}
+                {kpis.expectedOutbound.badgeText}
               </span>
             </div>
           </div>
@@ -329,7 +386,9 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
             <div className="amx-guard-kpi-top">
               <div>
                 <span className="amx-guard-kpi-label">Pending Gate Verification</span>
-                <div className="amx-guard-kpi-value">{activeCount}</div>
+                <div className="amx-guard-kpi-value">
+                  {loading ? '...' : kpis.pendingVerification.total}
+                </div>
               </div>
               <div className="amx-guard-kpi-icon-box amx-guard-kpi-icon-danger">
                 <span className="material-symbols-outlined text-[22px]">pending_actions</span>
@@ -337,11 +396,11 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
             </div>
             <div className="amx-guard-kpi-bottom">
               <span className="amx-guard-kpi-subtext">
-                {GUARD_KPIS_DATA.pendingVerification.subtext}
+                {kpis.pendingVerification.subtext}
               </span>
               <span className="amx-guard-kpi-pill amx-guard-kpi-pill-danger">
                 <span className="amx-guard-pulse-dot"></span>
-                {GUARD_KPIS_DATA.pendingVerification.badgeText}
+                {kpis.pendingVerification.badgeText}
               </span>
             </div>
           </div>
@@ -351,7 +410,9 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
             <div className="amx-guard-kpi-top">
               <div>
                 <span className="amx-guard-kpi-label">Today's Completed Entries</span>
-                <div className="amx-guard-kpi-value">{completedEntriesCount}</div>
+                <div className="amx-guard-kpi-value">
+                  {loading ? '...' : kpis.todaysCompletedEntries.total}
+                </div>
               </div>
               <div className="amx-guard-kpi-icon-box amx-guard-kpi-icon-neutral">
                 <span className="material-symbols-outlined text-[22px]">verified</span>
@@ -359,11 +420,11 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
             </div>
             <div className="amx-guard-kpi-bottom">
               <span className="amx-guard-kpi-subtext">
-                {GUARD_KPIS_DATA.todaysCompletedEntries.subtext}
+                {kpis.todaysCompletedEntries.subtext}
               </span>
               <span className="amx-guard-kpi-pill amx-guard-kpi-pill-neutral">
                 <span className="material-symbols-outlined text-[14px]">check</span>
-                {GUARD_KPIS_DATA.todaysCompletedEntries.badgeText}
+                {kpis.todaysCompletedEntries.badgeText}
               </span>
             </div>
           </div>
@@ -379,7 +440,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
               <div className="amx-guard-card-title-group">
                 <h2 className="amx-guard-card-title">Gate Verification Queue</h2>
                 <span className="amx-guard-count-badge">
-                  {activeCount} Active
+                  {pendingActionableCount} Pending Verification{onHoldCount > 0 ? ` • ${onHoldCount} On Hold` : ''}
                 </span>
               </div>
               <div className="amx-guard-search-wrap">
@@ -409,90 +470,108 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredQueue.map((item) => {
-                    const isInbound = item.type === 'Inbound';
-                    const isReturn = item.type === 'Inbound Return';
+                  {filteredQueue.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '36px 16px', color: '#76777d' }}>
+                        {loading
+                          ? 'Loading gate passes in queue...'
+                          : queueItems.length === 0
+                          ? 'No gate passes currently in verification queue.'
+                          : `No gate passes matching "${filterQuery}".`}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredQueue.map((item) => {
+                      const isInbound = item.type === 'Inbound';
+                      const isReturn = item.type === 'Inbound Return';
 
-                    let typeClass = 'amx-guard-type-outbound';
-                    if (isInbound) typeClass = 'amx-guard-type-inbound';
-                    if (isReturn) typeClass = 'amx-guard-type-return';
+                      let typeClass = 'amx-guard-type-outbound';
+                      if (isInbound) typeClass = 'amx-guard-type-inbound';
+                      if (isReturn) typeClass = 'amx-guard-type-return';
 
-                    let statusClass = 'amx-guard-status-awaiting-exit';
-                    let statusIcon = 'north_east';
-                    if (item.status === 'Awaiting Entry') {
-                      statusClass = 'amx-guard-status-awaiting-entry';
-                      statusIcon = 'south_west';
-                    } else if (item.status === 'Flagged') {
-                      statusClass = 'amx-guard-status-flagged';
-                      statusIcon = 'flag';
-                    } else if (item.status === 'In Transit') {
-                      statusClass = 'amx-guard-status-in-transit';
-                      statusIcon = 'local_shipping';
-                    } else if (item.status === 'Cleared') {
-                      statusClass = 'amx-guard-status-cleared';
-                      statusIcon = 'verified';
-                    }
+                      let statusClass = 'amx-guard-status-awaiting-exit';
+                      let statusIcon = 'north_east';
+                      if (item.status === 'Awaiting Entry') {
+                        statusClass = 'amx-guard-status-awaiting-entry';
+                        statusIcon = 'south_west';
+                      } else if (item.status === 'Flagged') {
+                        statusClass = 'amx-guard-status-flagged';
+                        statusIcon = 'flag';
+                      } else if (item.status === 'In Transit') {
+                        statusClass = 'amx-guard-status-in-transit';
+                        statusIcon = 'local_shipping';
+                      } else if (item.status === 'Cleared') {
+                        statusClass = 'amx-guard-status-cleared';
+                        statusIcon = 'verified';
+                      }
 
-                    return (
-                      <tr key={item.id}>
-                        <td>
-                          <span className="amx-guard-pass-id">{item.id}</span>
-                        </td>
-                        <td>
-                          <div className="amx-guard-table-person">
-                            <span className="amx-guard-person-name">{item.requesterName}</span>
-                            <span className="amx-guard-person-badge">{item.requesterBadge}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="amx-guard-table-asset">
-                            <span className="amx-guard-asset-name">{item.assetName}</span>
-                            <span className="amx-guard-asset-sn">SN: {item.serialNumber}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`amx-guard-type-badge ${typeClass}`}>
-                            {item.type}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`amx-guard-status-pill ${statusClass}`}>
-                            <span className="material-symbols-outlined text-[14px]">
-                              {statusIcon}
+                      return (
+                        <tr key={item.id}>
+                          <td>
+                            <span className="amx-guard-pass-id">{item.id}</span>
+                          </td>
+                          <td>
+                            <div className="amx-guard-table-person">
+                              <span className="amx-guard-person-name">{item.requesterName}</span>
+                              <span className="amx-guard-person-badge">{item.requesterBadge}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="amx-guard-table-asset">
+                              <span className="amx-guard-asset-name">{item.assetName}</span>
+                              <span className="amx-guard-asset-sn">SN: {item.serialNumber}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`amx-guard-type-badge ${typeClass}`}>
+                              {item.type}
                             </span>
-                            {item.status}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          {item.action === 'verify' && (
-                            <button
-                              type="button"
-                              className="amx-guard-btn-verify-action"
-                              onClick={() => openVerifyModal(item)}
-                            >
-                              Verify
-                            </button>
-                          )}
-                          {item.action === 'flagged' && (
-                            <span className="amx-guard-action-onhold">
-                              <span className="material-symbols-outlined text-[13px] text-[#ba1a1a]">
-                                lock
+                          </td>
+                          <td>
+                            <span className={`amx-guard-status-pill ${statusClass}`}>
+                              <span className="material-symbols-outlined text-[14px]">
+                                {statusIcon}
                               </span>
-                              On Hold
+                              {item.status}
                             </span>
-                          )}
-                          {item.action === 'cleared' && (
-                            <span className="amx-guard-action-completed">
-                              <span className="material-symbols-outlined text-[14px] text-[#00687a]">
-                                check_circle
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {item.action === 'verify' && (
+                              <button
+                                type="button"
+                                className="amx-guard-btn-verify-action"
+                                onClick={() => {
+                                  if (onNavigate) {
+                                    onNavigate(`gate-pass/${item.id}/verification`);
+                                  } else {
+                                    openVerifyModal(item);
+                                  }
+                                }}
+                              >
+                                Verify
+                              </button>
+                            )}
+                            {item.action === 'flagged' && (
+                              <span className="amx-guard-action-onhold">
+                                <span className="material-symbols-outlined text-[13px] text-[#ba1a1a]">
+                                  lock
+                                </span>
+                                On Hold
                               </span>
-                              Completed
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                            )}
+                            {item.action === 'cleared' && (
+                              <span className="amx-guard-action-completed">
+                                <span className="material-symbols-outlined text-[14px] text-[#00687a]">
+                                  check_circle
+                                </span>
+                                Completed
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -503,8 +582,12 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
                 type="button"
                 className="amx-guard-link"
                 onClick={() => {
-                  setFilterQuery('');
-                  showToast('Viewing all checkpoint queue records.');
+                  if (onNavigate) {
+                    onNavigate('gate-pass');
+                  } else {
+                    setFilterQuery('');
+                    showToast('Viewing all checkpoint queue records.');
+                  }
                 }}
               >
                 View All Gate Passes
@@ -517,86 +600,92 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
           <div className="amx-guard-activity-card">
             <div className="amx-guard-activity-header">
               <h2 className="amx-guard-card-title">Recent Gate Activity</h2>
-              <span className="amx-guard-node-tag">Gate-01A</span>
+              <span className="amx-guard-node-tag">Perimeter Node</span>
             </div>
 
             <div className="amx-guard-activity-list">
-              {activityFeed.map((act) => {
-                const isFlag = act.type === 'flagged' || act.isFlagged;
-                return (
-                  <div
-                    key={act.id}
-                    className={`amx-guard-activity-item ${
-                      isFlag ? 'amx-guard-activity-item-flagged' : ''
-                    }`}
-                  >
-                    <div className="amx-guard-activity-top">
-                      <span
-                        className={`amx-guard-activity-title ${
-                          isFlag ? 'amx-guard-activity-title-flagged' : ''
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[16px]">
-                          {isFlag
-                            ? 'warning'
-                            : act.type === 'entry'
-                            ? 'login'
-                            : act.plateOrBadge.startsWith('Badge')
-                            ? 'badge'
-                            : 'logout'}
+              {activityFeed.length === 0 ? (
+                <div className="amx-guard-empty-state">
+                  {loading ? 'Loading recent activity...' : 'No recent checkpoint activity recorded.'}
+                </div>
+              ) : (
+                activityFeed.map((act) => {
+                  const isFlag = act.type === 'flagged' || act.isFlagged;
+                  return (
+                    <div
+                      key={act.id}
+                      className={`amx-guard-activity-item ${
+                        isFlag ? 'amx-guard-activity-item-flagged' : ''
+                      }`}
+                    >
+                      <div className="amx-guard-activity-top">
+                        <span
+                          className={`amx-guard-activity-title ${
+                            isFlag ? 'amx-guard-activity-title-flagged' : ''
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">
+                            {isFlag
+                              ? 'warning'
+                              : act.type === 'entry'
+                              ? 'login'
+                              : act.plateOrBadge.startsWith('Badge')
+                              ? 'badge'
+                              : 'logout'}
+                          </span>
+                          {act.title}
                         </span>
-                        {act.title}
-                      </span>
-                      <span className="amx-guard-activity-time">{act.time}</span>
-                    </div>
-
-                    <div className="amx-guard-activity-details">
-                      <div className="amx-guard-activity-pass-row">
-                        <span>
-                          Pass:{' '}
-                          <strong className="font-mono text-[#191c1e]">
-                            {act.passId}
-                          </strong>
-                        </span>
-                        <span className="font-mono">{act.plateOrBadge}</span>
+                        <span className="amx-guard-activity-time">{act.time}</span>
                       </div>
-                      <div>
-                        Asset: <span>{act.assetName}</span>
+
+                      <div className="amx-guard-activity-details">
+                        <div className="amx-guard-activity-pass-row">
+                          <span>
+                            Pass:{' '}
+                            <strong className="font-mono text-[#191c1e]">
+                              {act.passId}
+                            </strong>
+                          </span>
+                          <span className="font-mono">{act.plateOrBadge}</span>
+                        </div>
+                        <div>
+                          Asset: <span>{act.assetName}</span>
+                        </div>
+                      </div>
+
+                      <div className="amx-guard-activity-footer">
+                        <span
+                          className={`amx-guard-activity-note ${
+                            isFlag ? 'amx-guard-activity-note-danger' : ''
+                          }`}
+                        >
+                          {act.notes}
+                        </span>
+                        {act.badgeText === 'Barrier Cleared' && (
+                          <span className="amx-guard-badge-cleared">
+                            <span className="material-symbols-outlined text-[12px]">done_all</span>
+                            Barrier Cleared
+                          </span>
+                        )}
+                        {act.badgeText === 'Logged Entry' && (
+                          <span className="amx-guard-badge-logged">Logged Entry</span>
+                        )}
+                        {act.badgeText === 'Discrepancy' && (
+                          <span className="amx-guard-badge-discrepancy">Discrepancy</span>
+                        )}
                       </div>
                     </div>
-
-                    <div className="amx-guard-activity-footer">
-                      <span
-                        className={`amx-guard-activity-note ${
-                          isFlag ? 'amx-guard-activity-note-danger' : ''
-                        }`}
-                      >
-                        {act.notes}
-                      </span>
-                      {act.badgeText === 'Barrier Cleared' && (
-                        <span className="amx-guard-badge-cleared">
-                          <span className="material-symbols-outlined text-[12px]">done_all</span>
-                          Barrier Cleared
-                        </span>
-                      )}
-                      {act.badgeText === 'Logged Entry' && (
-                        <span className="amx-guard-badge-logged">Logged Entry</span>
-                      )}
-                      {act.badgeText === 'Discrepancy' && (
-                        <span className="amx-guard-badge-discrepancy">Discrepancy</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
             <div className="amx-guard-feed-footer">
               <span className="amx-guard-feed-status">
                 <span className="amx-guard-node-dot"></span>
-                Live Feed Active
+                Activity Feed Active
               </span>
-              <span>(Simulated Feed • Local Checkpoint Cache)</span>
+              <span>(Live Checkpoint Records)</span>
             </div>
           </div>
         </div>
@@ -605,13 +694,13 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
             LOWER OPERATIONAL SECTION (Upcoming Movements / Alerts 50/50)
             ============================================================== */}
         <div className="amx-guard-lower-grid">
-          {/* UPCOMING MOVEMENTS (Next 3 Hours) */}
+          {/* UPCOMING MOVEMENTS (Scheduled for Today) */}
           <div className="amx-guard-panel-card">
             <div>
               <div className="amx-guard-card-header" style={{ padding: 0, marginBottom: 16 }}>
                 <div className="amx-guard-card-title-group">
                   <h2 className="amx-guard-card-title">Upcoming Movements</h2>
-                  <span className="text-xs text-[#45464d]">(Next 3 Hours)</span>
+                  <span className="text-xs text-[#45464d]">(Scheduled for Today • Date-Level Precision)</span>
                 </div>
                 <span className="amx-guard-kpi-pill amx-guard-kpi-pill-neutral">
                   Checkpoint Attention
@@ -619,36 +708,42 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
               </div>
 
               <div className="amx-guard-movement-list">
-                {GUARD_UPCOMING_MOVEMENTS_DATA.map((mov) => {
-                  const isOutbound = mov.type === 'Outbound';
-                  return (
-                    <div key={mov.id} className="amx-guard-movement-item">
-                      <div className="amx-guard-movement-left">
-                        <div className="amx-guard-movement-time">{mov.time}</div>
-                        <div className="amx-guard-movement-body">
-                          <div className="amx-guard-movement-title-row">
-                            <span className="amx-guard-movement-asset">{mov.title}</span>
-                            <span
-                              className={`amx-guard-type-badge ${
-                                isOutbound ? 'amx-guard-type-outbound' : 'amx-guard-type-inbound'
-                              }`}
-                              style={{ fontSize: 10, padding: '1px 6px' }}
-                            >
-                              {mov.type}
-                            </span>
+                {upcomingMovements.length === 0 ? (
+                  <div className="amx-guard-empty-state">
+                    {loading ? 'Checking scheduled movements...' : 'No upcoming movements scheduled for today.'}
+                  </div>
+                ) : (
+                  upcomingMovements.map((mov) => {
+                    const isOutbound = mov.type === 'Outbound';
+                    return (
+                      <div key={mov.id} className="amx-guard-movement-item">
+                        <div className="amx-guard-movement-left">
+                          <div className="amx-guard-movement-time">{mov.time}</div>
+                          <div className="amx-guard-movement-body">
+                            <div className="amx-guard-movement-title-row">
+                              <span className="amx-guard-movement-asset">{mov.title}</span>
+                              <span
+                                className={`amx-guard-type-badge ${
+                                  isOutbound ? 'amx-guard-type-outbound' : 'amx-guard-type-inbound'
+                                }`}
+                                style={{ fontSize: 10, padding: '1px 6px' }}
+                              >
+                                {mov.type}
+                              </span>
+                            </div>
+                            <div className="amx-guard-movement-meta">
+                              {mov.personLabel}:{' '}
+                              <strong className="text-[#191c1e]">{mov.personName}</strong>
+                            </div>
+                            <div className="amx-guard-movement-meta">{mov.details}</div>
                           </div>
-                          <div className="amx-guard-movement-meta">
-                            {mov.personLabel}:{' '}
-                            <strong className="text-[#191c1e]">{mov.personName}</strong>
-                          </div>
-                          <div className="amx-guard-movement-meta">{mov.details}</div>
                         </div>
-                      </div>
 
-                      <span className="amx-guard-movement-status">{mov.statusBadge}</span>
-                    </div>
-                  );
-                })}
+                        <span className="amx-guard-movement-status">{mov.statusBadge}</span>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -666,7 +761,13 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
               <button
                 type="button"
                 className="amx-guard-link"
-                onClick={() => showToast('Checkpoint schedule view synchronized.')}
+                onClick={() => {
+                  if (onNavigate) {
+                    onNavigate('gate-pass');
+                  } else {
+                    showToast('Checkpoint schedule view synchronized.');
+                  }
+                }}
               >
                 View Master Schedule
                 <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
@@ -679,95 +780,111 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
             <div>
               <div className="amx-guard-card-header" style={{ padding: 0, marginBottom: 16 }}>
                 <div className="amx-guard-card-title-group">
-                  <h2 className="amx-guard-card-title">Security & Checkpoint Alerts</h2>
+                  <h2 className="amx-guard-card-title">Security & Discrepancy Alerts</h2>
                 </div>
                 <span className="amx-guard-kpi-pill amx-guard-kpi-pill-danger">
                   <span className="amx-guard-pulse-dot"></span>
-                  {activeAlertsCount} Active Flags
+                  {activeAlertsCount} Unresolved Flags
                 </span>
               </div>
 
               <div className="amx-guard-alerts-list">
-                {alerts.map((alt) => {
-                  const isCrit = alt.severity === 'critical';
-                  const isWarn = alt.severity === 'warning';
-                  return (
-                    <div
-                      key={alt.id}
-                      className={`amx-guard-alert-item ${
-                        isCrit ? 'amx-guard-alert-critical' : ''
-                      }`}
-                      style={{ opacity: alt.acknowledged ? 0.6 : 1 }}
-                    >
-                      <div className="amx-guard-alert-top">
-                        <div className="amx-guard-alert-title-wrap">
+                {alerts.length === 0 ? (
+                  <div className="amx-guard-empty-state">
+                    {loading ? 'Checking security flags...' : 'No active security flags or discrepancies.'}
+                  </div>
+                ) : (
+                  alerts.map((alt) => {
+                    const isCrit = alt.severity === 'critical';
+                    const isWarn = alt.severity === 'warning';
+                    return (
+                      <div
+                        key={alt.id}
+                        className={`amx-guard-alert-item ${
+                          isCrit ? 'amx-guard-alert-critical' : ''
+                        }`}
+                        style={{ opacity: alt.acknowledged ? 0.6 : 1 }}
+                      >
+                        <div className="amx-guard-alert-top">
+                          <div className="amx-guard-alert-title-wrap">
+                            <span
+                              className="material-symbols-outlined text-[18px]"
+                              style={{
+                                color: isCrit ? '#ba1a1a' : isWarn ? '#00687a' : '#45464d',
+                              }}
+                            >
+                              {alt.icon}
+                            </span>
+                            <span className="amx-guard-alert-title">{alt.title}</span>
+                          </div>
                           <span
-                            className="material-symbols-outlined text-[18px]"
-                            style={{
-                              color: isCrit ? '#ba1a1a' : isWarn ? '#00687a' : '#45464d',
-                            }}
+                            className={`amx-guard-alert-severity ${
+                              isCrit
+                                ? 'amx-guard-alert-sev-critical'
+                                : isWarn
+                                ? 'amx-guard-alert-sev-warning'
+                                : 'amx-guard-alert-sev-notice'
+                            }`}
                           >
-                            {alt.icon}
+                            {alt.badgeText}
                           </span>
-                          <span className="amx-guard-alert-title">{alt.title}</span>
                         </div>
-                        <span
-                          className={`amx-guard-alert-severity ${
-                            isCrit
-                              ? 'amx-guard-alert-sev-critical'
-                              : isWarn
-                              ? 'amx-guard-alert-sev-warning'
-                              : 'amx-guard-alert-sev-notice'
-                          }`}
-                        >
-                          {alt.badgeText}
-                        </span>
-                      </div>
 
-                      <p className="amx-guard-alert-text">{alt.description}</p>
+                        <p className="amx-guard-alert-text">{alt.description}</p>
 
-                      <div className="amx-guard-alert-actions">
-                        {isCrit && (
-                          <>
+                        <div className="amx-guard-alert-actions">
+                          {isCrit && (
+                            <>
+                              <button
+                                type="button"
+                                className="amx-guard-alert-btn-danger"
+                                onClick={() => setReviewingAlert(alt)}
+                              >
+                                Review Flag
+                              </button>
+                              {alt.passId && (
+                                <>
+                                  <span style={{ color: '#c6c6cd' }}>•</span>
+                                  <button
+                                    type="button"
+                                    className="amx-guard-alert-btn-muted"
+                                    onClick={() => {
+                                      if (onNavigate && alt.passId) {
+                                        onNavigate(`gate-pass/${alt.passId}`);
+                                      } else {
+                                        showToast(`Pass ${alt.passId} recorded in Escalated status.`);
+                                      }
+                                    }}
+                                  >
+                                    View in Ledger
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          )}
+                          {isWarn && (
                             <button
                               type="button"
-                              className="amx-guard-alert-btn-danger"
-                              onClick={() => setReviewingAlert(alt)}
+                              className="amx-guard-alert-btn-link"
+                              onClick={() => handleAcknowledgeAlert(alt.id)}
                             >
-                              Review Flag
+                              {alt.acknowledged ? 'Acknowledged ✓' : 'Acknowledge'}
                             </button>
-                            <span style={{ color: '#c6c6cd' }}>•</span>
+                          )}
+                          {alt.severity === 'notice' && (
                             <button
                               type="button"
-                              className="amx-guard-alert-btn-muted"
-                              onClick={() => handleEscalateAlert(alt.passId)}
+                              className="amx-guard-alert-btn-link"
+                              onClick={() => setIsIncidentModalOpen(true)}
                             >
-                              Escalate to Supervisor
+                              Log Incident
                             </button>
-                          </>
-                        )}
-                        {isWarn && (
-                          <button
-                            type="button"
-                            className="amx-guard-alert-btn-link"
-                            onClick={() => handleAcknowledgeAlert(alt.id)}
-                          >
-                            {alt.acknowledged ? 'Acknowledged ✓' : 'Acknowledge'}
-                          </button>
-                        )}
-                        {alt.severity === 'notice' && (
-                          <button
-                            type="button"
-                            className="amx-guard-alert-btn-link"
-                            onClick={() => setIsIncidentModalOpen(true)}
-                          >
-                            Log Incident
-                          </button>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -776,7 +893,13 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
               <button
                 type="button"
                 className="amx-guard-link"
-                onClick={() => showToast('Security incident archive opened in read-only mode.')}
+                onClick={() => {
+                  if (onNavigate) {
+                    onNavigate('security-incidents');
+                  } else {
+                    showToast('Security incident archive opened in read-only mode.');
+                  }
+                }}
               >
                 Incident Archive →
               </button>
@@ -802,7 +925,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
       </div>
 
       {/* ==============================================================
-          MODAL: Gate Pass Verification
+          MODAL: Gate Pass Verification (Fallback / Inspection)
           ============================================================== */}
       {verifyingItem && (
         <div className="amx-guard-modal-backdrop" onClick={closeVerifyModal}>
@@ -857,7 +980,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
                 </div>
                 {verifyingItem.carrier && (
                   <div style={{ fontSize: 12, color: '#45464d' }}>
-                    Carrier / Vehicle: <strong>{verifyingItem.carrier}</strong>
+                    Carrier / Route: <strong>{verifyingItem.carrier}</strong>
                   </div>
                 )}
                 {verifyingItem.destination && (
@@ -917,7 +1040,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
                 <textarea
                   className="amx-guard-input-field"
                   rows={3}
-                  placeholder="Record barrier observation, physical condition, or discrepancy notes..."
+                  placeholder="Record checkpoint observation, physical condition, or discrepancy notes..."
                   value={checkpointNotes}
                   onChange={(e) => setCheckpointNotes(e.target.value)}
                 />
@@ -1015,7 +1138,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
                   </div>
 
                   <div>
-                    <label className="amx-guard-input-label">Barrier / Gate Node</label>
+                    <label className="amx-guard-input-label">Barrier / Checkpoint Node</label>
                     <select
                       className="amx-guard-input-field"
                       value={incidentGate}
@@ -1108,15 +1231,15 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
                   lineHeight: 1.5,
                 }}
               >
-                <strong>Security Officer Discrepancy Notice:</strong>
+                <strong>Recorded Checkpoint Discrepancy:</strong>
                 <p style={{ margin: '6px 0 0 0' }}>{reviewingAlert.description}</p>
               </div>
 
               <div style={{ fontSize: 13, color: '#45464d', lineHeight: 1.5 }}>
                 <p>
-                  <strong>Mandatory Checkpoint Action:</strong> Physical gate barrier remains locked.
-                  Do not clear transport until the secondary supervisor inspection verifies the
-                  chassis tag against master digital authorization.
+                  <strong>System Status:</strong> Gate pass status is recorded as Escalated. Checkpoint
+                  clearance remains locked until an authorized administrator records an approval decision
+                  in the Gate Pass Ledger.
                 </p>
               </div>
             </div>
@@ -1129,16 +1252,23 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
               >
                 Close
               </button>
-              <button
-                type="button"
-                className="amx-guard-btn-primary"
-                onClick={() => {
-                  handleEscalateAlert(reviewingAlert.passId);
-                  setReviewingAlert(null);
-                }}
-              >
-                Escalate to Supervisor
-              </button>
+              {reviewingAlert.passId && (
+                <button
+                  type="button"
+                  className="amx-guard-btn-primary"
+                  onClick={() => {
+                    const passId = reviewingAlert.passId;
+                    setReviewingAlert(null);
+                    if (onNavigate && passId) {
+                      onNavigate(`gate-pass/${passId}`);
+                    } else {
+                      showToast(`Pass ${passId} remains locked in Escalated status.`);
+                    }
+                  }}
+                >
+                  View Pass in Ledger
+                </button>
+              )}
             </div>
           </div>
         </div>

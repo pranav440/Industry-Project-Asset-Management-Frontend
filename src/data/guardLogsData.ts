@@ -22,8 +22,9 @@ export interface GuardMovementLogRecord {
   assetId: string; // e.g. AST-2024-0042
   assetName: string; // e.g. Cisco Catalyst 9300 Switch
   serialNumber: string; // e.g. CS-9300-8801
-  direction: 'Outward' | 'Inward';
-  directionLabel: string; // 'Outward / Exit' | 'Inward / Entry'
+  category?: 'Physical Movement' | 'Administrative' | 'Security Escalation';
+  direction: 'Outward' | 'Inward' | 'N/A';
+  directionLabel: string; // 'Outward / Exit' | 'Inward / Entry' | 'Escalation Hold' | 'Administrative'
   requesterName: string; // e.g. Elena Rostova
   requesterBadge: string; // e.g. ENG-9042
   department: string; // e.g. Hardware Engineering
@@ -67,6 +68,10 @@ export interface GuardLogsKpis {
   flaggedMovements: {
     total: number;
     badgeText: string;
+    subtext: string;
+  };
+  totalRecords?: {
+    total: number;
     subtext: string;
   };
 }

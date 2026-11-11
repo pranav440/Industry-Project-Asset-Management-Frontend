@@ -390,34 +390,34 @@ def list_requests(
 ) -> RequestListResponse:
     query = select(Request)
 
-    if search:
-        pattern = f"%{search}%"
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
         query = query.where(or_(
             Request.request_id.ilike(pattern),
             Request.requester_name.ilike(pattern),
             Request.requested_item.ilike(pattern),
             Request.department.ilike(pattern),
         ))
-    if request_type:
-        request_type_key = VALID_REQUEST_TYPE_VALUES.get(request_type)
+    if request_type and request_type.strip():
+        request_type_key = VALID_REQUEST_TYPE_VALUES.get(request_type.strip())
         if request_type_key is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid request type filter")
         query = query.where(Request.request_type == request_type_key)
-    if status:
-        status_key = VALID_STATUS_VALUES.get(status)
+    if status and status.strip():
+        status_key = VALID_STATUS_VALUES.get(status.strip())
         if status_key is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid status filter")
         query = query.where(Request.status == status_key)
-    if priority:
-        priority_key = VALID_PRIORITY_VALUES.get(priority)
+    if priority and priority.strip():
+        priority_key = VALID_PRIORITY_VALUES.get(priority.strip())
         if priority_key is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid priority filter")
         query = query.where(Request.priority == priority_key)
-    if department:
-        query = query.where(Request.department == department)
-    if request_date:
+    if department and department.strip():
+        query = query.where(Request.department == department.strip())
+    if request_date and request_date.strip():
         try:
-            parsed_date = datetime.strptime(request_date, "%Y-%m-%d").date()
+            parsed_date = datetime.strptime(request_date.strip(), "%Y-%m-%d").date()
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid request date filter") from exc
         query = query.where(Request.request_date == parsed_date)

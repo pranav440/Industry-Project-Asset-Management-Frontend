@@ -97,6 +97,7 @@ def _maintenance_response(record: Maintenance, asset: Asset, user: User | None) 
         service_notes=record.service_notes,
         created_at=record.created_at,
         created_by=user.full_name if user is not None else str(record.created_by_user_id),
+        asset_status=asset.status.value,
     )
 
 
@@ -267,23 +268,32 @@ def list_assets(
     custodian: str | None = Query(default=None),
     category: str | None = Query(default=None),
     search: str | None = Query(default=None),
-    status_filter: AssetStatus | None = Query(default=None, alias="status"),
+    status_filter: str | None = Query(default=None, alias="status"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
     _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> AssetListResponse:
     query = select(Asset)
-    if location:
-        query = query.where(Asset.location == location)
-    if custodian:
-        query = query.where(Asset.custodian == custodian)
-    if category:
-        query = query.where(Asset.category == category)
-    if status_filter:
-        query = query.where(Asset.status == status_filter)
-    if search:
-        pattern = f"%{search}%"
+    if location and location.strip():
+        query = query.where(Asset.location == location.strip())
+    if custodian and custodian.strip():
+        query = query.where(Asset.custodian == custodian.strip())
+    if category and category.strip():
+        query = query.where(Asset.category == category.strip())
+    if status_filter and status_filter.strip() and status_filter.strip().lower() != "all":
+        st = status_filter.strip().lower()
+        matched_status = None
+        for s in AssetStatus:
+            if s.value.lower() == st:
+                matched_status = s
+                break
+        if matched_status:
+            query = query.where(Asset.status == matched_status)
+        else:
+            query = query.where(Asset.status == status_filter.strip())
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
         query = query.where(or_(
             Asset.asset_id.ilike(pattern),
             Asset.name.ilike(pattern),
@@ -621,6 +631,21 @@ def create_maintenance(
     if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
 
+    before_status = asset.status.value
+    if body.asset_status is not None:
+        if body.asset_status != "Active":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot transition asset status to '{body.asset_status}'. Only Active status transition is supported upon maintenance completion.",
+            )
+        if asset.status != AssetStatus.in_maintenance:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Asset must be In Maintenance to transition status to Active (current status: '{asset.status.value}').",
+            )
+        asset.status = AssetStatus.active
+    after_status = asset.status.value
+
     maintenance_id = f"MNT-{uuid.uuid4().hex[:12].upper()}"
     record = Maintenance(
         maintenance_id=maintenance_id,
@@ -639,8 +664,8 @@ def create_maintenance(
         asset_id=asset.id,
         asset_identifier=asset.asset_id,
         actor_user_id=admin.id,
-        before_state={"asset_status": asset.status.value},
-        after_state={"asset_status": asset.status.value, "maintenance_id": maintenance_id},
+        before_state={"asset_status": before_status},
+        after_state={"asset_status": after_status, "maintenance_id": maintenance_id},
         metadata_json={"maintenance_type": body.maintenance_type, "maintenance_status": "Completed"},
     )
     db.add_all((record, audit))

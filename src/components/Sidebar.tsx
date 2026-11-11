@@ -49,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const guardNavItems = [
     { label: 'Guard Dashboard', path: 'dashboard', icon: 'security', fill: true },
+    { label: 'Gate Passes', path: 'gate-pass', icon: 'confirmation_number' },
     { label: 'Gate Verification', path: 'gate-verification', icon: 'verified_user' },
     { label: 'Entry / Exit Logs', path: 'entry-exit-logs', icon: 'swap_horiz' },
     { label: 'Security Incidents', path: 'security-incidents', icon: 'report_problem' },

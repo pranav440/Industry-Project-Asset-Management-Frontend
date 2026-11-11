@@ -1,9 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
-import {
-  INITIAL_GUARD_LOGS_DATA,
-  type GuardMovementLogRecord,
+import type {
+  GuardMovementLogRecord,
+  GuardLogsKpis,
 } from '../data/guardLogsData';
+import {
+  fetchGuardMovementLogs,
+  fetchAllGuardMovementLogsForExport,
+} from '../api/guardLogsApi';
 import './GuardEntryExitLogs.css';
 
 interface GuardEntryExitLogsPageProps {
@@ -15,25 +19,31 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
-  // Master record state (mock data initialized)
-  const [logs] = useState<GuardMovementLogRecord[]>(INITIAL_GUARD_LOGS_DATA);
+  // Master record state backed by live API
+  const [logs, setLogs] = useState<GuardMovementLogRecord[]>([]);
+  const [totalEntries, setTotalEntries] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [kpis, setKpis] = useState<GuardLogsKpis | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   // Selected record for Movement Audit Details drawer
-  const [selectedRecordId, setSelectedRecordId] = useState<string>('LOG-2026-0048');
+  const [selectedRecordId, setSelectedRecordId] = useState<string>('');
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(true);
 
-  // Filter criteria
+  // Filter criteria inputs
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [fromDate, setFromDate] = useState<string>('2026-05-20');
-  const [toDate, setToDate] = useState<string>('2026-05-24');
-  const [directionFilter, setDirectionFilter] = useState<'All' | 'Inward' | 'Outward'>('All');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+  const [directionFilter, setDirectionFilter] = useState<'All' | 'Movements' | 'Inward' | 'Outward'>('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Cleared' | 'Pending' | 'Flagged'>('All');
 
-  // Applied filter state (filters take effect on change or Apply button click)
+  // Applied filter state (applied when user clicks Apply or resets)
   const [appliedSearch, setAppliedSearch] = useState<string>('');
-  const [appliedFromDate, setAppliedFromDate] = useState<string>('2026-05-20');
-  const [appliedToDate, setAppliedToDate] = useState<string>('2026-05-24');
-  const [appliedDirection, setAppliedDirection] = useState<'All' | 'Inward' | 'Outward'>('All');
+  const [appliedFromDate, setAppliedFromDate] = useState<string>('');
+  const [appliedToDate, setAppliedToDate] = useState<string>('');
+  const [appliedDirection, setAppliedDirection] = useState<'All' | 'Movements' | 'Inward' | 'Outward'>('All');
   const [appliedStatus, setAppliedStatus] = useState<'All' | 'Cleared' | 'Pending' | 'Flagged'>('All');
 
   // Pagination state
@@ -52,6 +62,45 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
     }, 3800);
   };
 
+  // Fetch live movement logs from backend API
+  const loadLogs = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const res = await fetchGuardMovementLogs({
+        search: appliedSearch,
+        fromDate: appliedFromDate,
+        toDate: appliedToDate,
+        direction: appliedDirection,
+        status: appliedStatus,
+        page: currentPage,
+        pageSize: pageSize,
+      });
+      setLogs(res.items);
+      setTotalEntries(res.total);
+      setTotalPages(res.totalPages);
+      setKpis(res.kpis);
+      if (res.items.length > 0) {
+        setSelectedRecordId((prev) => {
+          if (prev && res.items.some((r) => r.id === prev || r.passId === prev)) {
+            return prev;
+          }
+          return res.items[0].id;
+        });
+      } else {
+        setSelectedRecordId('');
+      }
+    } catch (err: any) {
+      setLoadError(err?.message || 'Failed to load physical movement logs.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [appliedSearch, appliedFromDate, appliedToDate, appliedDirection, appliedStatus, currentPage, pageSize]);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+
   // Synchronize applied filters
   const handleApplyFilters = () => {
     setAppliedSearch(searchQuery);
@@ -60,23 +109,23 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
     setAppliedDirection(directionFilter);
     setAppliedStatus(statusFilter);
     setCurrentPage(1);
-    showToast('Filters applied to ledger');
+    showToast('Filters applied to movement ledger');
   };
 
   const handleResetFilters = () => {
     setSearchQuery('');
-    setFromDate('2026-05-20');
-    setToDate('2026-05-24');
+    setFromDate('');
+    setToDate('');
     setDirectionFilter('All');
     setStatusFilter('All');
 
     setAppliedSearch('');
-    setAppliedFromDate('2026-05-20');
-    setAppliedToDate('2026-05-24');
+    setAppliedFromDate('');
+    setAppliedToDate('');
     setAppliedDirection('All');
     setAppliedStatus('All');
     setCurrentPage(1);
-    showToast('Filters reset to default range');
+    showToast('Filters reset to show all records');
   };
 
   // Keyboard shortcut Ctrl+E for Export
@@ -89,153 +138,136 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [logs, appliedSearch, appliedFromDate, appliedToDate, appliedDirection, appliedStatus]);
-
-  // Filtered dataset
-  const filteredLogs = useMemo(() => {
-    return logs.filter((record) => {
-      // Search matching (Pass ID, Asset ID, Asset Name, Requester, Custodian, Carrier, Serial)
-      if (appliedSearch.trim()) {
-        const query = appliedSearch.toLowerCase().trim();
-        const matchesQuery =
-          record.passId.toLowerCase().includes(query) ||
-          record.assetId.toLowerCase().includes(query) ||
-          record.assetName.toLowerCase().includes(query) ||
-          record.serialNumber.toLowerCase().includes(query) ||
-          record.requesterName.toLowerCase().includes(query) ||
-          record.requesterBadge.toLowerCase().includes(query) ||
-          record.custodian.toLowerCase().includes(query) ||
-          record.carrierVehicle.toLowerCase().includes(query) ||
-          record.guardName.toLowerCase().includes(query) ||
-          record.guardBadge.toLowerCase().includes(query);
-
-        if (!matchesQuery) return false;
-      }
-
-      // Date range matching
-      if (appliedFromDate && record.date < appliedFromDate) {
-        return false;
-      }
-      if (appliedToDate && record.date > appliedToDate) {
-        return false;
-      }
-
-      // Direction matching
-      if (appliedDirection !== 'All' && record.direction !== appliedDirection) {
-        return false;
-      }
-
-      // Status matching
-      if (appliedStatus !== 'All' && record.status !== appliedStatus) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [logs, appliedSearch, appliedFromDate, appliedToDate, appliedDirection, appliedStatus]);
-
-  // Paginated dataset
-  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
-  const paginatedLogs = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredLogs.slice(start, start + pageSize);
-  }, [filteredLogs, currentPage, pageSize]);
+  }, [appliedSearch, appliedFromDate, appliedToDate, appliedDirection, appliedStatus, logs]);
 
   // Selected record object
   const selectedRecord = useMemo(() => {
+    if (!logs.length) return null;
     return (
       logs.find((r) => r.id === selectedRecordId || r.passId === selectedRecordId) ||
-      filteredLogs[0] ||
       logs[0]
     );
-  }, [logs, selectedRecordId, filteredLogs]);
+  }, [logs, selectedRecordId]);
 
-  // Dynamic KPI counts based on full mock dataset
+  // Summary KPI counts from backend or derived
   const kpiCounts = useMemo(() => {
-    const total = logs.length;
-    const inbound = logs.filter((l) => l.direction === 'Inward' && l.status !== 'Flagged').length;
-    const outbound = logs.filter((l) => l.direction === 'Outward' && l.status !== 'Flagged').length;
-    const flagged = logs.filter((l) => l.status === 'Flagged').length;
+    if (kpis) {
+      return {
+        totalMovements: kpis.totalMovements.total,
+        inboundEntries: kpis.inboundEntries.total,
+        outboundExits: kpis.outboundExits.total,
+        flaggedMovements: kpis.flaggedMovements.total,
+      };
+    }
     return {
-      totalMovements: total,
-      inboundEntries: inbound,
-      outboundExits: outbound,
-      flaggedMovements: flagged,
+      totalMovements: totalEntries,
+      inboundEntries: logs.filter((l) => l.direction === 'Inward' && l.status !== 'Flagged').length,
+      outboundExits: logs.filter((l) => l.direction === 'Outward' && l.status !== 'Flagged').length,
+      flaggedMovements: logs.filter((l) => l.status === 'Flagged').length,
     };
-  }, [logs]);
+  }, [kpis, totalEntries, logs]);
 
-  // Handle Export CSV
-  const handleExportCsv = () => {
-    const headers = [
-      'Log ID',
-      'Gate Pass ID',
-      'Asset ID',
-      'Asset Name',
-      'Serial Number',
-      'Direction',
-      'Requester Name',
-      'Requester Badge',
-      'Department',
-      'Date',
-      'Time UTC',
-      'Verification Status',
-      'Verifying Guard',
-      'Guard Badge',
-      'Checkpoint Node',
-      'Approving Admin',
-      'Custodian',
-      'Carrier / Vehicle',
-      'Manifest Hash',
-      'Tamper Seal ID',
-      'Inspected Qty',
-      'Expected Qty',
-      'Has Discrepancy',
-      'Discrepancy Details',
-      'Guard Remarks',
-    ];
+  // Handle Export CSV (explicit semantics: complete multi-page export of all matching records under active filters)
+  const handleExportCsv = async () => {
+    try {
+      setIsExporting(true);
+      showToast('Fetching all matching ledger records for export...');
+      const exportItems = await fetchAllGuardMovementLogsForExport({
+        search: appliedSearch,
+        fromDate: appliedFromDate,
+        toDate: appliedToDate,
+        direction: appliedDirection,
+        status: appliedStatus,
+      }, (loaded, total) => {
+        if (total > 100) {
+          showToast(`Exporting records: ${loaded} of ${total} loaded...`);
+        }
+      });
 
-    const rows = filteredLogs.map((item) => [
-      item.id,
-      item.passId,
-      item.assetId,
-      `"${item.assetName.replace(/"/g, '""')}"`,
-      item.serialNumber,
-      item.direction,
-      `"${item.requesterName.replace(/"/g, '""')}"`,
-      item.requesterBadge,
-      `"${item.department.replace(/"/g, '""')}"`,
-      item.date,
-      item.timeDisplay,
-      item.status,
-      `"${item.guardName.replace(/"/g, '""')}"`,
-      item.guardBadge,
-      `"${item.checkpoint.replace(/"/g, '""')}"`,
-      `"${item.approvingAdmin.replace(/"/g, '""')}"`,
-      `"${item.custodian.replace(/"/g, '""')}"`,
-      `"${item.carrierVehicle.replace(/"/g, '""')}"`,
-      item.manifestHash,
-      item.tamperSealId,
-      item.inspectedQty,
-      item.expectedQty,
-      item.hasDiscrepancy ? 'YES' : 'NO',
-      `"${item.discrepancyDetails.replace(/"/g, '""')}"`,
-      `"${item.guardRemarks.replace(/"/g, '""')}"`,
-    ]);
+      if (exportItems.length === 0) {
+        showToast('No records match the active filter criteria to export');
+        return;
+      }
 
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+      const headers = [
+        'Log ID',
+        'Gate Pass ID',
+        'Asset ID',
+        'Asset Name',
+        'Serial Number',
+        'Event Category',
+        'Movement Direction',
+        'Action Label',
+        'Requester Name',
+        'Requester Badge',
+        'Department',
+        'Date',
+        'Time UTC',
+        'Verification Status',
+        'Verifying Guard',
+        'Guard Badge',
+        'Checkpoint Node',
+        'Approving Admin',
+        'Custodian',
+        'Carrier / Vehicle',
+        'Manifest Reference',
+        'Tamper Seal ID',
+        'Inspected Qty',
+        'Expected Qty',
+        'Has Discrepancy',
+        'Discrepancy Details',
+        'Guard Remarks',
+      ];
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    const dateStamp = new Date().toISOString().slice(0, 10);
-    link.setAttribute('download', `AssetMX_Guard_Movement_Logs_${dateStamp}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const rows = exportItems.map((item) => [
+        item.id,
+        item.passId,
+        item.assetId,
+        `"${item.assetName.replace(/"/g, '""')}"`,
+        item.serialNumber,
+        item.category || (item.direction === 'Inward' || item.direction === 'Outward' ? 'Physical Movement' : 'Administrative'),
+        item.direction,
+        `"${item.directionLabel.replace(/"/g, '""')}"`,
+        `"${item.requesterName.replace(/"/g, '""')}"`,
+        item.requesterBadge,
+        `"${item.department.replace(/"/g, '""')}"`,
+        item.date,
+        item.timeDisplay,
+        item.status,
+        `"${item.guardName.replace(/"/g, '""')}"`,
+        item.guardBadge,
+        `"${item.checkpoint.replace(/"/g, '""')}"`,
+        `"${item.approvingAdmin.replace(/"/g, '""')}"`,
+        `"${item.custodian.replace(/"/g, '""')}"`,
+        `"${item.carrierVehicle.replace(/"/g, '""')}"`,
+        item.manifestHash,
+        item.tamperSealId,
+        item.inspectedQty,
+        item.expectedQty,
+        item.hasDiscrepancy ? 'YES' : 'NO',
+        `"${item.discrepancyDetails.replace(/"/g, '""')}"`,
+        `"${item.guardRemarks.replace(/"/g, '""')}"`,
+      ]);
 
-    showToast(`Exported ${filteredLogs.length} audit records to CSV`);
+      const csvContent =
+        'data:text/csv;charset=utf-8,' +
+        [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      link.setAttribute('download', `AssetMX_Guard_Movement_Logs_Filtered_${dateStamp}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast(`Exported all ${exportItems.length} matching audit records to CSV`);
+    } catch (err: any) {
+      showToast('Export failed: ' + (err?.message || 'Server error'));
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Row selection handler
@@ -272,29 +304,29 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
           </div>
 
           <div className="amx-logs-header-actions">
-            {/* Live Checkpoint Node Pill */}
-            <div className="amx-logs-node-pill" title="Active Checkpoint Station">
+            {/* Station Checkpoint Pill */}
+            <div className="amx-logs-node-pill" title="Station Console">
               <span className="amx-logs-live-ping">
                 <span className="amx-logs-ping-anim"></span>
                 <span className="amx-logs-ping-dot"></span>
               </span>
               <div>
-                <span className="amx-logs-pill-label">Active Node</span>
-                <div className="amx-logs-pill-val">Gate-01A (North Barrier)</div>
+                <span className="amx-logs-pill-label">Checkpoint</span>
+                <div className="amx-logs-pill-val">Gate Verification Console</div>
               </div>
             </div>
 
-            {/* Active Shift Pill */}
-            <div className="amx-logs-shift-pill" title="Current Duty Shift">
+            {/* Station Role Pill */}
+            <div className="amx-logs-shift-pill" title="Duty Station">
               <span
                 className="material-symbols-outlined"
                 style={{ fontSize: 18, color: '#00687a' }}
               >
-                schedule
+                verified_user
               </span>
               <div>
-                <span className="amx-logs-pill-label">Guard Shift</span>
-                <div className="amx-logs-pill-val">Shift Bravo (14:00 - 22:00)</div>
+                <span className="amx-logs-pill-label">Duty Station</span>
+                <div className="amx-logs-pill-val">Guard Audit Ledger</div>
               </div>
             </div>
 
@@ -304,7 +336,9 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                 type="button"
                 className="amx-logs-btn-export"
                 onClick={handleExportCsv}
-                aria-label="Export Logs to CSV"
+                disabled={isExporting}
+                aria-label="Export Filtered Ledger to CSV"
+                data-testid="guard-logs-export-btn"
               >
                 <span
                   className="material-symbols-outlined"
@@ -312,12 +346,37 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                 >
                   download
                 </span>
-                <span>Export CSV</span>
+                <span>{isExporting ? 'Exporting...' : 'Export CSV'}</span>
               </button>
-              <span className="amx-logs-export-hint">[Ctrl + E] ISO-27001</span>
+              <span className="amx-logs-export-hint">[Ctrl + E] Filtered Ledger</span>
             </div>
           </div>
         </header>
+
+        {/* Error Banner with Retry */}
+        {loadError && (
+          <div className="amx-logs-error-banner" role="alert" data-testid="guard-logs-error-banner">
+            <div className="amx-logs-error-content">
+              <span className="material-symbols-outlined" style={{ fontSize: 24, color: '#ba1a1a' }}>
+                error
+              </span>
+              <div>
+                <strong>Unable to retrieve movement logs:</strong> {loadError}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="amx-logs-btn-retry"
+              onClick={loadLogs}
+              data-testid="guard-logs-retry-btn"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                refresh
+              </span>
+              <span>Retry</span>
+            </button>
+          </div>
+        )}
 
         {/* 4 KPI Summary Cards */}
         <section
@@ -329,7 +388,11 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
           <div className="amx-logs-kpi-card">
             <div className="amx-logs-kpi-top">
               <span className="amx-logs-kpi-title">Total Movements</span>
-              <span className="amx-logs-kpi-badge">May 20–24</span>
+              <span className="amx-logs-kpi-badge">
+                {appliedFromDate && appliedToDate
+                  ? `${appliedFromDate} – ${appliedToDate}`
+                  : 'All Records'}
+              </span>
             </div>
             <div className="amx-logs-kpi-val-row">
               <span className="amx-logs-kpi-number">{kpiCounts.totalMovements}</span>
@@ -337,7 +400,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
             </div>
             <p className="amx-logs-kpi-subtext">
               <span className="amx-logs-kpi-dot"></span>
-              Across Gate-01A lane barriers
+              Across verified perimeter checkpoints
             </p>
           </div>
 
@@ -422,6 +485,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   if (e.key === 'Enter') handleApplyFilters();
                 }}
                 aria-label="Search Gate Pass ID, Asset ID, Requester, Carrier"
+                data-testid="guard-logs-search-input"
               />
             </div>
 
@@ -441,6 +505,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   onChange={(e) => setFromDate(e.target.value)}
                   aria-label="From Date"
                   title="From Date"
+                  data-testid="guard-logs-from-date"
                 />
                 <span style={{ color: '#76777d' }}>–</span>
                 <input
@@ -450,6 +515,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   onChange={(e) => setToDate(e.target.value)}
                   aria-label="To Date"
                   title="To Date"
+                  data-testid="guard-logs-to-date"
                 />
               </div>
             </div>
@@ -461,11 +527,12 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                 className="amx-logs-select"
                 value={directionFilter}
                 onChange={(e) =>
-                  setDirectionFilter(e.target.value as 'All' | 'Inward' | 'Outward')
+                  setDirectionFilter(e.target.value as 'All' | 'Movements' | 'Inward' | 'Outward')
                 }
                 aria-label="Filter by Movement Direction"
               >
-                <option value="All">All Movements</option>
+                <option value="All">All Categories</option>
+                <option value="Movements">Physical Movements Only</option>
                 <option value="Inward">Inward / Entry</option>
                 <option value="Outward">Outward / Exit</option>
               </select>
@@ -497,6 +564,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                 type="button"
                 className="amx-logs-btn-apply"
                 onClick={handleApplyFilters}
+                data-testid="guard-logs-apply-btn"
               >
                 Apply Filter
               </button>
@@ -504,6 +572,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                 type="button"
                 className="amx-logs-btn-reset"
                 onClick={handleResetFilters}
+                data-testid="guard-logs-reset-btn"
               >
                 Reset
               </button>
@@ -514,21 +583,23 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
           <div className="amx-logs-active-scope-row">
             <div className="amx-logs-active-pills">
               <span className="amx-logs-active-label">Active Filters:</span>
-              <div className="amx-logs-scope-pill highlight">
-                <span>Date: {appliedFromDate} to {appliedToDate}</span>
-                <span
-                  className="amx-logs-pill-remove"
-                  onClick={() => {
-                    setFromDate('2026-05-20');
-                    setToDate('2026-05-24');
-                    setAppliedFromDate('2026-05-20');
-                    setAppliedToDate('2026-05-24');
-                  }}
-                  title="Reset date filter"
-                >
-                  ×
-                </span>
-              </div>
+              {appliedFromDate && appliedToDate && (
+                <div className="amx-logs-scope-pill highlight">
+                  <span>Date: {appliedFromDate} to {appliedToDate}</span>
+                  <span
+                    className="amx-logs-pill-remove"
+                    onClick={() => {
+                      setFromDate('');
+                      setToDate('');
+                      setAppliedFromDate('');
+                      setAppliedToDate('');
+                    }}
+                    title="Reset date filter"
+                  >
+                    ×
+                  </span>
+                </div>
+              )}
 
               {appliedDirection !== 'All' && (
                 <div className="amx-logs-scope-pill">
@@ -577,10 +648,14 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   </span>
                 </div>
               )}
+
+              {!appliedFromDate && !appliedToDate && appliedDirection === 'All' && appliedStatus === 'All' && !appliedSearch && (
+                <span style={{ fontSize: 12, color: '#76777d' }}>None (showing full ledger)</span>
+              )}
             </div>
 
             <div className="amx-logs-synced-status">
-              LEDGER SYNCED: 100% IMMUTABLE
+              SERVER-AUTHENTICATED AUDIT LEDGER
             </div>
           </div>
         </section>
@@ -601,12 +676,12 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   className="amx-logs-status-badge cleared"
                   style={{ fontSize: 11 }}
                 >
-                  {filteredLogs.length} Records
+                  {totalEntries} Records
                 </span>
               </div>
               <div className="amx-logs-auto-refresh">
                 <span className="amx-logs-refresh-dot"></span>
-                <span>Checkpoint Log Snapshot</span>
+                <span>Authoritative Checkpoint Log</span>
               </div>
             </div>
 
@@ -628,10 +703,19 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedLogs.length === 0 ? (
+                  {isLoading ? (
                     <tr>
                       <td colSpan={8} style={{ textAlign: 'center', padding: '48px 16px' }}>
-                        <div style={{ color: '#45464d', marginBottom: 8 }}>
+                        <div className="amx-logs-loading-state" data-testid="guard-logs-loading">
+                          <div className="amx-logs-spinner"></div>
+                          <span>Loading physical checkpoint movement logs...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : logs.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '48px 16px' }}>
+                        <div style={{ color: '#45464d', marginBottom: 8 }} data-testid="guard-logs-empty-state">
                           No movement logs match the selected filter criteria.
                         </div>
                         <button
@@ -645,7 +729,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    paginatedLogs.map((record) => {
+                    logs.map((record) => {
                       const isSelected = selectedRecord?.id === record.id;
                       const isFlagged = record.status === 'Flagged';
 
@@ -701,21 +785,57 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
 
                           {/* Movement Direction */}
                           <td>
-                            <span
-                              className={`amx-logs-dir-pill ${
-                                record.direction === 'Inward' ? 'inbound' : ''
-                              }`}
-                            >
+                            {record.category === 'Security Escalation' ? (
                               <span
-                                className="material-symbols-outlined"
-                                style={{ fontSize: 13 }}
+                                className="amx-logs-dir-pill"
+                                style={{
+                                  background: 'rgba(186, 26, 26, 0.12)',
+                                  color: '#ba1a1a',
+                                  borderColor: 'rgba(186, 26, 26, 0.3)',
+                                }}
                               >
-                                {record.direction === 'Outward'
-                                  ? 'arrow_outward'
-                                  : 'arrow_downward'}
+                                <span
+                                  className="material-symbols-outlined"
+                                  style={{ fontSize: 13 }}
+                                >
+                                  warning
+                                </span>
+                                <span>ESCALATION</span>
                               </span>
-                              <span>{record.direction.toUpperCase()}</span>
-                            </span>
+                            ) : record.category === 'Administrative' ? (
+                              <span
+                                className="amx-logs-dir-pill"
+                                style={{
+                                  background: '#edf0f8',
+                                  color: '#45464d',
+                                  borderColor: '#c6c6cd',
+                                }}
+                              >
+                                <span
+                                  className="material-symbols-outlined"
+                                  style={{ fontSize: 13 }}
+                                >
+                                  manage_accounts
+                                </span>
+                                <span>ADMIN</span>
+                              </span>
+                            ) : (
+                              <span
+                                className={`amx-logs-dir-pill ${
+                                  record.direction === 'Inward' ? 'inbound' : ''
+                                }`}
+                              >
+                                <span
+                                  className="material-symbols-outlined"
+                                  style={{ fontSize: 13 }}
+                                >
+                                  {record.direction === 'Outward'
+                                    ? 'arrow_outward'
+                                    : 'arrow_downward'}
+                                </span>
+                                <span>{record.direction.toUpperCase()}</span>
+                              </span>
+                            )}
                           </td>
 
                           {/* Requester */}
@@ -816,9 +936,9 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
               <div className="amx-logs-pagination-left">
                 <span>
                   Showing{' '}
-                  {filteredLogs.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
-                  {Math.min(currentPage * pageSize, filteredLogs.length)} of{' '}
-                  {filteredLogs.length} entries
+                  {totalEntries > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
+                  {Math.min(currentPage * pageSize, totalEntries)} of{' '}
+                  {totalEntries} entries
                 </span>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span>Show</span>
@@ -830,6 +950,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                       setCurrentPage(1);
                     }}
                     aria-label="Rows per page"
+                    data-testid="guard-logs-page-size"
                   >
                     <option value={10}>10</option>
                     <option value={25}>25</option>
@@ -844,8 +965,9 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   type="button"
                   className="amx-logs-page-btn"
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage <= 1}
+                  disabled={currentPage <= 1 || isLoading}
                   aria-label="Previous Page"
+                  data-testid="guard-logs-prev-btn"
                 >
                   Prev
                 </button>
@@ -858,6 +980,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                       currentPage === page ? 'active' : ''
                     }`}
                     onClick={() => setCurrentPage(page)}
+                    disabled={isLoading}
                   >
                     {page}
                   </button>
@@ -867,8 +990,9 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   type="button"
                   className="amx-logs-page-btn"
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage >= totalPages}
+                  disabled={currentPage >= totalPages || isLoading}
                   aria-label="Next Page"
+                  data-testid="guard-logs-next-btn"
                 >
                   Next
                 </button>
@@ -896,13 +1020,31 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                     >
                       {selectedRecord.status.toUpperCase()}
                     </span>
-                    <span
-                      className={`amx-logs-dir-pill ${
-                        selectedRecord.direction === 'Inward' ? 'inbound' : ''
-                      }`}
-                    >
-                      {selectedRecord.direction.toUpperCase()}
-                    </span>
+                    {selectedRecord.direction !== 'N/A' ? (
+                      <span
+                        className={`amx-logs-dir-pill ${
+                          selectedRecord.direction === 'Inward' ? 'inbound' : ''
+                        }`}
+                      >
+                        {selectedRecord.direction.toUpperCase()}
+                      </span>
+                    ) : (
+                      <span
+                        className="amx-logs-dir-pill"
+                        style={{
+                          background:
+                            selectedRecord.category === 'Security Escalation'
+                              ? 'rgba(186, 26, 26, 0.12)'
+                              : '#edf0f8',
+                          color:
+                            selectedRecord.category === 'Security Escalation'
+                              ? '#ba1a1a'
+                              : '#45464d',
+                        }}
+                      >
+                        {(selectedRecord.category || 'Administrative').toUpperCase()}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -919,12 +1061,18 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
               </div>
 
               <div className="amx-logs-drawer-body">
-                {/* Header Info & Cryptographic Identity Box */}
+                {/* Header Info & Manifest Specifications Box */}
                 <div className="amx-logs-identity-box">
                   <div className="amx-logs-hash-row">
-                    <span style={{ color: '#45464d' }}>IMMUTABLE MANIFEST HASH</span>
+                    <span style={{ color: '#45464d' }}>EVENT CLASSIFICATION</span>
                     <span className="amx-logs-hash-val">
-                      {selectedRecord.manifestHash}
+                      {selectedRecord.category || 'Physical Movement'} ({selectedRecord.directionLabel})
+                    </span>
+                  </div>
+                  <div className="amx-logs-hash-row" style={{ marginTop: 4 }}>
+                    <span style={{ color: '#45464d' }}>MANIFEST REFERENCE</span>
+                    <span className="amx-logs-hash-val" style={{ fontSize: 11 }}>
+                      Standard Manifest (No Hash Stored)
                     </span>
                   </div>
 
@@ -933,7 +1081,9 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                       <span className="amx-logs-meta-label">
                         {selectedRecord.direction === 'Outward'
                           ? 'Actual Exit Time'
-                          : 'Actual Entry Time'}
+                          : selectedRecord.direction === 'Inward'
+                          ? 'Actual Entry Time'
+                          : 'Recorded Event Time'}
                       </span>
                       <span className="amx-logs-meta-val">
                         {selectedRecord.dateDisplay}
@@ -975,7 +1125,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                     </div>
 
                     <div style={{ gridColumn: 'span 2' }}>
-                      <span className="amx-logs-meta-label">Carrier & Vehicle</span>
+                      <span className="amx-logs-meta-label">Carrier &amp; Destination</span>
                       <span className="amx-logs-meta-val">
                         {selectedRecord.carrierVehicle}
                       </span>
@@ -1016,12 +1166,11 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                       <div className="amx-logs-discrepancy-title">
                         <span>CHECKPOINT CLEARANCE:</span>
                         <span className="amx-logs-discrepancy-status">
-                          CLEARED & PASSING
+                          CLEARED &amp; PASSING
                         </span>
                       </div>
                       <p className="amx-logs-discrepancy-desc">
-                        All physical serial numbers, tamper seals, and carrier manifests
-                        matched cryptographic authorizations without variance.
+                        Physical verification completed and logged at perimeter checkpoint.
                       </p>
                     </div>
                   </div>
@@ -1035,9 +1184,18 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                     </h4>
                     <span
                       className="amx-logs-barcode-pill"
-                      title="Optical Serial Scanner Validated"
+                      title={
+                        selectedRecord.serialNumber !== 'Unavailable'
+                          ? 'Authoritative Serial Recorded'
+                          : 'Serial Not Available'
+                      }
+                      style={{
+                        opacity: selectedRecord.serialNumber !== 'Unavailable' ? 1 : 0.65,
+                      }}
                     >
-                      BARCODE SCANNED
+                      {selectedRecord.serialNumber !== 'Unavailable'
+                        ? 'SERIAL RECORDED'
+                        : 'SERIAL PENDING'}
                     </span>
                   </div>
 
@@ -1124,43 +1282,81 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   <h4 className="amx-logs-section-title">
                     Perimeter Inspection Checklist
                   </h4>
-                  <div className="amx-logs-checklist-box" style={{ marginTop: 8 }}>
-                    {selectedRecord.checklist.map((item, idx) => (
-                      <div key={idx} className="amx-logs-checklist-row">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {selectedRecord.checklist.length > 0 ? (
+                    <div className="amx-logs-checklist-box" style={{ marginTop: 8 }}>
+                      {selectedRecord.checklist.map((item, idx) => (
+                        <div key={idx} className="amx-logs-checklist-row">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span
+                              className="material-symbols-outlined"
+                              style={{
+                                fontSize: 16,
+                                color: item.verified ? '#00687a' : '#ba1a1a',
+                              }}
+                            >
+                              {item.verified ? 'check_box' : 'indeterminate_check_box'}
+                            </span>
+                            <span>{item.title}</span>
+                          </div>
                           <span
-                            className="material-symbols-outlined"
                             style={{
-                              fontSize: 16,
+                              fontFamily: 'JetBrains Mono',
+                              fontSize: 11,
+                              fontWeight: 700,
                               color: item.verified ? '#00687a' : '#ba1a1a',
                             }}
                           >
-                            {item.verified ? 'check_box' : 'indeterminate_check_box'}
+                            {item.status}
                           </span>
-                          <span>{item.title}</span>
                         </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div
+                      className="amx-logs-checklist-box"
+                      style={{
+                        marginTop: 8,
+                        padding: 12,
+                        backgroundColor: '#f2f4f6',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        color: '#45464d',
+                        border: '1px solid #c6c6cd',
+                      }}
+                      data-testid="guard-logs-checklist-notice"
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontWeight: 600,
+                          color: '#191c1e',
+                          marginBottom: 4,
+                        }}
+                      >
                         <span
-                          style={{
-                            fontFamily: 'JetBrains Mono',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: item.verified ? '#00687a' : '#ba1a1a',
-                          }}
+                          className="material-symbols-outlined"
+                          style={{ fontSize: 16, color: '#00687a' }}
                         >
-                          {item.status}
+                          info
                         </span>
+                        <span>Inspection Checklist Status</span>
                       </div>
-                    ))}
-                  </div>
+                      <p style={{ margin: 0 }}>
+                        Individual physical inspection checklist tick-boxes are not persisted in backend audit logs. Clearance validity is established via authoritative gate verification sign-off.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Guard Remarks */}
                 <div>
-                  <h4 className="amx-logs-section-title">Guard Remarks & Notes</h4>
+                  <h4 className="amx-logs-section-title">Guard Remarks &amp; Notes</h4>
                   <div className="amx-logs-remarks-card" style={{ marginTop: 8 }}>
                     <div>&ldquo;{selectedRecord.guardRemarks}&rdquo;</div>
                     <div className="amx-logs-remarks-author">
-                      Signed off by: {selectedRecord.guardName} ({selectedRecord.guardBadge})
+                      Recorded by: {selectedRecord.guardName} ({selectedRecord.guardBadge})
                     </div>
                   </div>
                 </div>
@@ -1169,21 +1365,27 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                 <div>
                   <h4 className="amx-logs-section-title">Station Timeline</h4>
                   <div className="amx-logs-timeline-list" style={{ marginTop: 12 }}>
-                    {selectedRecord.timeline.map((evt, idx) => (
-                      <div key={idx} className="amx-logs-timeline-node">
-                        <span
-                          className={`amx-logs-timeline-dot ${
-                            evt.completed ? '' : 'gray'
-                          }`}
-                        ></span>
-                        <div style={{ fontWeight: 600, color: '#191c1e' }}>
-                          {evt.title}
-                        </div>
-                        <div style={{ color: '#45464d', fontSize: 11 }}>
-                          {evt.time} — {evt.desc}
-                        </div>
+                    {selectedRecord.timeline.length === 0 ? (
+                      <div style={{ color: '#76777d', fontSize: 12, fontStyle: 'italic' }}>
+                        No preceding station events recorded.
                       </div>
-                    ))}
+                    ) : (
+                      selectedRecord.timeline.map((evt, idx) => (
+                        <div key={idx} className="amx-logs-timeline-node">
+                          <span
+                            className={`amx-logs-timeline-dot ${
+                              evt.completed ? '' : 'gray'
+                            }`}
+                          ></span>
+                          <div style={{ fontWeight: 600, color: '#191c1e' }}>
+                            {evt.title}
+                          </div>
+                          <div style={{ color: '#45464d', fontSize: 11 }}>
+                            {evt.time} — {evt.desc}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -1206,12 +1408,13 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   type="button"
                   className="amx-logs-btn-verify-hash"
                   onClick={() => setShowVerifyModal(true)}
-                  aria-label="Verify Ledger Cryptohash"
+                  aria-label="View Audit Record Details"
+                  data-testid="btn-audit-details"
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                    lock_clock
+                    receipt_long
                   </span>
-                  <span>Verify Cryptohash</span>
+                  <span>Audit Record Details</span>
                 </button>
               </div>
             </aside>
@@ -1231,18 +1434,17 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
           </span>
           <div>
             <div className="amx-logs-protocol-title">
-              Immutable Physical Checkpoint Ledger Protocol
+              Authoritative Physical Checkpoint Ledger
             </div>
             <p className="amx-logs-protocol-desc">
-              All checkpoint movement events logged herein are cryptographically anchored
-              upon barrier actuation. Under AssetMX SecOps Rule 9.4, records cannot be
-              altered, deleted, or backdated. Guards hold read-only audit permissions;
-              modifications require dual-administrator cryptographic key authorization.
+              All checkpoint movement events logged herein represent authoritative records
+              stored in the AssetMX audit system upon gate verification. Under SecOps policy,
+              all gate movements and officer sign-offs are preserved for perimeter compliance.
             </p>
           </div>
         </section>
 
-        {/* Cryptohash Verification Modal Dialog */}
+        {/* Audit Record Reference Modal Dialog */}
         {showVerifyModal && selectedRecord && (
           <div
             className="amx-logs-modal-overlay"
@@ -1260,6 +1462,7 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
               backdropFilter: 'blur(3px)',
             }}
             onClick={() => setShowVerifyModal(false)}
+            data-testid="audit-details-modal"
           >
             <div
               className="amx-logs-modal-card"
@@ -1287,10 +1490,10 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                     className="material-symbols-outlined"
                     style={{ color: '#00687a', fontSize: 24 }}
                   >
-                    verified
+                    verified_user
                   </span>
                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-                    Cryptographic Integrity Reference <span style={{ fontSize: 13, fontWeight: 400, color: '#76777d' }}>(Demo)</span>
+                    Gate Pass Audit Record Details
                   </h3>
                 </div>
                 <button
@@ -1302,13 +1505,14 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                     color: '#76777d',
                   }}
                   onClick={() => setShowVerifyModal(false)}
+                  aria-label="Close dialog"
                 >
                   <span className="material-symbols-outlined">close</span>
                 </button>
               </div>
 
               <p style={{ fontSize: 13, color: '#45464d', margin: '0 0 16px 0' }}>
-                Simulated representation of the cryptographic anchor for gate pass{' '}
+                Authoritative database audit trail for gate pass{' '}
                 <strong>{selectedRecord.passId}</strong>.
               </p>
 
@@ -1325,27 +1529,45 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                 }}
               >
                 <div>
-                  <span style={{ color: '#76777d' }}>SHA-256 Digest:</span>
+                  <span style={{ color: '#76777d' }}>Ledger Record ID:</span>
                   <div style={{ fontWeight: 700, color: '#00687a', wordBreak: 'break-all' }}>
-                    {selectedRecord.manifestHash}
+                    {selectedRecord.id}
                   </div>
                 </div>
                 <div>
-                  <span style={{ color: '#76777d' }}>Merkle Root <span style={{ fontSize: 11 }}>[Simulated]</span>:</span>
-                  <div style={{ wordBreak: 'break-all', color: '#191c1e' }}>
-                    0x7a89b02efc188941019fa76b91c778401392dfb
+                  <span style={{ color: '#76777d' }}>Event Category &amp; Direction:</span>
+                  <div style={{ color: '#191c1e', fontWeight: 600 }}>
+                    {selectedRecord.category || 'Physical Movement'} — {selectedRecord.directionLabel}
                   </div>
                 </div>
                 <div>
-                  <span style={{ color: '#76777d' }}>Ledger Block Status <span style={{ fontSize: 11 }}>[Simulated]</span>:</span>
-                  <div style={{ color: '#00687a', fontWeight: 700 }}>
-                    CONFIRMED (1,482 Confirmations)
+                  <span style={{ color: '#76777d' }}>Ledger Status:</span>
+                  <div style={{ color: selectedRecord.status === 'Flagged' ? '#ba1a1a' : '#00687a', fontWeight: 700 }}>
+                    {selectedRecord.status.toUpperCase()} ({selectedRecord.discrepancyStatusTitle})
                   </div>
                 </div>
                 <div>
-                  <span style={{ color: '#76777d' }}>Station Timestamp:</span>
+                  <span style={{ color: '#76777d' }}>Recorded Timestamp:</span>
                   <div style={{ color: '#191c1e' }}>
                     {selectedRecord.dateDisplay} — {selectedRecord.timeDisplay}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ color: '#76777d' }}>Verifying Officer:</span>
+                  <div style={{ color: '#191c1e' }}>
+                    {selectedRecord.guardName} ({selectedRecord.guardBadge})
+                  </div>
+                </div>
+                <div>
+                  <span style={{ color: '#76777d' }}>Storage Source:</span>
+                  <div style={{ color: '#45464d' }}>
+                    Relational Table: gate_pass_history (Database Audited)
+                  </div>
+                </div>
+                <div>
+                  <span style={{ color: '#76777d' }}>Cryptographic Telemetry:</span>
+                  <div style={{ color: '#76777d', fontStyle: 'italic' }}>
+                    None (Standard Database-Audited Gate Pass)
                   </div>
                 </div>
               </div>
@@ -1364,10 +1586,10 @@ export const GuardEntryExitLogsPage: React.FC<GuardEntryExitLogsPageProps> = ({
                   style={{ padding: '8px 20px' }}
                   onClick={() => {
                     setShowVerifyModal(false);
-                    showToast('Demonstration hash reference reviewed');
+                    showToast('Audit record details reviewed');
                   }}
                 >
-                  Close Proof
+                  Close Details
                 </button>
               </div>
             </div>

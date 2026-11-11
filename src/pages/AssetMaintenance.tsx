@@ -1,8 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { AssetStatusBadge } from '../components/AssetStatusBadge';
-import { createMaintenance, getAsset, listMaintenance, type AssetApiError, type MaintenanceApiRecord } from '../api/assetApi';
-import type { AssetDetailsData } from '../data/assetDetailsData';
+import {
+  createMaintenance,
+  getAsset,
+  listMaintenance,
+  type AssetApiError,
+  type AssetStatus,
+  type MaintenanceApiRecord,
+} from '../api/assetApi';
+import { getUser } from '../auth/session';
 import './AssetMaintenance.css';
 
 export interface MaintenanceRecordItem {
@@ -17,6 +24,16 @@ export interface MaintenanceRecordItem {
   notes?: string;
   timestamp?: string;
   loggedBy?: string;
+}
+
+interface AssetMaintenanceContext {
+  id: string;
+  name: string;
+  status: AssetStatus;
+  category: string;
+  location: string;
+  custodian: string;
+  vendorName?: string;
 }
 
 interface AssetMaintenancePageProps {
@@ -39,6 +56,7 @@ interface MaintenanceFormErrors {
   maintenanceType?: string;
   serviceVendor?: string;
   maintenanceCost?: string;
+  serviceNotes?: string;
 }
 
 export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
@@ -46,7 +64,14 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
-  const [asset, setAsset] = useState<AssetDetailsData | null>(null);
+  const user = getUser();
+  const userName = user?.full_name || 'Administrator';
+  const userRoleSubtitle = user?.role
+    ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
+    : 'Administrator';
+  const userRole = user?.role || 'admin';
+
+  const [asset, setAsset] = useState<AssetMaintenanceContext | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [apiError, setApiError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -64,6 +89,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
 
   const [records, setRecords] = useState<MaintenanceRecordItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [markActiveOnComplete, setMarkActiveOnComplete] = useState<boolean>(false);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -84,10 +110,6 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
   });
 
   const [formErrors, setFormErrors] = useState<MaintenanceFormErrors>({});
-
-  const showToast = (message: string) => {
-    setSaveError(message);
-  };
 
   const formatDateDisplay = (iso: string) => {
     const d = new Date(iso);
@@ -112,16 +134,17 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
 
   const apiErrorMessage = (error: unknown, fallback: string) => {
     const status = (error as AssetApiError)?.status;
+    const msg = (error as { message?: string })?.message || (error instanceof Error ? error.message : '');
     if (status === 401) return 'Your session has expired. Please sign in again.';
     if (status === 403) return 'Admin access is required.';
     if (status === 404) return 'Asset not found.';
-    if (status === 422) return error instanceof Error ? error.message : 'Please check the maintenance details.';
-    if (status >= 500) return 'The server could not process the request.';
-    return error instanceof Error ? error.message : fallback;
+    if (status === 422) return msg || 'Please check the maintenance details.';
+    if (status && status >= 500) return 'The server could not process the request.';
+    return msg || fallback;
   };
 
   // Fetch asset context and persisted maintenance history.
-  useEffect(() => {
+  const loadData = useCallback(() => {
     let active = true;
     setLoading(true);
     setApiError(null);
@@ -134,40 +157,9 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
           name: record.name,
           status: record.status,
           category: record.category,
-          specification: record.specification || 'Standard Enterprise Laptop',
-          serialNumber: record.serial_number || 'SN-88294-DL5430',
-          assignedCustodianDepartment: record.custodian,
-          assignedCustodianName: record.custodian,
-          assignedLocation: record.location,
-          assignedSubLocation: 'Dev Pod 4B',
-          warrantyStatus: record.warranty_period,
-          warrantyCover: '3-Year Onsite Cover',
-          lifecycleStageText: 'Stage 2: Active Usage',
-          estimatedEndOfLife: 'Jan 2028',
-          qrVerifiedText: 'Verified & Active',
-          qrExplanation: `QR Association: ${record.qr_code_value}`,
-          lifecycleStages: [],
-          acquisition: {
-            purchaseDate: record.purchase_date,
-            vendorName: record.vendor_name,
-            invoiceReference: record.invoice_reference || '',
-            poNumber: '',
-            totalCost: record.total_cost,
-            warrantyPeriod: record.warranty_period,
-            configuredDepreciation: record.depreciation || '',
-          },
-          custody: {
-            assignedCustodian: record.custodian,
-            department: record.custodian,
-            assignedLocation: record.location,
-            allocationDate: record.allocation_date || '',
-            designatedUser: record.custodian,
-            accountabilityStatus: 'Active Assignment',
-          },
-          movementHistory: [],
-          maintenanceHistory: [],
-          auditHistory: [],
-          qrCodeDataUrl: record.qr_code_data_url,
+          location: record.location,
+          custodian: record.custodian,
+          vendorName: record.vendor_name || undefined,
         });
         setRecords(maintenance.map(mapMaintenanceRecord));
         setLoading(false);
@@ -182,6 +174,11 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
       active = false;
     };
   }, [assetId]);
+
+  useEffect(() => {
+    const cleanup = loadData();
+    return cleanup;
+  }, [loadData]);
 
   // Copy Asset ID helper
   const handleCopyId = () => {
@@ -223,10 +220,12 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
     });
     setFormErrors({});
     setSaveError(null);
+    setMarkActiveOnComplete(asset?.status === 'In Maintenance');
     setIsAddModalOpen(true);
   };
 
   const handleCloseAddModal = () => {
+    if (isSaving) return;
     setIsAddModalOpen(false);
     setFormErrors({});
   };
@@ -250,9 +249,15 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
     }
     if (!formData.serviceVendor.trim()) {
       nextErrors.serviceVendor = 'Service Vendor is required.';
+    } else if (formData.serviceVendor.length > 255) {
+      nextErrors.serviceVendor = 'Service Vendor cannot exceed 255 characters.';
     }
-    if (!formData.maintenanceCost.trim() || isNaN(Number(formData.maintenanceCost)) || Number(formData.maintenanceCost) < 0) {
-      nextErrors.maintenanceCost = 'Valid Maintenance Cost is required.';
+    const costNum = Number(formData.maintenanceCost);
+    if (!formData.maintenanceCost.trim() || isNaN(costNum) || costNum < 0) {
+      nextErrors.maintenanceCost = 'Valid Maintenance Cost is required (>= 0).';
+    }
+    if (formData.serviceNotes.length > 2000) {
+      nextErrors.serviceNotes = 'Service notes cannot exceed 2000 characters.';
     }
 
     setFormErrors(nextErrors);
@@ -262,23 +267,31 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
   // Submit Add Maintenance Record
   const handleSaveRecord = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) {
+    if (isSaving || !validateForm()) {
       return;
     }
 
     setIsSaving(true);
     setSaveError(null);
     try {
-      const created = await createMaintenance(assetId, {
+      const payload = {
         service_date: formData.serviceDate,
         maintenance_type: formData.maintenanceType as 'Preventive' | 'Corrective',
         service_vendor: formData.serviceVendor.trim(),
         ...(formData.technician.trim() ? { technician: formData.technician.trim() } : {}),
         maintenance_cost: Number(formData.maintenanceCost),
         ...(formData.serviceNotes.trim() ? { service_notes: formData.serviceNotes.trim() } : {}),
-      });
+        ...(asset?.status === 'In Maintenance' && markActiveOnComplete ? { asset_status: 'Active' as const } : {}),
+      };
+
+      const created = await createMaintenance(assetId, payload);
       const newRecord = mapMaintenanceRecord(created);
       setRecords((prev) => [newRecord, ...prev]);
+
+      if (payload.asset_status) {
+        setAsset((prev) => (prev ? { ...prev, status: payload.asset_status! } : null));
+      }
+
       setIsAddModalOpen(false);
       setSuccessInfo({
         id: newRecord.id,
@@ -289,7 +302,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
         date: newRecord.date,
       });
     } catch (error: unknown) {
-      showToast(apiErrorMessage(error, 'Unable to save the maintenance record.'));
+      setSaveError(apiErrorMessage(error, 'Unable to save the maintenance record.'));
     } finally {
       setIsSaving(false);
     }
@@ -312,9 +325,17 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
 
   if (loading) {
     return (
-      <DashboardLayout currentNav="Assets" onNavigate={handleNav} onSignOut={onSignOut}>
-        <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-          Loading asset maintenance details...
+      <DashboardLayout
+        currentNav="Assets"
+        userName={userName}
+        userRoleSubtitle={userRoleSubtitle}
+        role={userRole}
+        onNavigate={handleNav}
+        onSignOut={onSignOut}
+      >
+        <div role="status" className="amx-maintenance-loading-box">
+          <div className="amx-maintenance-spinner" aria-hidden="true" />
+          <p>Loading asset maintenance details...</p>
         </div>
       </DashboardLayout>
     );
@@ -322,17 +343,70 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
 
   if (apiError || !asset) {
     return (
-      <DashboardLayout currentNav="Assets" onNavigate={handleNav} onSignOut={onSignOut}>
-        <div role="alert" style={{ padding: '40px', textAlign: 'center', color: '#ba1a1a' }}>
-          {apiError || 'Asset not found.'}
+      <DashboardLayout
+        currentNav="Assets"
+        userName={userName}
+        userRoleSubtitle={userRoleSubtitle}
+        role={userRole}
+        onNavigate={handleNav}
+        onSignOut={onSignOut}
+      >
+        <div className="amx-maintenance-container">
+          <nav className="amx-maintenance-breadcrumb" aria-label="Breadcrumb">
+            <button
+              type="button"
+              className="amx-maintenance-back-btn"
+              onClick={() => onNavigate?.('assets')}
+            >
+              Assets
+            </button>
+            <span className="amx-maintenance-breadcrumb-sep" aria-hidden="true">/</span>
+            <span className="amx-maintenance-breadcrumb-curr">Maintenance</span>
+          </nav>
+
+          <div role="alert" className="amx-maintenance-error-card">
+            <h2 className="amx-maintenance-error-title">Unable to Load Asset Maintenance</h2>
+            <p className="amx-maintenance-error-desc">{apiError || 'Asset not found.'}</p>
+            <div className="amx-maintenance-error-actions">
+              <button
+                type="button"
+                className="amx-maintenance-retry-btn"
+                onClick={() => loadData()}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                className="amx-maintenance-btn-back"
+                onClick={() => onNavigate?.('assets')}
+              >
+                Back to Assets
+              </button>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     );
   }
 
+  const custodianDisplay = asset.custodian || 'Unassigned';
+  const custodianInitials =
+    custodianDisplay === 'Unassigned'
+      ? 'NA'
+      : custodianDisplay
+          .split(' ')
+          .map((n) => n[0])
+          .filter(Boolean)
+          .slice(0, 2)
+          .join('')
+          .toUpperCase() || 'NA';
+
   return (
     <DashboardLayout
       currentNav="Assets"
+      userName={userName}
+      userRoleSubtitle={userRoleSubtitle}
+      role={userRole}
       onNavigate={handleNav}
       onSignOut={onSignOut}
       onSearch={() => {}}
@@ -491,8 +565,8 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
 
             <div className="amx-context-item">
               <span className="amx-context-label">Location</span>
-              <span className="amx-context-value" title={asset.assignedLocation}>
-                {asset.assignedLocation}
+              <span className="amx-context-value" title={asset.location}>
+                {asset.location}
               </span>
             </div>
 
@@ -500,15 +574,10 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
               <span className="amx-context-label">Assigned Custodian</span>
               <div className="amx-custodian-badge">
                 <div className="amx-custodian-avatar">
-                  {(asset.custody.assignedCustodian || asset.assignedCustodianName || 'MV')
-                    .split(' ')
-                    .map((n) => n[0])
-                    .slice(0, 2)
-                    .join('')
-                    .toUpperCase()}
+                  {custodianInitials}
                 </div>
-                <span className="amx-context-value" title={asset.custody.assignedCustodian || asset.assignedCustodianName}>
-                  {asset.custody.assignedCustodian || asset.assignedCustodianName}
+                <span className="amx-context-value" title={custodianDisplay}>
+                  {custodianDisplay}
                 </span>
               </div>
             </div>
@@ -529,19 +598,29 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
                   </span>
                 </div>
                 <div className="amx-metric-bottom">
-                  <div className="amx-metric-val">15 Jan 2024</div>
-                  <div className="amx-metric-sub">Initial Deployment Check</div>
+                  <div className="amx-metric-val">
+                    {records.length > 0 ? records[0].date : 'No Service Logged'}
+                  </div>
+                  <div className="amx-metric-sub">
+                    {records.length > 0
+                      ? `${records[0].type} (${records[0].vendor})`
+                      : 'No maintenance history recorded'}
+                  </div>
                 </div>
               </div>
 
               <div className="amx-metric-card">
                 <div className="amx-metric-top">
                   <span className="amx-metric-label">Next Due</span>
-                  <span className="amx-metric-badge">Scheduled</span>
+                  <span className="amx-metric-badge unscheduled">
+                    Not Scheduled
+                  </span>
                 </div>
                 <div className="amx-metric-bottom">
-                  <div className="amx-metric-val cyan">15 Oct 2025</div>
-                  <div className="amx-metric-sub">Routine Preventive Service</div>
+                  <div className="amx-metric-val" style={{ color: '#64748b' }}>
+                    Not Scheduled
+                  </div>
+                  <div className="amx-metric-sub">Schedule tracking not configured</div>
                 </div>
               </div>
 
@@ -554,7 +633,9 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
                 </div>
                 <div className="amx-metric-bottom">
                   <div className="amx-metric-val mono">₹{totalCostSum.toLocaleString('en-IN')}</div>
-                  <div className="amx-metric-sub">{records.length} Recorded Services</div>
+                  <div className="amx-metric-sub">
+                    {records.length} Recorded {records.length === 1 ? 'Service' : 'Services'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -725,35 +806,47 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Upcoming Maintenance Card */}
+          {/* RIGHT COLUMN: Upcoming Maintenance / Active Servicing Card */}
           <div className="amx-maintenance-right-col">
             <div className="amx-upcoming-card">
               <div className="amx-upcoming-header">
                 <div className="amx-upcoming-title-wrap">
                   <span className="material-symbols-outlined amx-upcoming-title-icon" aria-hidden="true">
-                    event_upcoming
+                    {asset.status === 'In Maintenance' ? 'build_circle' : 'event_upcoming'}
                   </span>
-                  <span>Upcoming Maintenance</span>
+                  <span>{asset.status === 'In Maintenance' ? 'Active Servicing' : 'Upcoming Maintenance'}</span>
                 </div>
-                <span className="amx-upcoming-badge">In 28 Days</span>
+                <span
+                  className={`amx-upcoming-badge ${asset.status === 'In Maintenance' ? '' : 'unscheduled'}`}
+                >
+                  {asset.status === 'In Maintenance' ? 'In Maintenance' : 'None Scheduled'}
+                </span>
               </div>
 
               <div className="amx-upcoming-alert-box">
                 <div className="amx-upcoming-asset-row">
                   <span className="amx-upcoming-asset-name">{asset.name}</span>
-                  <span className="amx-status-pill-scheduled">Scheduled</span>
+                  <AssetStatusBadge status={asset.status} />
                 </div>
 
                 <div className="amx-upcoming-date-row">
                   <span className="material-symbols-outlined" aria-hidden="true">
-                    calendar_today
+                    {asset.status === 'In Maintenance' ? 'engineering' : 'calendar_today'}
                   </span>
-                  <span>Due Date: <span className="val">15 Oct 2025</span></span>
+                  <span>
+                    {asset.status === 'In Maintenance' ? 'Status: Active Maintenance' : 'Schedule: Not Configured'}
+                  </span>
                 </div>
 
                 <div className="amx-upcoming-task-box">
-                  <span className="amx-task-box-label">Task Description</span>
-                  <span className="amx-task-box-content">Preventive Diagnostics &amp; Thermal Check</span>
+                  <span className="amx-task-box-label">
+                    {asset.status === 'In Maintenance' ? 'Servicing Status' : 'Task Description'}
+                  </span>
+                  <span className="amx-task-box-content">
+                    {asset.status === 'In Maintenance'
+                      ? 'This asset is currently flagged as In Maintenance in the registry. Record service completion details using "Add Maintenance Record".'
+                      : 'No scheduled or recurring maintenance is configured for this asset in the registry.'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -768,12 +861,13 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
             <div className="amx-modal-header">
               <div className="amx-modal-header-text">
                 <h2 id="addModalTitle" className="amx-modal-title">Add Maintenance Record</h2>
-                <p className="amx-modal-subtitle">Record a completed or scheduled service event for {asset.id}</p>
+                <p className="amx-modal-subtitle">Record a completed service event for {asset.id}</p>
               </div>
               <button
                 type="button"
                 className="amx-modal-close-btn"
                 onClick={handleCloseAddModal}
+                disabled={isSaving}
                 aria-label="Close dialog"
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
@@ -785,7 +879,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
             <form onSubmit={handleSaveRecord} noValidate>
               <div className="amx-modal-form-body">
                 {saveError && (
-                  <div role="alert" className="amx-field-error-msg" style={{ marginBottom: '12px' }}>
+                  <div role="alert" className="amx-field-error-msg" style={{ marginBottom: '12px', fontSize: '13px' }}>
                     {saveError}
                   </div>
                 )}
@@ -813,6 +907,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
                       className={`amx-form-input ${formErrors.serviceDate ? 'has-error' : ''}`}
                       value={formData.serviceDate}
                       onChange={(e) => handleInputChange('serviceDate', e.target.value)}
+                      disabled={isSaving}
                     />
                     {formErrors.serviceDate && (
                       <span className="amx-field-error-msg">{formErrors.serviceDate}</span>
@@ -828,6 +923,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
                       className={`amx-form-select ${formErrors.maintenanceType ? 'has-error' : ''}`}
                       value={formData.maintenanceType}
                       onChange={(e) => handleInputChange('maintenanceType', e.target.value)}
+                      disabled={isSaving}
                     >
                       <option value="">Select type</option>
                       <option value="Preventive">Preventive</option>
@@ -845,19 +941,24 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
                     <label className="amx-form-label" htmlFor="formServiceVendor">
                       Service Vendor <span className="amx-form-label-star">*</span>
                     </label>
-                    <select
+                    <input
                       id="formServiceVendor"
-                      className={`amx-form-select ${formErrors.serviceVendor ? 'has-error' : ''}`}
+                      list="vendorSuggestions"
+                      type="text"
+                      className={`amx-form-input ${formErrors.serviceVendor ? 'has-error' : ''}`}
+                      placeholder="Select or enter service vendor"
                       value={formData.serviceVendor}
                       onChange={(e) => handleInputChange('serviceVendor', e.target.value)}
-                    >
-                      <option value="">Select or enter service vendor</option>
-                      <option value="Dell Care Services">Dell Care Services (Authorized)</option>
-                      <option value="TechSupply Co. Ltd.">TechSupply Co. Ltd.</option>
-                      <option value="In-house IT Ops">In-house IT Ops</option>
-                      <option value="SysCom Solutions">SysCom Solutions</option>
-                      <option value="Hardware Services Inc.">Hardware Services Inc.</option>
-                    </select>
+                      disabled={isSaving}
+                    />
+                    <datalist id="vendorSuggestions">
+                      <option value="Dell Care Services" />
+                      <option value="TechSupply Co. Ltd." />
+                      <option value="In-house IT Ops" />
+                      <option value="SysCom Solutions" />
+                      <option value="Hardware Services Inc." />
+                      {asset?.vendorName && <option value={asset.vendorName} />}
+                    </datalist>
                     {formErrors.serviceVendor && (
                       <span className="amx-field-error-msg">{formErrors.serviceVendor}</span>
                     )}
@@ -874,6 +975,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
                       placeholder="Enter technician name (optional)"
                       value={formData.technician}
                       onChange={(e) => handleInputChange('technician', e.target.value)}
+                      disabled={isSaving}
                     />
                   </div>
                 </div>
@@ -894,6 +996,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
                       placeholder="e.g. 2400"
                       value={formData.maintenanceCost}
                       onChange={(e) => handleInputChange('maintenanceCost', e.target.value)}
+                      disabled={isSaving}
                     />
                   </div>
                   {formErrors.maintenanceCost && (
@@ -913,8 +1016,38 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
                     placeholder="Enter service description, parts checked, or diagnostics outcome..."
                     value={formData.serviceNotes}
                     onChange={(e) => handleInputChange('serviceNotes', e.target.value)}
+                    disabled={isSaving}
                   />
+                  {formErrors.serviceNotes && (
+                    <span className="amx-field-error-msg">{formErrors.serviceNotes}</span>
+                  )}
                 </div>
+
+                {/* Optional Status Reset if In Maintenance */}
+                {asset.status === 'In Maintenance' && (
+                  <div className="amx-form-field-group" style={{ marginTop: '4px' }}>
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        color: '#1e293b',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        id="markActiveCheckbox"
+                        checked={markActiveOnComplete}
+                        onChange={(e) => setMarkActiveOnComplete(e.target.checked)}
+                        disabled={isSaving}
+                      />
+                      <span>Return asset status to <strong>Active</strong> upon recording this completed service</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div className="amx-modal-footer">
@@ -922,6 +1055,7 @@ export const AssetMaintenancePage: React.FC<AssetMaintenancePageProps> = ({
                   type="button"
                   className="amx-btn-modal-cancel"
                   onClick={handleCloseAddModal}
+                  disabled={isSaving}
                 >
                   Cancel
                 </button>

@@ -41,8 +41,8 @@ export interface DashboardApiResponse {
   my_requests: DashboardRequestItem[];
   expiry_alerts: DashboardExpiryAlert[];
   stock_levels: DashboardStockLevel[];
-  department_consumption: null;
-  recent_pos: null;
+  department_consumption: { departments?: any[]; total?: string } | null;
+  recent_pos: any[] | null;
 }
 
 export class DashboardApiError extends Error {

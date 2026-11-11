@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { AssetStatusBadge } from '../components/AssetStatusBadge';
 import {
@@ -13,7 +13,12 @@ import {
   type AssetValuationApiRecord,
   type AssetValuationSummaryApiRecord,
 } from '../api/assetApi';
-import { type AssetDetailsData, type LifecycleStage, type AuditHistoryRecord, ASSET_DETAILS_MOCK_DATA, DEFAULT_ASSET_DETAILS_DATA } from '../data/assetDetailsData';
+import {
+  type AssetDetailsData,
+  type LifecycleStage,
+  type AuditHistoryRecord,
+} from '../data/assetDetailsData';
+import { getUser } from '../auth/session';
 import './AssetDetails.css';
 
 interface AssetDetailsPageProps {
@@ -27,8 +32,9 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const currentUser = useMemo(() => getUser(), []);
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [asset, setAsset] = useState<AssetDetailsData | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -54,7 +60,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
   };
 
   const getAuditIconAndColor = (action: string): { icon: string; iconColor: string } => {
-    const act = action.toLowerCase();
+    const act = (action || '').toLowerCase();
     if (act.includes('created') || act.includes('registered')) {
       return { icon: 'verified_user', iconColor: '#059669' };
     }
@@ -72,180 +78,284 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
 
   const computeLifecycleStages = (
     status: string,
-    purchaseDate: string,
-    allocationDate: string | null
+    purchaseDate: string | null,
+    allocationDate: string | null,
+    movements: AssetMovementRecord[] = [],
+    maintenance: MaintenanceHistoryApiRecord[] = [],
+    audits: AuditLogApiRecord[] = [],
+    location?: string,
+    custodian?: string
   ): LifecycleStage[] => {
     const isDisposed = status === 'Disposed';
     const isInMaintenance = status === 'In Maintenance';
     const isInTransit = status === 'In Transit';
 
-    return [
-      {
-        step: 1,
-        name: '1. Allocation & Onboarding',
-        subtitle: 'Procured, barcoded & cataloged in inventory',
+    // Stage 1: Allocation & Onboarding
+    const stage1Date = allocationDate || purchaseDate;
+    const stage1: LifecycleStage = {
+      step: 1,
+      name: '1. Allocation & Onboarding',
+      subtitle: stage1Date
+        ? `Cataloged in inventory and allocated to ${custodian || 'custodian'}`
+        : 'Procured and cataloged in asset inventory',
+      statusLabel: stage1Date ? 'Completed' : 'Pending',
+      statusType: stage1Date ? 'completed' : 'pending',
+      dateLabel: formatDisplayDate(stage1Date),
+    };
+
+    // Stage 2: Physical Movement & Deployment
+    let stage2: LifecycleStage;
+    if (isInTransit) {
+      const latestMov = movements.length > 0 ? movements[movements.length - 1] : null;
+      stage2 = {
+        step: 2,
+        name: '2. Physical Movement & Deployment',
+        subtitle: latestMov
+          ? `In transit: ${latestMov.from_location} → ${latestMov.to_location}`
+          : 'Currently in physical transit between facilities',
+        statusLabel: 'In Transit',
+        statusType: 'current',
+        dateLabel: latestMov ? formatDisplayDate(latestMov.initiated_at) : 'In Transit',
+      };
+    } else if (isDisposed) {
+      stage2 = {
+        step: 2,
+        name: '2. Physical Movement & Deployment',
+        subtitle: 'Completed operational deployment cycle',
         statusLabel: 'Completed',
         statusType: 'completed',
-        dateLabel: formatDisplayDate(allocationDate || purchaseDate),
-      },
-      {
+        dateLabel: 'Concluded',
+      };
+    } else {
+      const latestMov = movements.length > 0 ? movements[movements.length - 1] : null;
+      stage2 = {
         step: 2,
-        name: '2. Active Deployment',
-        subtitle: isInTransit
-          ? 'Currently in physical transit between hubs'
-          : isDisposed
-          ? 'Completed deployment cycle'
+        name: '2. Physical Movement & Deployment',
+        subtitle: location && custodian
+          ? `Active at ${location} under ${custodian}`
           : 'In active deployment & custodian possession',
-        statusLabel: isInTransit ? 'In Transit' : isDisposed ? 'Completed' : 'Current Stage',
-        statusType: isInTransit ? 'current' : isDisposed ? 'completed' : 'current',
-        dateLabel: `Since ${formatDisplayDate(allocationDate || purchaseDate)}`,
-      },
-      {
+        statusLabel: latestMov ? 'Deployed' : 'Active Deployment',
+        statusType: 'current',
+        dateLabel: latestMov
+          ? `Since ${formatDisplayDate(latestMov.completed_at || latestMov.initiated_at || stage1Date)}`
+          : (stage1Date ? `Since ${formatDisplayDate(stage1Date)}` : 'Active'),
+      };
+    }
+
+    // Stage 3: Maintenance & Servicing
+    let stage3: LifecycleStage;
+    if (isInMaintenance) {
+      const latestMnt = maintenance.length > 0 ? maintenance[0] : null;
+      stage3 = {
         step: 3,
         name: '3. Maintenance & Servicing',
-        subtitle: isInMaintenance
-          ? 'Under active service and diagnosis'
-          : 'Periodic preventive & corrective maintenance',
-        statusLabel: isInMaintenance ? 'Active Service' : 'Scheduled',
-        statusType: isInMaintenance ? 'current' : 'scheduled',
-        dateLabel: isInMaintenance ? 'In Progress' : 'Routine',
-      },
-      {
+        subtitle: latestMnt
+          ? `${latestMnt.serviceEvent} with ${latestMnt.vendor}`
+          : 'Under active diagnosis and maintenance',
+        statusLabel: 'In Maintenance',
+        statusType: 'current',
+        dateLabel: latestMnt ? latestMnt.date : 'In Progress',
+      };
+    } else if (maintenance.length > 0) {
+      const latestMnt = maintenance[0];
+      stage3 = {
+        step: 3,
+        name: '3. Maintenance & Servicing',
+        subtitle: `${maintenance.length} service event${maintenance.length > 1 ? 's' : ''} logged (${latestMnt.serviceEvent})`,
+        statusLabel: 'Serviced',
+        statusType: 'completed',
+        dateLabel: `Last: ${latestMnt.date}`,
+      };
+    } else {
+      // Grounded in reality: No fabricated routine or scheduled events
+      stage3 = {
+        step: 3,
+        name: '3. Maintenance & Servicing',
+        subtitle: 'No maintenance records logged for this asset',
+        statusLabel: 'No Service History',
+        statusType: 'pending',
+        dateLabel: 'Not recorded',
+      };
+    }
+
+    // Stage 4: Disposal & Decommission
+    let stage4: LifecycleStage;
+    if (isDisposed) {
+      const disposalAudit = audits.find((a) => a.action && a.action.toLowerCase().includes('dispos'));
+      stage4 = {
         step: 4,
         name: '4. Disposal & Decommission',
-        subtitle: isDisposed
-          ? 'Asset decommissioned and archived'
-          : 'E-waste recycling / certified vendor buyback',
-        statusLabel: isDisposed ? 'Disposed' : 'Pending',
-        statusType: isDisposed ? 'completed' : 'pending',
-        dateLabel: isDisposed ? 'Decommissioned' : 'End of Lifecycle',
-      },
-    ];
+        subtitle: 'Asset decommissioned and archived from service',
+        statusLabel: 'Disposed',
+        statusType: 'completed',
+        dateLabel: disposalAudit ? formatDisplayDate(disposalAudit.occurred_at) : 'Decommissioned',
+      };
+    } else {
+      stage4 = {
+        step: 4,
+        name: '4. Disposal & Decommission',
+        subtitle: 'Asset is currently active in operational lifecycle',
+        statusLabel: 'Pending',
+        statusType: 'pending',
+        dateLabel: 'Active Lifecycle',
+      };
+    }
+
+    return [stage1, stage2, stage3, stage4];
   };
 
-  const mapAssetRecord = (record: Awaited<ReturnType<typeof getAsset>>): AssetDetailsData => ({
-    id: record.asset_id,
-    name: record.name,
-    status: record.status,
-    category: record.category,
-    specification: record.specification || 'Not available',
-    serialNumber: record.serial_number || 'Not available',
-    assignedCustodianDepartment: record.custodian,
-    assignedCustodianName: record.custodian,
-    assignedLocation: record.location,
-    assignedSubLocation: 'Floor Unit',
-    warrantyStatus: record.warranty_period,
-    warrantyCover: record.warranty_period.toLowerCase().includes('year') ? 'Manufacturer Warranty' : 'Standard Cover',
-    lifecycleStageText: `Stage ${record.status === 'Disposed' ? '4: Disposed' : record.status === 'In Maintenance' ? '3: Maintenance' : record.status === 'In Transit' ? '2: In Transit' : '2: Active Usage'}`,
-    estimatedEndOfLife: record.warranty_period ? 'Active Warranty Period' : 'Not available',
-    qrVerifiedText: 'Verified & Active',
-    qrExplanation: `Asset Tag Value: ${record.qr_code_value}`,
-    lifecycleStages: computeLifecycleStages(record.status, record.purchase_date, record.allocation_date),
-    acquisition: {
-      purchaseDate: formatDisplayDate(record.purchase_date),
-      vendorName: record.vendor_name,
-      invoiceReference: record.invoice_reference || 'Not available',
-      poNumber: record.invoice_reference || 'PO-DIRECT',
-      totalCost: record.total_cost.startsWith('₹') ? record.total_cost : `₹${record.total_cost}`,
-      warrantyPeriod: record.warranty_period,
-      configuredDepreciation: record.depreciation || 'Standard Linear (10%/yr)',
-    },
-    custody: {
-      assignedCustodian: record.custodian,
-      department: record.custodian,
+  const mapAssetRecord = (record: Awaited<ReturnType<typeof getAsset>>): AssetDetailsData => {
+    const movements = record.movement_history || [];
+    const maintenance = record.maintenance_history || [];
+    const audits = record.audit_history || [];
+
+    const isDisposed = record.status === 'Disposed';
+    const isInMaintenance = record.status === 'In Maintenance';
+    const isInTransit = record.status === 'In Transit';
+
+    const lifecycleStageText = isDisposed
+      ? 'Stage 4: Disposed'
+      : isInMaintenance
+      ? 'Stage 3: Maintenance'
+      : isInTransit
+      ? 'Stage 2: In Transit'
+      : 'Stage 2: Active Usage';
+
+    return {
+      id: record.asset_id,
+      name: record.name,
+      status: record.status,
+      category: record.category,
+      specification: record.specification || 'Not available',
+      serialNumber: record.serial_number || 'Not available',
+      assignedCustodianDepartment: record.custodian,
+      assignedCustodianName: record.custodian,
       assignedLocation: record.location,
-      allocationDate: formatDisplayDate(record.allocation_date || record.purchase_date),
-      designatedUser: record.custodian,
-      accountabilityStatus: 'Verified Active',
-    },
-    movementHistory: (record.movement_history || []).map((movement: AssetMovementRecord) => ({
-      id: movement.movement_id,
-      date: formatDisplayDate(movement.initiated_at),
-      movementType: 'Transfer',
-      from: movement.from_location,
-      to: movement.to_location,
-      custodian: movement.to_custodian,
-      verification: movement.status,
-    })),
-    maintenanceHistory: (record.maintenance_history || []).map((mnt: MaintenanceHistoryApiRecord) => ({
-      id: mnt.id,
-      date: mnt.date,
-      serviceEvent: mnt.serviceEvent,
-      vendor: mnt.vendor,
-      cost: mnt.cost.startsWith('₹') ? mnt.cost : `₹${mnt.cost}`,
-      status: mnt.status as 'Completed' | 'Scheduled' | 'In Progress',
-    })),
-    auditHistory: (record.audit_history || []).map((audit: AuditLogApiRecord): AuditHistoryRecord => {
-      const { icon, iconColor } = getAuditIconAndColor(audit.action);
-      return {
-        id: String(audit.id),
-        event: audit.action,
-        icon,
-        iconColor,
-        dateTime: audit.occurred_at
-          ? new Date(audit.occurred_at).toLocaleString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })
-          : 'Recorded',
-        performedBy: audit.actor_user_id ? `User #${audit.actor_user_id}` : 'System Admin',
-      };
-    }),
-    qrCodeDataUrl: record.qr_code_data_url,
-  });
+      assignedSubLocation: 'Floor Unit',
+      warrantyStatus: record.warranty_period || 'Not recorded',
+      warrantyCover: record.warranty_period && record.warranty_period.toLowerCase().includes('year')
+        ? 'Manufacturer Warranty'
+        : record.warranty_period
+        ? 'Standard Cover'
+        : 'Not recorded',
+      lifecycleStageText,
+      estimatedEndOfLife: record.warranty_period ? record.warranty_period : 'Not recorded',
+      qrVerifiedText: 'Verified & Active',
+      qrExplanation: record.qr_code_value
+        ? `Asset Tag Value: ${record.qr_code_value}`
+        : 'Asset QR Tag recorded in inventory ledger.',
+      lifecycleStages: computeLifecycleStages(
+        record.status,
+        record.purchase_date,
+        record.allocation_date,
+        movements,
+        maintenance,
+        audits,
+        record.location,
+        record.custodian
+      ),
+      acquisition: {
+        purchaseDate: formatDisplayDate(record.purchase_date),
+        vendorName: record.vendor_name,
+        invoiceReference: record.invoice_reference || 'Not available',
+        poNumber: record.invoice_reference || 'PO-DIRECT',
+        totalCost: record.total_cost.startsWith('₹') ? record.total_cost : `₹${record.total_cost}`,
+        warrantyPeriod: record.warranty_period || 'Not recorded',
+        configuredDepreciation: record.depreciation || 'Standard Linear (10%/yr)',
+      },
+      custody: {
+        assignedCustodian: record.custodian,
+        department: record.custodian,
+        assignedLocation: record.location,
+        allocationDate: formatDisplayDate(record.allocation_date || record.purchase_date),
+        designatedUser: record.custodian,
+        accountabilityStatus: record.status === 'Active' ? 'Verified Active' : record.status,
+      },
+      movementHistory: movements.map((movement: AssetMovementRecord) => ({
+        id: movement.movement_id,
+        date: formatDisplayDate(movement.initiated_at),
+        movementType: 'Transfer',
+        from: movement.from_location,
+        to: movement.to_location,
+        custodian: movement.to_custodian,
+        verification: movement.status,
+      })),
+      maintenanceHistory: maintenance.map((mnt: MaintenanceHistoryApiRecord) => ({
+        id: mnt.id,
+        date: mnt.date,
+        serviceEvent: mnt.serviceEvent,
+        vendor: mnt.vendor,
+        cost: mnt.cost.startsWith('₹') ? mnt.cost : `₹${mnt.cost}`,
+        status: mnt.status as 'Completed' | 'Scheduled' | 'In Progress',
+      })),
+      auditHistory: audits.map((audit: AuditLogApiRecord): AuditHistoryRecord => {
+        const { icon, iconColor } = getAuditIconAndColor(audit.action);
+        return {
+          id: String(audit.id),
+          event: audit.action,
+          icon,
+          iconColor,
+          dateTime: audit.occurred_at
+            ? new Date(audit.occurred_at).toLocaleString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+            : 'Recorded',
+          performedBy: audit.actor_user_id ? `User #${audit.actor_user_id}` : 'System Admin',
+        };
+      }),
+      qrCodeDataUrl: record.qr_code_data_url,
+    };
+  };
+
+  const loadAssetData = useCallback(async () => {
+    if (!assetId) {
+      setAsset(null);
+      setApiError('No asset identifier provided.');
+      return;
+    }
+    setApiError(null);
+    try {
+      const record = await getAsset(assetId);
+      const mapped = mapAssetRecord(record);
+      setAsset(mapped);
+      setFormState({
+        name: mapped.name,
+        category: mapped.category,
+        specification: mapped.specification === 'Not available' ? '' : mapped.specification,
+        location: mapped.assignedLocation,
+        custodian: mapped.assignedCustodianDepartment,
+        purchaseDate: record.purchase_date,
+        vendorName: mapped.acquisition.vendorName,
+        totalCost: record.total_cost,
+        warrantyPeriod: mapped.acquisition.warrantyPeriod,
+        serialNumber: mapped.serialNumber === 'Not available' ? '' : mapped.serialNumber,
+      });
+    } catch (error: unknown) {
+      const status = (error as AssetApiError).status;
+      setAsset(null);
+      setApiError(
+        status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : status === 403
+          ? 'Admin access is required to view asset details.'
+          : status === 404
+          ? `Asset "${assetId}" was not found in the inventory ledger.`
+          : status && status >= 500
+          ? 'The asset service is temporarily unavailable. Please retry.'
+          : error instanceof Error
+          ? error.message
+          : 'Unable to load asset details. Please check your connection and retry.'
+      );
+    }
+  }, [assetId]);
 
   useEffect(() => {
-    let active = true;
-    setAsset(null);
-    setApiError(null);
-    setIsEditing(false);
-    getAsset(assetId)
-      .then((record) => {
-        if (!active) return;
-        const mapped = mapAssetRecord(record);
-        setAsset(mapped);
-        setFormState({
-          name: mapped.name,
-          category: mapped.category,
-          specification: mapped.specification === 'Not available' ? '' : mapped.specification,
-          location: mapped.assignedLocation,
-          custodian: mapped.assignedCustodianDepartment,
-          purchaseDate: record.purchase_date,
-          vendorName: mapped.acquisition.vendorName,
-          totalCost: record.total_cost,
-          warrantyPeriod: mapped.acquisition.warrantyPeriod,
-          serialNumber: mapped.serialNumber === 'Not available' ? '' : mapped.serialNumber,
-        });
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        const fallback = ASSET_DETAILS_MOCK_DATA[assetId] || DEFAULT_ASSET_DETAILS_DATA;
-        if (fallback) {
-          setAsset(fallback);
-          setFormState({
-            name: fallback.name,
-            category: fallback.category,
-            specification: fallback.specification === 'Not available' ? '' : fallback.specification,
-            location: fallback.assignedLocation,
-            custodian: fallback.assignedCustodianDepartment,
-            purchaseDate: fallback.acquisition.purchaseDate,
-            vendorName: fallback.acquisition.vendorName,
-            totalCost: fallback.acquisition.totalCost,
-            warrantyPeriod: fallback.acquisition.warrantyPeriod,
-            serialNumber: fallback.serialNumber === 'Not available' ? '' : fallback.serialNumber,
-          });
-          return;
-        }
-        const status = (error as AssetApiError).status;
-        setApiError(status === 401 ? 'Your session has expired. Please sign in again.' : status === 403 ? 'Admin access is required to view assets.' : status === 404 ? 'Asset not found.' : error instanceof Error ? error.message : 'Unable to load asset.');
-      });
-    return () => {
-      active = false;
-    };
-  }, [assetId]);
+    loadAssetData();
+  }, [loadAssetData]);
 
   // Valuation & Depreciation State
   const [valuationLedger, setValuationLedger] = useState<AssetValuationApiRecord[]>([]);
@@ -270,7 +380,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
     notes?: string;
   }>({});
 
-  const loadValuations = async (targetId: string) => {
+  const loadValuations = useCallback(async (targetId: string) => {
     setIsLoadingValuations(true);
     setValuationError(null);
     try {
@@ -278,20 +388,19 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
       setValuationLedger(data.items || []);
       setValuationSummary(data.summary || null);
     } catch (err: unknown) {
-      console.error('Failed to load asset valuation history', err);
       setValuationError(err instanceof Error ? err.message : 'Failed to load valuation ledger');
       setValuationLedger([]);
       setValuationSummary(null);
     } finally {
       setIsLoadingValuations(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (assetId) {
       loadValuations(assetId);
     }
-  }, [assetId]);
+  }, [assetId, loadValuations]);
 
   const parseCurrencyNumber = (val: string | number | undefined | null): number | null => {
     if (val === undefined || val === null) return null;
@@ -384,7 +493,6 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
       setIsValModalOpen(false);
       showToast(`Valuation update of ${formatCurrency(parsedNew)} recorded for ${asset.id}.`);
     } catch (err: unknown) {
-      console.error('Failed to record valuation update', err);
       const msg = err instanceof Error ? err.message : 'Failed to record valuation update';
       showToast(`Error: ${msg}`);
     } finally {
@@ -394,12 +502,30 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
 
   const handleEditSave = async () => {
     if (!asset) return;
+    if (!formState.name.trim()) {
+      showToast('Asset name cannot be empty.');
+      return;
+    }
+    if (!formState.category.trim()) {
+      showToast('Category cannot be empty.');
+      return;
+    }
+    if (!formState.location.trim()) {
+      showToast('Location cannot be empty.');
+      return;
+    }
+    if (!formState.custodian.trim()) {
+      showToast('Custodian cannot be empty.');
+      return;
+    }
+
     setSaving(true);
     try {
       const result = await updateAsset(asset.id, {
         name: formState.name.trim(),
         category: formState.category.trim(),
         specification: formState.specification.trim() || undefined,
+        serialNumber: formState.serialNumber.trim() || undefined,
         location: formState.location.trim(),
         custodian: formState.custodian.trim(),
         purchaseDate: formState.purchaseDate,
@@ -431,10 +557,6 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
     showToast(`Asset ID ${asset.id} copied to clipboard.`);
   };
 
-  if (!asset) {
-    return <div role={apiError ? 'alert' : 'status'}>{apiError || 'Loading asset...'}</div>;
-  }
-
   const handleNav = (subRoute: string) => {
     if (subRoute === 'dashboard') {
       onNavigate?.('dashboard');
@@ -448,6 +570,110 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
     }
   };
 
+  if (!asset) {
+    return (
+      <DashboardLayout
+        currentNav="Assets"
+        onNavigate={handleNav}
+        onSignOut={onSignOut}
+        onSearch={(q) => showToast(`Search query: ${q}`)}
+        searchPlaceholder="Search assets..."
+        onAddAsset={() => onNavigate?.('assets/new')}
+        onNotificationsClick={() =>
+          showToast('Administrative alerts: check asset lifecycle updates.')
+        }
+        onHelpClick={() => showToast('AssetMX Enterprise Help Center & User Manual.')}
+        onProfileClick={() => showToast(`Active User: ${currentUser?.full_name || 'Administrator'} (Role: ${currentUser?.role || 'Admin'}).`)}
+        userName={currentUser?.full_name || 'Administrator'}
+        userRoleSubtitle={currentUser?.role ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1) : 'Administrator'}
+        role={currentUser?.role || 'admin'}
+      >
+        <div className="amx-asset-details-container">
+          <div className="amx-details-top-bar">
+            <nav className="amx-breadcrumb-nav" aria-label="Breadcrumb">
+              <button
+                type="button"
+                className="amx-back-link"
+                onClick={() => onNavigate?.('assets')}
+                aria-label="Back to Assets Inventory"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
+                  arrow_back
+                </span>
+                <span>Back to Assets</span>
+              </button>
+              <span className="amx-breadcrumb-separator" aria-hidden="true">/</span>
+              <span className="amx-breadcrumb-current">Asset Details</span>
+              <span className="amx-breadcrumb-separator" aria-hidden="true">/</span>
+              <span className="amx-breadcrumb-id">{assetId}</span>
+            </nav>
+          </div>
+
+          {apiError ? (
+            <div
+              role="alert"
+              style={{
+                padding: '24px',
+                borderRadius: '8px',
+                backgroundColor: '#fef2f2',
+                color: '#991b1b',
+                border: '1px solid #fecaca',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                fontSize: '14px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '24px' }} aria-hidden="true">
+                  error
+                </span>
+                <span>{apiError}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  className="amx-action-btn-primary"
+                  onClick={loadAssetData}
+                  style={{ width: 'auto', padding: '0 16px', height: '36px' }}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="amx-action-btn-secondary"
+                  onClick={() => onNavigate?.('assets')}
+                  style={{ width: 'auto', padding: '0 16px', height: '36px' }}
+                >
+                  Back to Assets Inventory
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                padding: '48px 24px',
+                textAlign: 'center',
+                color: 'var(--amx-dash-text-muted)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '32px', color: '#0891B2' }} aria-hidden="true">
+                progress_activity
+              </span>
+              <span>Loading asset details for {assetId}...</span>
+            </div>
+          )}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout
       currentNav="Assets"
@@ -457,10 +683,13 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
       searchPlaceholder="Search assets..."
       onAddAsset={() => onNavigate?.('assets/new')}
       onNotificationsClick={() =>
-        showToast('1 Alert: Printer Ink (Cyan) expires today; Stationery low stock.')
+        showToast('Administrative alerts: check asset lifecycle updates.')
       }
       onHelpClick={() => showToast('AssetMX Enterprise Help Center & User Manual.')}
-      onProfileClick={() => showToast('Active User: Administrator (Role: Admin, Dept: IT).')}
+      onProfileClick={() => showToast(`Active User: ${currentUser?.full_name || 'Administrator'} (Role: ${currentUser?.role || 'Admin'}).`)}
+      userName={currentUser?.full_name || 'Administrator'}
+      userRoleSubtitle={currentUser?.role ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1) : 'Administrator'}
+      role={currentUser?.role || 'admin'}
     >
       {/* Toast Notification */}
       {toastMessage && (
@@ -486,7 +715,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
             animation: 'fadeIn 0.2s ease',
           }}
         >
-          <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#57dffe' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#57dffe' }} aria-hidden="true">
             info
           </span>
           <span>{toastMessage}</span>
@@ -562,54 +791,113 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
             <div className="amx-card-header-bar">
               <h3 className="amx-card-heading">Edit Asset Details</h3>
             </div>
-            <div className="amx-2col-fields-grid" style={{ marginTop: '16px' }}>
-              <label className="amx-field-group">
-                <span className="amx-field-label">Asset Name</span>
-                <input value={formState.name} onChange={(e) => setFormState((current) => ({ ...current, name: e.target.value }))} />
-              </label>
-              <label className="amx-field-group">
-                <span className="amx-field-label">Category</span>
-                <input value={formState.category} onChange={(e) => setFormState((current) => ({ ...current, category: e.target.value }))} />
-              </label>
-              <label className="amx-field-group">
-                <span className="amx-field-label">Specification</span>
-                <input value={formState.specification} onChange={(e) => setFormState((current) => ({ ...current, specification: e.target.value }))} />
-              </label>
-              <label className="amx-field-group">
-                <span className="amx-field-label">Serial Number</span>
-                <input value={formState.serialNumber} onChange={(e) => setFormState((current) => ({ ...current, serialNumber: e.target.value }))} />
-              </label>
-              <label className="amx-field-group">
-                <span className="amx-field-label">Location</span>
-                <input value={formState.location} onChange={(e) => setFormState((current) => ({ ...current, location: e.target.value }))} />
-              </label>
-              <label className="amx-field-group">
-                <span className="amx-field-label">Custodian</span>
-                <input value={formState.custodian} onChange={(e) => setFormState((current) => ({ ...current, custodian: e.target.value }))} />
-              </label>
-              <label className="amx-field-group">
-                <span className="amx-field-label">Purchase Date</span>
-                <input type="date" value={formState.purchaseDate} onChange={(e) => setFormState((current) => ({ ...current, purchaseDate: e.target.value }))} />
-              </label>
-              <label className="amx-field-group">
-                <span className="amx-field-label">Vendor Name</span>
-                <input value={formState.vendorName} onChange={(e) => setFormState((current) => ({ ...current, vendorName: e.target.value }))} />
-              </label>
-              <label className="amx-field-group">
-                <span className="amx-field-label">Total Cost</span>
-                <input value={formState.totalCost} onChange={(e) => setFormState((current) => ({ ...current, totalCost: e.target.value }))} />
-              </label>
-              <label className="amx-field-group">
-                <span className="amx-field-label">Warranty Period</span>
-                <input value={formState.warrantyPeriod} onChange={(e) => setFormState((current) => ({ ...current, warrantyPeriod: e.target.value }))} />
-              </label>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
-              <button type="button" className="amx-action-btn-secondary" onClick={() => setIsEditing(false)}>Cancel</button>
-              <button type="button" className="amx-action-btn-primary" onClick={handleEditSave} disabled={saving}>
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleEditSave();
+              }}
+              style={{ marginTop: '16px' }}
+            >
+              <div className="amx-2col-fields-grid">
+                <div className="amx-field-group">
+                  <label className="amx-field-label" htmlFor="edit-asset-name">Asset Name</label>
+                  <input
+                    id="edit-asset-name"
+                    value={formState.name}
+                    onChange={(e) => setFormState((current) => ({ ...current, name: e.target.value }))}
+                  />
+                </div>
+                <div className="amx-field-group">
+                  <label className="amx-field-label" htmlFor="edit-asset-category">Category</label>
+                  <input
+                    id="edit-asset-category"
+                    value={formState.category}
+                    onChange={(e) => setFormState((current) => ({ ...current, category: e.target.value }))}
+                  />
+                </div>
+                <div className="amx-field-group">
+                  <label className="amx-field-label" htmlFor="edit-asset-spec">Specification</label>
+                  <input
+                    id="edit-asset-spec"
+                    value={formState.specification}
+                    onChange={(e) => setFormState((current) => ({ ...current, specification: e.target.value }))}
+                  />
+                </div>
+                <div className="amx-field-group">
+                  <label className="amx-field-label" htmlFor="edit-asset-serial">Serial Number</label>
+                  <input
+                    id="edit-asset-serial"
+                    value={formState.serialNumber}
+                    onChange={(e) => setFormState((current) => ({ ...current, serialNumber: e.target.value }))}
+                  />
+                </div>
+                <div className="amx-field-group">
+                  <label className="amx-field-label" htmlFor="edit-asset-location">Location</label>
+                  <input
+                    id="edit-asset-location"
+                    value={formState.location}
+                    onChange={(e) => setFormState((current) => ({ ...current, location: e.target.value }))}
+                  />
+                </div>
+                <div className="amx-field-group">
+                  <label className="amx-field-label" htmlFor="edit-asset-custodian">Custodian</label>
+                  <input
+                    id="edit-asset-custodian"
+                    value={formState.custodian}
+                    onChange={(e) => setFormState((current) => ({ ...current, custodian: e.target.value }))}
+                  />
+                </div>
+                <div className="amx-field-group">
+                  <label className="amx-field-label" htmlFor="edit-asset-purchase-date">Purchase Date</label>
+                  <input
+                    id="edit-asset-purchase-date"
+                    type="date"
+                    value={formState.purchaseDate}
+                    onChange={(e) => setFormState((current) => ({ ...current, purchaseDate: e.target.value }))}
+                  />
+                </div>
+                <div className="amx-field-group">
+                  <label className="amx-field-label" htmlFor="edit-asset-vendor">Vendor Name</label>
+                  <input
+                    id="edit-asset-vendor"
+                    value={formState.vendorName}
+                    onChange={(e) => setFormState((current) => ({ ...current, vendorName: e.target.value }))}
+                  />
+                </div>
+                <div className="amx-field-group">
+                  <label className="amx-field-label" htmlFor="edit-asset-cost">Total Cost</label>
+                  <input
+                    id="edit-asset-cost"
+                    value={formState.totalCost}
+                    onChange={(e) => setFormState((current) => ({ ...current, totalCost: e.target.value }))}
+                  />
+                </div>
+                <div className="amx-field-group">
+                  <label className="amx-field-label" htmlFor="edit-asset-warranty">Warranty Period</label>
+                  <input
+                    id="edit-asset-warranty"
+                    value={formState.warrantyPeriod}
+                    onChange={(e) => setFormState((current) => ({ ...current, warrantyPeriod: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="amx-action-btn-secondary"
+                  onClick={() => setIsEditing(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="amx-action-btn-primary"
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
@@ -716,7 +1004,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
         <div className="amx-details-card">
           <div className="amx-lifecycle-header">
             <h3 className="amx-card-heading">Asset Lifecycle Stage</h3>
-            <span className="amx-card-meta-text">Estimated End of Life: {asset.estimatedEndOfLife}</span>
+            <span className="amx-card-meta-text">Warranty / End of Life: {asset.estimatedEndOfLife}</span>
           </div>
 
           <div className="amx-lifecycle-stepper-grid">
@@ -758,7 +1046,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                 <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#0891B2' }} aria-hidden="true">
                   receipt_long
                 </span>
-                Acquisition & Financials
+                Acquisition &amp; Financials
               </h3>
               <span className="amx-td-mono" style={{ fontSize: '12px' }}>{asset.acquisition.poNumber}</span>
             </div>
@@ -798,7 +1086,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                 <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#0891B2' }} aria-hidden="true">
                   badge
                 </span>
-                Custody & Current Location
+                Custody &amp; Current Location
               </h3>
             </div>
 
@@ -902,7 +1190,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                     <tr>
                       <td colSpan={7} className="amx-table-empty">
                         <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--amx-dash-text-muted)' }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: '28px', color: '#0891B2', display: 'block', marginBottom: '6px' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '28px', color: '#0891B2', display: 'block', marginBottom: '6px' }} aria-hidden="true">
                             hourglass_top
                           </span>
                           Loading valuation history from ledger...
@@ -913,7 +1201,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                     <tr>
                       <td colSpan={7} className="amx-table-empty">
                         <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--amx-dash-danger, #ef4444)' }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: '28px', display: 'block', marginBottom: '6px' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '28px', display: 'block', marginBottom: '6px' }} aria-hidden="true">
                             error
                           </span>
                           <div>{valuationError}</div>
@@ -932,7 +1220,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                     <tr>
                       <td colSpan={7} className="amx-table-empty">
                         <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--amx-dash-text-muted)' }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: '28px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '28px', color: '#94a3b8', display: 'block', marginBottom: '6px' }} aria-hidden="true">
                             hourglass_empty
                           </span>
                           No valuation or depreciation adjustments recorded yet for this asset.
@@ -1050,7 +1338,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                 </span>
                 Maintenance History
               </h3>
-              <p className="amx-table-top-desc">Log of scheduled servicing, repairs, and vendor warranties.</p>
+              <p className="amx-table-top-desc">Log of servicing, repairs, and vendor warranties.</p>
             </div>
             <button
               type="button"
@@ -1119,7 +1407,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                               border: '1px solid #c6c6cd',
                             }}
                           >
-                            Scheduled
+                            {mnt.status}
                           </span>
                         )}
                       </td>
@@ -1153,7 +1441,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
               <thead>
                 <tr>
                   <th scope="col">Event</th>
-                  <th scope="col">Date & Time</th>
+                  <th scope="col">Date &amp; Time</th>
                   <th scope="col">Performed By</th>
                 </tr>
               </thead>
@@ -1216,7 +1504,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                 aria-label="Close dialog"
                 id="btn-close-val-modal"
               >
-                <span className="material-symbols-outlined">close</span>
+                <span className="material-symbols-outlined" aria-hidden="true">close</span>
               </button>
             </div>
 
@@ -1338,7 +1626,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                     id="btn-proceed-review-valuation"
                   >
                     <span>Proceed to Review</span>
-                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
                       arrow_forward
                     </span>
                   </button>
@@ -1378,21 +1666,21 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                           if (diff < 0) {
                             return (
                               <span className="amx-diff-badge depreciation" id="val-diff-badge">
-                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>trending_down</span>
+                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">trending_down</span>
                                 Depreciation: -₹{Math.abs(diff).toLocaleString('en-IN')}
                               </span>
                             );
                           } else if (diff > 0) {
                             return (
                               <span className="amx-diff-badge revaluation" id="val-diff-badge">
-                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>trending_up</span>
+                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">trending_up</span>
                                 Revaluation: +₹{diff.toLocaleString('en-IN')}
                               </span>
                             );
                           } else {
                             return (
                               <span className="amx-diff-badge neutral" id="val-diff-badge">
-                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>remove</span>
+                                <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">remove</span>
                                 No Change (₹0)
                               </span>
                             );
@@ -1433,7 +1721,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                     onClick={() => setValModalStep('form')}
                     id="btn-back-edit-valuation"
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
                       arrow_back
                     </span>
                     <span>Back to Edit</span>
@@ -1445,7 +1733,7 @@ export const AssetDetailsPage: React.FC<AssetDetailsPageProps> = ({
                     id="btn-confirm-record-valuation"
                     disabled={isSubmittingValuation}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
                       {isSubmittingValuation ? 'progress_activity' : 'check_circle'}
                     </span>
                     <span>{isSubmittingValuation ? 'Recording Entry...' : 'Confirm & Record Entry'}</span>

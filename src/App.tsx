@@ -15,7 +15,6 @@ import RequestDetailsPage from './pages/RequestDetails';
 import AddExternalRequestPage from './pages/AddExternalRequest';
 import GatePassPage from './pages/GatePass';
 import GatePassDetailsPage from './pages/GatePassDetails';
-import GateVerificationPage from './pages/GateVerification';
 import ReportsOverviewPage from './pages/ReportsOverview';
 import AssetUtilizationPage from './pages/AssetUtilization';
 import RequestsReportPage from './pages/RequestsReport';
@@ -31,6 +30,7 @@ import { EmployeeMyConsumptionPage } from './pages/EmployeeMyConsumption';
 import { HostDashboardPage } from './pages/HostDashboard';
 import { HostGatePassesPage } from './pages/HostGatePasses';
 import { HostMovementActivityPage } from './pages/HostMovementActivity';
+import { GateVerificationPage } from './pages/GateVerification';
 import { GuardDashboardPage } from './pages/GuardDashboard';
 import { GuardGateVerificationPage } from './pages/GuardGateVerification';
 import { GuardEntryExitLogsPage } from './pages/GuardEntryExitLogs';
@@ -117,7 +117,7 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
       return { name: 'reports' };
     }
     if (path === '/gate-verification' || path === '/gate-verification/') {
-      return { name: 'gate-verification', passId: 'GP-2026-0422' };
+      return { name: 'gate-verification' };
     }
     if (path === '/entry-exit-logs' || path === '/entry-exit-logs/' || path === '/logs' || path === '/logs/') {
       return { name: 'entry-exit-logs' };
@@ -347,7 +347,7 @@ export default function App() {
       if (subRoute === 'guard-dashboard' || subRoute === 'dashboard') {
         navigate('/dashboard');
       } else if (subRoute === 'gate-verification') {
-        navigate('/gate-pass/GP-2026-0422/verification');
+        navigate('/gate-verification');
       } else if (subRoute === 'entry-exit-logs' || subRoute === 'logs') {
         navigate('/entry-exit-logs');
       } else if (subRoute === 'security-incidents' || subRoute === 'incidents') {
@@ -427,7 +427,7 @@ export default function App() {
     if (route === 'gate-verification') {
       return (
         <GuardGateVerificationPage
-          passId={routeInfo.passId || 'GP-2026-0422'}
+          passId={routeInfo.passId}
           onNavigate={handleSubRouteNav}
           onSignOut={signOut}
         />
@@ -529,11 +529,11 @@ export default function App() {
     );
   }
 
-  // Gate Verification Route
+  // Gate Verification Route (Admin & Superadmin)
   if (route === 'gate-verification' && getToken()) {
     return (
       <GateVerificationPage
-        passId={routeInfo.passId || 'GP-2026-0012'}
+        passId={routeInfo.passId || ''}
         onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />

@@ -46,4 +46,11 @@ export const ASSET_FILTER_OPTIONS = {
     { value: 'Hardware / Compute', label: 'Hardware / Compute' },
     { value: 'IT Infrastructure', label: 'IT Infrastructure' },
   ],
+  statuses: [
+    { value: '', label: 'All Statuses' },
+    { value: 'Active', label: 'Active' },
+    { value: 'In Maintenance', label: 'In Maintenance' },
+    { value: 'In Transit', label: 'In Transit' },
+    { value: 'Disposed', label: 'Disposed' },
+  ],
 };

@@ -3,14 +3,40 @@ import type { StockLevelItem } from '../data/dashboardData';
 
 interface StockLevelsProps {
   stocks: StockLevelItem[];
+  onViewConsumables?: () => void;
 }
 
-export const StockLevels: React.FC<StockLevelsProps> = ({ stocks = [] }) => {
+export const StockLevels: React.FC<StockLevelsProps> = ({ stocks = [], onViewConsumables }) => {
   return (
     <section className="amx-card-panel" aria-labelledby="stock-levels-title">
-      <h3 id="stock-levels-title" className="amx-section-title" style={{ marginBottom: '16px' }}>
-        Stock Levels
-      </h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <h3 id="stock-levels-title" className="amx-section-title" style={{ margin: 0 }}>
+          Stock Levels
+        </h3>
+        {onViewConsumables && (
+          <button
+            type="button"
+            onClick={onViewConsumables}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#0891B2',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px',
+              padding: '2px 6px',
+              borderRadius: '4px',
+            }}
+            aria-label="Manage consumable stock levels"
+          >
+            <span>Manage Stock</span>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>arrow_forward</span>
+          </button>
+        )}
+      </div>
       <div className="amx-stock-list">
         {(stocks || []).length === 0 ? (
           <p style={{ color: 'var(--amx-dash-text-muted)', fontSize: '13px', fontStyle: 'italic', margin: '16px 0' }}>

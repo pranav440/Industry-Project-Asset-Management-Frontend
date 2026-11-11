@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { AssetStatusBadge } from '../components/AssetStatusBadge';
 import { getAsset, initiateTransfer, type AssetApiError, type AssetMovementRecord } from '../api/assetApi';
 import type { AssetDetailsData } from '../data/assetDetailsData';
 import { ASSET_FILTER_OPTIONS } from '../data/assetsData';
+import { getUser } from '../auth/session';
 import './AssetTransfer.css';
 
 interface AssetTransferPageProps {
@@ -23,6 +24,7 @@ interface FormErrors {
   destinationLocation?: string;
   newCustodian?: string;
   qrCode?: string;
+  transferReason?: string;
 }
 
 export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
@@ -30,6 +32,8 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
+  const currentUser = useMemo(() => getUser(), []);
+
   const [asset, setAsset] = useState<AssetDetailsData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -49,8 +53,12 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [successInfo, setSuccessInfo] = useState<{
     assetId: string;
+    movementId: string;
+    fromLocation: string;
     destination: string;
+    fromCustodian: string;
     newCustodian: string;
+    status: string;
   } | null>(null);
 
   // Today's formatted date
@@ -65,90 +73,105 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
     setTimeout(() => setToastMessage(null), 2800);
   };
 
-  useEffect(() => {
-    let active = true;
+  const loadAssetData = useCallback(async () => {
+    if (!assetId) {
+      setAsset(null);
+      setLoading(false);
+      setApiError('No asset identifier provided.');
+      return;
+    }
     setLoading(true);
     setApiError(null);
+    setTransferError(null);
 
-    getAsset(assetId)
-      .then((record) => {
-        if (!active) return;
-        const loadedQr = record.qr_code_value || `assetmx:${record.asset_id}`;
-        setFormData((prev) => ({
-          ...prev,
-          qrCode: prev.qrCode || loadedQr,
-        }));
-        setAsset({
-          id: record.asset_id,
-          name: record.name,
-          status: record.status,
-          category: record.category,
-          specification: record.specification || 'Standard Hardware Unit',
-          serialNumber: record.serial_number || 'Not available',
-          assignedCustodianDepartment: record.custodian,
-          assignedCustodianName: record.custodian,
+    try {
+      const record = await getAsset(assetId);
+      const loadedQr = record.qr_code_value || `assetmx:${record.asset_id}`;
+      setFormData((prev) => ({
+        ...prev,
+        qrCode: prev.qrCode || loadedQr,
+      }));
+      setAsset({
+        id: record.asset_id,
+        name: record.name,
+        status: record.status,
+        category: record.category,
+        specification: record.specification || 'Standard Hardware Unit',
+        serialNumber: record.serial_number || 'Not available',
+        assignedCustodianDepartment: record.custodian,
+        assignedCustodianName: record.custodian,
+        assignedLocation: record.location,
+        assignedSubLocation: 'Floor Unit',
+        warrantyStatus: record.warranty_period,
+        warrantyCover: 'Standard Cover',
+        lifecycleStageText:
+          record.status === 'Disposed'
+            ? 'Disposed'
+            : record.status === 'In Transit'
+            ? 'In Transit'
+            : 'Active Assignment',
+        estimatedEndOfLife: record.warranty_period || 'Not recorded',
+        qrVerifiedText: 'Verified & Active',
+        qrExplanation: `QR Tag: ${record.qr_code_value}`,
+        lifecycleStages: [],
+        acquisition: {
+          purchaseDate: record.purchase_date,
+          vendorName: record.vendor_name,
+          invoiceReference: record.invoice_reference || '',
+          poNumber: record.invoice_reference || 'PO-DIRECT',
+          totalCost: record.total_cost,
+          warrantyPeriod: record.warranty_period,
+          configuredDepreciation: record.depreciation || '',
+        },
+        custody: {
+          assignedCustodian: record.custodian,
+          department: record.custodian,
           assignedLocation: record.location,
-          assignedSubLocation: 'Not available',
-          warrantyStatus: record.warranty_period,
-          warrantyCover: 'Not available',
-          lifecycleStageText: 'Active Assignment',
-          estimatedEndOfLife: 'Not available',
-          qrVerifiedText: 'Backend generated',
-          qrExplanation: `QR Association: ${record.qr_code_value}`,
-          lifecycleStages: [],
-          acquisition: {
-            purchaseDate: record.purchase_date,
-            vendorName: record.vendor_name,
-            invoiceReference: record.invoice_reference || '',
-            poNumber: '',
-            totalCost: record.total_cost,
-            warrantyPeriod: record.warranty_period,
-            configuredDepreciation: record.depreciation || '',
-          },
-          custody: {
-            assignedCustodian: record.custodian,
-            department: record.custodian,
-            assignedLocation: record.location,
-            allocationDate: record.allocation_date || '',
-            designatedUser: record.custodian,
-            accountabilityStatus: 'Active',
-          },
-          movementHistory: record.movement_history.map((movement: AssetMovementRecord) => ({
-            id: movement.movement_id,
-            date: new Date(movement.initiated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-            movementType: 'Transfer',
-            from: movement.from_location,
-            to: movement.to_location,
-            custodian: movement.to_custodian,
-            verification: movement.status,
-          })),
-          maintenanceHistory: [],
-          auditHistory: [],
-          qrCodeDataUrl: record.qr_code_data_url,
-        });
-        setLoading(false);
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        const status = (error as AssetApiError)?.status;
-        setApiError(
-          status === 401
-            ? 'Your session has expired. Please sign in again.'
-            : status === 403
-            ? 'Admin access is required.'
-            : status === 404
-            ? 'Asset not found.'
-            : error instanceof Error
-            ? error.message
-            : 'Unable to load asset information.'
-        );
-        setLoading(false);
+          allocationDate: record.allocation_date || '',
+          designatedUser: record.custodian,
+          accountabilityStatus: record.status === 'Active' ? 'Active' : record.status,
+        },
+        movementHistory: (record.movement_history || []).map((movement: AssetMovementRecord) => ({
+          id: movement.movement_id,
+          date: new Date(movement.initiated_at).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          }),
+          movementType: 'Transfer',
+          from: movement.from_location,
+          to: movement.to_location,
+          custodian: movement.to_custodian,
+          verification: movement.status,
+        })),
+        maintenanceHistory: [],
+        auditHistory: [],
+        qrCodeDataUrl: record.qr_code_data_url,
       });
-
-    return () => {
-      active = false;
-    };
+    } catch (error: unknown) {
+      const status = (error as AssetApiError)?.status;
+      setAsset(null);
+      setApiError(
+        status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : status === 403
+          ? 'Admin access is required to transfer assets.'
+          : status === 404
+          ? `Asset "${assetId}" was not found in the inventory ledger.`
+          : status && status >= 500
+          ? 'The asset service is temporarily unavailable. Please retry.'
+          : error instanceof Error
+          ? error.message
+          : 'Unable to load asset information.'
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [assetId]);
+
+  useEffect(() => {
+    loadAssetData();
+  }, [loadAssetData]);
 
   const handleInputChange = (field: keyof TransferFormState, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -168,14 +191,35 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
     if (!formData.qrCode.trim()) {
       nextErrors.qrCode = 'Asset QR code is required for movement transfer under SRS QR-03.';
     }
+    if (formData.transferReason.length > 500) {
+      nextErrors.transferReason = 'Transfer reason cannot exceed 500 characters.';
+    }
+    if (
+      asset &&
+      formData.destinationLocation.trim() === asset.assignedLocation.trim() &&
+      formData.newCustodian.trim() === (asset.custody.assignedCustodian || asset.assignedCustodianDepartment).trim()
+    ) {
+      nextErrors.destinationLocation = 'Destination location or new custodian must be different from current assignment.';
+    }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
   const handleInitiateClick = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!asset) return;
+
+    if (asset.status === 'Disposed') {
+      showToast('Disposed assets cannot be transferred.');
+      return;
+    }
+    if (asset.status === 'In Transit') {
+      showToast('Asset already has an active transfer in progress.');
+      return;
+    }
+
     if (!validateForm()) {
-      showToast('Please select all required transfer fields.');
+      showToast('Please correct the required transfer fields.');
       return;
     }
     setTransferError(null);
@@ -183,58 +227,87 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
   };
 
   const handleConfirmSubmit = async () => {
+    if (isSubmitting || !asset) return;
     setIsSubmitting(true);
     setTransferError(null);
+
     try {
       const response = await initiateTransfer(assetId, {
-        destination_location: formData.destinationLocation,
-        new_custodian: formData.newCustodian,
+        destination_location: formData.destinationLocation.trim(),
+        new_custodian: formData.newCustodian.trim(),
         qr_code: formData.qrCode.trim(),
         ...(formData.transferReason.trim() ? { transfer_reason: formData.transferReason.trim() } : {}),
       });
-      setAsset((current) => current ? {
-        ...current,
-        status: response.asset.status,
-        assignedLocation: response.asset.location,
-        assignedCustodianDepartment: response.asset.custodian,
-        assignedCustodianName: response.asset.custodian,
-        custody: {
-          ...current.custody,
-          assignedCustodian: response.asset.custodian,
-          assignedLocation: response.asset.location,
-        },
-        movementHistory: response.asset.movement_history.map((movement: AssetMovementRecord) => ({
-          id: movement.movement_id,
-          date: new Date(movement.initiated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-          movementType: 'Transfer',
-          from: movement.from_location,
-          to: movement.to_location,
-          custodian: movement.to_custodian,
-          verification: movement.status,
-        })),
-      } : current);
+
+      // Update local asset state with returned updated asset and newly persisted movement
+      setAsset((current) =>
+        current
+          ? {
+              ...current,
+              status: response.asset.status,
+              assignedLocation: response.asset.location,
+              assignedCustodianDepartment: response.asset.custodian,
+              assignedCustodianName: response.asset.custodian,
+              custody: {
+                ...current.custody,
+                assignedCustodian: response.asset.custodian,
+                assignedLocation: response.asset.location,
+              },
+              movementHistory: (response.asset.movement_history || []).map((movement: AssetMovementRecord) => ({
+                id: movement.movement_id,
+                date: new Date(movement.initiated_at).toLocaleDateString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                }),
+                movementType: 'Transfer',
+                from: movement.from_location,
+                to: movement.to_location,
+                custodian: movement.to_custodian,
+                verification: movement.status,
+              })),
+            }
+          : current
+      );
+
       setShowConfirmModal(false);
       setSuccessInfo({
         assetId: response.asset.asset_id,
+        movementId: response.movement.movement_id,
+        fromLocation: response.movement.from_location,
         destination: response.movement.to_location,
+        fromCustodian: response.movement.from_custodian,
         newCustodian: response.movement.to_custodian,
+        status: response.movement.status,
       });
-      showToast('Asset transfer initiated successfully.');
+
+      // Reset form values
+      setFormData((prev) => ({
+        ...prev,
+        destinationLocation: '',
+        newCustodian: '',
+        transferReason: '',
+      }));
+      setErrors({});
+
+      showToast(`Asset transfer initiated successfully (${response.movement.movement_id}).`);
     } catch (error: unknown) {
       const status = (error as AssetApiError)?.status;
-      const message = status === 401
-        ? 'Your session has expired. Please sign in again.'
-        : status === 403
-        ? 'Admin access is required.'
-        : status === 404
-        ? 'Asset not found.'
-        : status === 409
-        ? (error instanceof Error ? error.message : 'This asset cannot be transferred right now.')
-        : status === 422
-        ? (error instanceof Error ? error.message : 'Please check the transfer details.')
-        : error instanceof Error
-        ? error.message
-        : 'Unable to initiate the transfer.';
+      const rawMessage = (error as { message?: string })?.message || (error instanceof Error ? error.message : '');
+      const message =
+        status === 400
+          ? (rawMessage || 'QR validation failed for this asset.')
+          : status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : status === 403
+          ? 'Admin access is required to initiate asset transfers.'
+          : status === 404
+          ? 'Asset not found.'
+          : status === 409
+          ? (rawMessage || 'This asset cannot be transferred right now.')
+          : status === 422
+          ? (rawMessage || 'Please check the transfer details.')
+          : rawMessage || 'Unable to initiate the transfer.';
       setTransferError(message);
       showToast(message);
     } finally {
@@ -242,24 +315,40 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
     }
   };
 
-  const locationOptions = [
-    { value: 'HQ - Floor 4, Dev Pod 4B', label: 'HQ - Floor 4, Dev Pod 4B' },
-    { value: 'HQ - Floor 2, Design Wing', label: 'HQ - Floor 2, Design Wing' },
-    { value: 'HQ - Data Center Basement B1', label: 'HQ - Data Center Basement B1' },
-    { value: 'Regional Annex - West Wing Labs', label: 'Regional Annex - West Wing Labs' },
-    { value: 'Distribution Facility - Bay 12', label: 'Distribution Facility - Bay 12' },
-    { value: 'Warehouse Storage - Zone A', label: 'Warehouse Storage - Zone A' },
-    ...ASSET_FILTER_OPTIONS.locations.filter((l) => l.value !== ''),
-  ];
+  const locationOptions = useMemo(() => {
+    const raw = [
+      { value: 'HQ - Floor 4, Dev Pod 4B', label: 'HQ - Floor 4, Dev Pod 4B' },
+      { value: 'HQ - Floor 2, Design Wing', label: 'HQ - Floor 2, Design Wing' },
+      { value: 'HQ - Data Center Basement B1', label: 'HQ - Data Center Basement B1' },
+      { value: 'Regional Annex - West Wing Labs', label: 'Regional Annex - West Wing Labs' },
+      { value: 'Distribution Facility - Bay 12', label: 'Distribution Facility - Bay 12' },
+      { value: 'Warehouse Storage - Zone A', label: 'Warehouse Storage - Zone A' },
+      ...ASSET_FILTER_OPTIONS.locations.filter((l) => l.value !== ''),
+    ];
+    const seen = new Set<string>();
+    return raw.filter((item) => {
+      if (seen.has(item.value)) return false;
+      seen.add(item.value);
+      return true;
+    });
+  }, []);
 
-  const custodianOptions = [
-    { value: 'Marcus Vance (EMP-0941) — IT Systems', label: 'Marcus Vance (EMP-0941) — IT Systems' },
-    { value: 'Elena Rostova (EMP-1102) — DevOps', label: 'Elena Rostova (EMP-1102) — DevOps' },
-    { value: 'Devin Cole (EMP-0419) — Product Lead', label: 'Devin Cole (EMP-0419) — Product Lead' },
-    { value: 'Sarah Jenkins (EMP-0312) — Facilities', label: 'Sarah Jenkins (EMP-0312) — Facilities' },
-    { value: 'Central Inventory Pool (Unassigned)', label: 'Central Inventory Pool (Unassigned)' },
-    ...ASSET_FILTER_OPTIONS.custodians.filter((c) => c.value !== ''),
-  ];
+  const custodianOptions = useMemo(() => {
+    const raw = [
+      { value: 'Marcus Vance (EMP-0941) — IT Systems', label: 'Marcus Vance (EMP-0941) — IT Systems' },
+      { value: 'Elena Rostova (EMP-1102) — DevOps', label: 'Elena Rostova (EMP-1102) — DevOps' },
+      { value: 'Devin Cole (EMP-0419) — Product Lead', label: 'Devin Cole (EMP-0419) — Product Lead' },
+      { value: 'Sarah Jenkins (EMP-0312) — Facilities', label: 'Sarah Jenkins (EMP-0312) — Facilities' },
+      { value: 'Central Inventory Pool (Unassigned)', label: 'Central Inventory Pool (Unassigned)' },
+      ...ASSET_FILTER_OPTIONS.custodians.filter((c) => c.value !== ''),
+    ];
+    const seen = new Set<string>();
+    return raw.filter((item) => {
+      if (seen.has(item.value)) return false;
+      seen.add(item.value);
+      return true;
+    });
+  }, []);
 
   const handleNav = (subRoute: string) => {
     if (subRoute === 'dashboard') {
@@ -276,9 +365,37 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
 
   if (loading) {
     return (
-      <DashboardLayout currentNav="Assets" onNavigate={handleNav} onSignOut={onSignOut}>
-        <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-          Loading asset information for transfer...
+      <DashboardLayout
+        currentNav="Assets"
+        onNavigate={handleNav}
+        onSignOut={onSignOut}
+        userName={currentUser?.full_name || 'Administrator'}
+        userRoleSubtitle={currentUser?.role ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1) : 'Administrator'}
+        role={currentUser?.role || 'admin'}
+      >
+        <div className="amx-transfer-container">
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              padding: '60px 20px',
+              textAlign: 'center',
+              color: 'var(--amx-dash-text-muted)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '12px',
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: '32px', color: '#0891b2' }}
+              aria-hidden="true"
+            >
+              progress_activity
+            </span>
+            <span>Loading asset information for transfer...</span>
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -286,13 +403,79 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
 
   if (apiError || !asset) {
     return (
-      <DashboardLayout currentNav="Assets" onNavigate={handleNav} onSignOut={onSignOut}>
-        <div role="alert" style={{ padding: '40px', textAlign: 'center', color: '#dc2626' }}>
-          {apiError || 'Asset not found.'}
+      <DashboardLayout
+        currentNav="Assets"
+        onNavigate={handleNav}
+        onSignOut={onSignOut}
+        userName={currentUser?.full_name || 'Administrator'}
+        userRoleSubtitle={currentUser?.role ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1) : 'Administrator'}
+        role={currentUser?.role || 'admin'}
+      >
+        <div className="amx-transfer-container">
+          <nav className="amx-transfer-breadcrumb" aria-label="Breadcrumb">
+            <button
+              type="button"
+              className="amx-transfer-back-btn"
+              onClick={() => onNavigate?.('assets')}
+              aria-label="Back to Assets Inventory"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
+                arrow_back
+              </span>
+              <span>Back to Assets</span>
+            </button>
+            <span className="amx-transfer-breadcrumb-sep" aria-hidden="true">/</span>
+            <span className="amx-transfer-breadcrumb-curr">Initiate Transfer</span>
+          </nav>
+
+          <div
+            role="alert"
+            style={{
+              padding: '24px',
+              borderRadius: '8px',
+              backgroundColor: '#fef2f2',
+              color: '#991b1b',
+              border: '1px solid #fecaca',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              fontSize: '14px',
+              marginTop: '16px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '24px' }} aria-hidden="true">
+                error
+              </span>
+              <span>{apiError || 'Asset not found.'}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+              <button
+                type="button"
+                className="amx-transfer-btn-primary"
+                onClick={loadAssetData}
+                style={{ width: 'auto', padding: '0 16px', height: '36px' }}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                className="amx-transfer-btn-cancel"
+                onClick={() => onNavigate?.('assets')}
+                style={{ width: 'auto', padding: '0 16px', height: '36px' }}
+              >
+                Back to Assets Inventory
+              </button>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     );
   }
+
+  const isDisposed = asset.status === 'Disposed';
+  const isInTransit = asset.status === 'In Transit';
+  const isTransferBlocked = isDisposed || isInTransit;
 
   return (
     <DashboardLayout
@@ -303,10 +486,15 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
       searchPlaceholder="Search assets..."
       onAddAsset={() => onNavigate?.('assets/new')}
       onNotificationsClick={() =>
-        showToast('1 Alert: Printer Ink (Cyan) expires today; Stationery low stock.')
+        showToast('Administrative alerts: check asset lifecycle updates.')
       }
       onHelpClick={() => showToast('AssetMX Enterprise Help Center & User Manual.')}
-      onProfileClick={() => showToast('Active User: Administrator (Role: Admin, Dept: IT).')}
+      onProfileClick={() =>
+        showToast(`Active User: ${currentUser?.full_name || 'Administrator'} (Role: ${currentUser?.role || 'Admin'}).`)
+      }
+      userName={currentUser?.full_name || 'Administrator'}
+      userRoleSubtitle={currentUser?.role ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1) : 'Administrator'}
+      role={currentUser?.role || 'admin'}
     >
       {/* Toast Notification */}
       {toastMessage && (
@@ -345,7 +533,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
           <div className="amx-confirm-modal">
             <div className="amx-modal-header">
               <h3 id="confirmTransferModalTitle" className="amx-modal-title">
-                Review & Confirm Transfer
+                Review &amp; Confirm Transfer
               </h3>
               <button
                 type="button"
@@ -353,13 +541,13 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                 onClick={() => setShowConfirmModal(false)}
                 aria-label="Close modal"
               >
-                <span className="material-symbols-outlined">close</span>
+                <span className="material-symbols-outlined" aria-hidden="true">close</span>
               </button>
             </div>
 
             <div className="amx-modal-body">
               {transferError && (
-                <div role="alert" style={{ marginBottom: '12px', color: '#ba1a1a', fontSize: '13px' }}>
+                <div role="alert" style={{ marginBottom: '12px', color: '#ba1a1a', fontSize: '13px', fontWeight: 600 }}>
                   {transferError}
                 </div>
               )}
@@ -392,6 +580,10 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                   <span className="amx-review-label">New Custodian</span>
                   <span className="amx-review-val" style={{ color: '#00687a' }}>{formData.newCustodian}</span>
                 </div>
+                <div className="amx-review-row span-2">
+                  <span className="amx-review-label">Validated QR Tag</span>
+                  <span className="amx-review-val mono" style={{ fontSize: '12px' }}>{formData.qrCode}</span>
+                </div>
                 {formData.transferReason && (
                   <div className="amx-review-row span-2">
                     <span className="amx-review-label">Transfer Reason</span>
@@ -408,6 +600,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                 type="button"
                 className="amx-transfer-btn-cancel"
                 onClick={() => setShowConfirmModal(false)}
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
@@ -417,7 +610,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                 onClick={handleConfirmSubmit}
                 disabled={isSubmitting}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
                   check_circle
                 </span>
                 <span>{isSubmitting ? 'Submitting...' : 'Confirm Transfer'}</span>
@@ -434,7 +627,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
             type="button"
             className="amx-transfer-back-btn"
             onClick={() => onNavigate?.(`assets/${asset.id}`)}
-            aria-label="Back to Asset Details"
+            aria-label={`Back to Asset Details (${asset.id})`}
           >
             <span className="material-symbols-outlined" style={{ fontSize: '16px' }} aria-hidden="true">
               arrow_back
@@ -445,21 +638,44 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
           <span className="amx-transfer-breadcrumb-curr">Initiate Transfer</span>
         </nav>
 
+        {/* Transfer Blocked Banners */}
+        {isDisposed && (
+          <div role="alert" className="amx-transfer-warning-banner">
+            <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#dc2626' }} aria-hidden="true">
+              block
+            </span>
+            <span>This asset has been disposed and cannot be transferred.</span>
+          </div>
+        )}
+
+        {isInTransit && (
+          <div role="alert" className="amx-transfer-warning-banner">
+            <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#0284c7' }} aria-hidden="true">
+              local_shipping
+            </span>
+            <span>
+              This asset is currently in transit. Physical checkpoint verification must be completed before another transfer can be initiated.
+            </span>
+          </div>
+        )}
+
         {/* Success State Banner */}
         {successInfo && (
           <div className="amx-transfer-success-banner" role="alert">
             <div className="amx-transfer-success-icon-wrap">
-              <span className="material-symbols-outlined" style={{ fontSize: '26px' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '26px' }} aria-hidden="true">
                 verified
               </span>
             </div>
             <div className="amx-transfer-success-content">
-              <h3 className="amx-transfer-success-title">Transfer Initiated</h3>
+              <h3 className="amx-transfer-success-title">Transfer Initiated (Status: {successInfo.status})</h3>
               <p className="amx-transfer-success-desc">
-                Asset transfer request has been successfully recorded. Movement authorization is active.
+                Asset transfer request has been successfully recorded in the ledger. Movement authorization is active.
               </p>
               <div className="amx-transfer-success-details">
                 <span><strong>Asset ID:</strong> {successInfo.assetId}</span>
+                <span><strong>Movement ID:</strong> {successInfo.movementId}</span>
+                <span><strong>From:</strong> {successInfo.fromLocation}</span>
                 <span><strong>Destination:</strong> {successInfo.destination}</span>
                 <span><strong>New Custodian:</strong> {successInfo.newCustodian}</span>
               </div>
@@ -476,7 +692,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                   className="amx-btn-back-assets"
                   onClick={() => onNavigate?.('assets')}
                 >
-                  Back to Assets
+                  Back to Assets Inventory
                 </button>
               </div>
             </div>
@@ -503,11 +719,12 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
               type="button"
               className="amx-transfer-btn-primary"
               onClick={handleInitiateClick}
+              disabled={isSubmitting || isTransferBlocked}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
                 swap_horiz
               </span>
-              <span>Initiate Transfer</span>
+              <span>{isSubmitting ? 'Submitting...' : 'Initiate Transfer'}</span>
             </button>
           </div>
         </div>
@@ -521,7 +738,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
               <div className="amx-transfer-card-header">
                 <div className="amx-transfer-card-title-wrap">
                   <div className="amx-transfer-card-icon">
-                    <span className="material-symbols-outlined">inventory_2</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">inventory_2</span>
                   </div>
                   <div>
                     <h2 id="secAssetInfoTitle" className="amx-transfer-card-title">
@@ -538,7 +755,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                   <label className="amx-transfer-label">Asset ID</label>
                   <div className="amx-transfer-readonly-box">
                     <span>{asset.id}</span>
-                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#94a3b8' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#94a3b8' }} aria-hidden="true">
                       lock
                     </span>
                   </div>
@@ -548,7 +765,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                   <label className="amx-transfer-label">Asset Name</label>
                   <div className="amx-transfer-readonly-box">
                     <span>{asset.name}</span>
-                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#94a3b8' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#94a3b8' }} aria-hidden="true">
                       lock
                     </span>
                   </div>
@@ -558,7 +775,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                   <label className="amx-transfer-label">Category</label>
                   <div className="amx-transfer-readonly-box">
                     <span>{asset.category}</span>
-                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#94a3b8' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#94a3b8' }} aria-hidden="true">
                       lock
                     </span>
                   </div>
@@ -568,7 +785,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                   <label className="amx-transfer-label">Current Status</label>
                   <div className="amx-transfer-readonly-box" style={{ padding: '6px 12px' }}>
                     <AssetStatusBadge status={asset.status} />
-                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#94a3b8' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#94a3b8' }} aria-hidden="true">
                       lock
                     </span>
                   </div>
@@ -581,7 +798,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
               <div className="amx-transfer-card-header">
                 <div className="amx-transfer-card-title-wrap">
                   <div className="amx-transfer-card-icon">
-                    <span className="material-symbols-outlined">badge</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">badge</span>
                   </div>
                   <div>
                     <h2 id="secCurrentAssignTitle" className="amx-transfer-card-title">
@@ -622,7 +839,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
               <div className="amx-transfer-card-header">
                 <div className="amx-transfer-card-title-wrap">
                   <div className="amx-transfer-card-icon">
-                    <span className="material-symbols-outlined">move_up</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">move_up</span>
                   </div>
                   <div>
                     <h2 id="secTransferDetailsTitle" className="amx-transfer-card-title">
@@ -644,10 +861,11 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                     className={`amx-transfer-select ${errors.destinationLocation ? 'has-error' : ''}`}
                     value={formData.destinationLocation}
                     onChange={(e) => handleInputChange('destinationLocation', e.target.value)}
+                    disabled={isTransferBlocked}
                   >
                     <option value="">Select Destination Location</option>
-                    {locationOptions.map((loc, idx) => (
-                      <option key={`${loc.value}-${idx}`} value={loc.value}>
+                    {locationOptions.map((loc) => (
+                      <option key={loc.value} value={loc.value}>
                         {loc.label}
                       </option>
                     ))}
@@ -666,10 +884,11 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                     className={`amx-transfer-select ${errors.newCustodian ? 'has-error' : ''}`}
                     value={formData.newCustodian}
                     onChange={(e) => handleInputChange('newCustodian', e.target.value)}
+                    disabled={isTransferBlocked}
                   >
                     <option value="">Select New Custodian</option>
-                    {custodianOptions.map((cust, idx) => (
-                      <option key={`${cust.value}-${idx}`} value={cust.value}>
+                    {custodianOptions.map((cust) => (
+                      <option key={cust.value} value={cust.value}>
                         {cust.label}
                       </option>
                     ))}
@@ -681,7 +900,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
 
                 <div className="amx-transfer-form-group" style={{ gridColumn: 'span 2' }}>
                   <label className="amx-transfer-label" htmlFor="qrCodeInput">
-                    Asset QR Code / Tag <span className="amx-required">*</span> (Mandatory SRS QR-03 Validation)
+                    Asset QR Code / Tag <span className="amx-transfer-req-star">*</span> (Mandatory SRS QR-03 Validation)
                   </label>
                   <input
                     type="text"
@@ -690,11 +909,14 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                     placeholder="Scan asset QR code or enter URN (e.g. assetmx:AST-...)"
                     value={formData.qrCode}
                     onChange={(e) => handleInputChange('qrCode', e.target.value)}
-                  />
+                    disabled={isTransferBlocked}
+                  >
+                  </input>
                   {errors.qrCode && (
                     <span className="amx-transfer-field-error">{errors.qrCode}</span>
                   )}
                 </div>
+
                 <div className="amx-transfer-form-group" style={{ gridColumn: 'span 2' }}>
                   <label className="amx-transfer-label" htmlFor="transferReasonInput">
                     Transfer Reason / Operational Justification
@@ -702,20 +924,25 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                   <textarea
                     id="transferReasonInput"
                     className="amx-transfer-textarea"
-                    placeholder="Provide justification or project reallocation notes (optional)..."
+                    placeholder="Provide justification or project reallocation notes (optional, max 500 characters)..."
                     value={formData.transferReason}
+                    maxLength={500}
                     onChange={(e) => handleInputChange('transferReason', e.target.value)}
+                    disabled={isTransferBlocked}
                   />
+                  {errors.transferReason && (
+                    <span className="amx-transfer-field-error">{errors.transferReason}</span>
+                  )}
                 </div>
               </div>
             </section>
 
-            {/* Section 4: Movement Information */}
+            {/* Section 4: Movement Schedule Information */}
             <section className="amx-transfer-card" aria-labelledby="secMovementInfoTitle">
               <div className="amx-transfer-card-header">
                 <div className="amx-transfer-card-title-wrap">
                   <div className="amx-transfer-card-icon">
-                    <span className="material-symbols-outlined">schedule</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">schedule</span>
                   </div>
                   <div>
                     <h2 id="secMovementInfoTitle" className="amx-transfer-card-title">
@@ -733,7 +960,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                   <span className="amx-movement-value">{todayFormatted}</span>
                 </div>
                 <div className="amx-movement-badge">
-                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }} aria-hidden="true">
                     history_toggle_off
                   </span>
                   <span>Auto-recorded upon confirmation</span>
@@ -742,15 +969,105 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
 
               {/* Informational QR Callout */}
               <div className="amx-transfer-qr-note">
-                <span className="material-symbols-outlined amx-transfer-qr-note-icon">
+                <span className="material-symbols-outlined amx-transfer-qr-note-icon" aria-hidden="true">
                   qr_code_scanner
                 </span>
                 <div>
                   <h4 className="amx-transfer-qr-note-title">Transit Verification Notice</h4>
                   <p className="amx-transfer-qr-note-text">
-                    QR-based movement validation is performed during applicable transit checkpoints.
+                    QR-based movement validation is performed during applicable transit checkpoints under SRS QR-03.
                   </p>
                 </div>
+              </div>
+            </section>
+
+            {/* Section 5: Persisted Movement & Transfer History */}
+            <section className="amx-transfer-card" aria-labelledby="secMovementHistoryTitle">
+              <div className="amx-transfer-card-header">
+                <div className="amx-transfer-card-title-wrap">
+                  <div className="amx-transfer-card-icon">
+                    <span className="material-symbols-outlined" aria-hidden="true">history</span>
+                  </div>
+                  <div>
+                    <h2 id="secMovementHistoryTitle" className="amx-transfer-card-title">
+                      Movement &amp; Transfer History
+                    </h2>
+                    <p className="amx-transfer-card-sub">
+                      Authoritative audit trail of physical relocations and custodial handovers
+                    </p>
+                  </div>
+                </div>
+                <span className="amx-transfer-section-tag">
+                  {asset.movementHistory.length} {asset.movementHistory.length === 1 ? 'RECORD' : 'RECORDS'}
+                </span>
+              </div>
+
+              <div className="amx-transfer-table-wrapper">
+                <table className="amx-transfer-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Date</th>
+                      <th scope="col">Movement ID</th>
+                      <th scope="col">From Location</th>
+                      <th scope="col">To Location</th>
+                      <th scope="col">To Custodian</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {asset.movementHistory.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          style={{
+                            textAlign: 'center',
+                            padding: '24px 16px',
+                            color: 'var(--amx-dash-text-muted)',
+                            fontStyle: 'italic',
+                          }}
+                        >
+                          No physical movement or relocation records logged yet for this asset.
+                        </td>
+                      </tr>
+                    ) : (
+                      asset.movementHistory.map((mov) => (
+                        <tr key={mov.id}>
+                          <td className="amx-td-mono">{mov.date}</td>
+                          <td className="amx-td-mono" style={{ fontSize: '12px' }}>
+                            {mov.id}
+                          </td>
+                          <td className="amx-td-muted">{mov.from}</td>
+                          <td className="amx-td-semibold">{mov.to}</td>
+                          <td className="amx-td-muted">{mov.custodian}</td>
+                          <td>
+                            <span
+                              className={`amx-transfer-status-badge ${
+                                mov.verification === 'Completed'
+                                  ? 'completed'
+                                  : mov.verification === 'In Transit'
+                                  ? 'in-transit'
+                                  : 'pending'
+                              }`}
+                            >
+                              <span
+                                className="material-symbols-outlined"
+                                style={{ fontSize: '14px' }}
+                                aria-hidden="true"
+                              >
+                                {mov.verification === 'Completed'
+                                  ? 'check_circle'
+                                  : mov.verification === 'In Transit'
+                                  ? 'local_shipping'
+                                  : 'pending'}
+                              </span>
+                              <span>{mov.verification}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </section>
           </div>
@@ -759,7 +1076,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
           <div className="amx-transfer-right-col">
             <aside className="amx-transfer-summary-card" aria-label="Transfer Summary">
               <h3 className="amx-summary-card-title">
-                <span className="material-symbols-outlined" style={{ color: 'var(--amx-dash-secondary)' }}>
+                <span className="material-symbols-outlined" style={{ color: 'var(--amx-dash-secondary)' }} aria-hidden="true">
                   summarize
                 </span>
                 <span>Transfer Summary</span>
@@ -773,7 +1090,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                 </div>
 
                 <div className="amx-flow-divider">
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
                     arrow_downward
                   </span>
                 </div>
@@ -792,7 +1109,7 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                 </div>
 
                 <div className="amx-flow-divider">
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
                     arrow_downward
                   </span>
                 </div>
@@ -815,11 +1132,12 @@ export const AssetTransferPage: React.FC<AssetTransferPageProps> = ({
                 <button
                   type="submit"
                   className="amx-btn-submit-transfer"
+                  disabled={isSubmitting || isTransferBlocked}
                 >
-                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
                     swap_horiz
                   </span>
-                  <span>Initiate Transfer</span>
+                  <span>{isSubmitting ? 'Submitting...' : 'Initiate Transfer'}</span>
                 </button>
               </div>
 

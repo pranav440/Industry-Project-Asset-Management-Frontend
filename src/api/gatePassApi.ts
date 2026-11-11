@@ -52,6 +52,8 @@ export interface GatePassApiRecord {
   qr_code_data_url?: string | null;
 }
 
+export type GatePass = GatePassApiRecord;
+
 export interface GatePassQRValidationResult {
   valid: boolean;
   pass_id: string | null;

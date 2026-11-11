@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
+import { getUser } from '../auth/session';
 import {
   getRequest,
   transitionRequest,
@@ -35,6 +36,7 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
+  const currentUser = getUser();
   const [request, setRequest] = useState<RequestItemData | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,74 +48,81 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
   const [operationalNote, setOperationalNote] = useState('');
   const [isSubmittingTransition, setIsSubmittingTransition] = useState(false);
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  const loadRequestDetails = useCallback(async () => {
     setIsLoading(true);
     setApiError(null);
 
-    getRequest(requestId)
-      .then((response) => {
-        if (!active) return;
-        setRequest({
-          id: response.request_id,
-          requesterName: response.requester_name,
-          requesterEmail: response.requester_email,
-          department: response.department,
-          requestType: response.request_type,
-          requestedItem: response.requested_item,
-          category: response.category,
-          quantity: response.quantity,
-          priority: response.priority,
-          requestDate: response.request_date,
-          status: response.status,
-          justification: response.justification,
-          processingGuidelines: response.processing_guidelines,
-          requestSource: response.request_source,
-          estimatedCost: response.estimated_cost || undefined,
-          procurementReference: response.procurement_reference || undefined,
-          attachments: (response.attachments || []) as any,
-          dateReceived: response.date_received || undefined,
-          externalReference: response.external_reference || undefined,
-          contactInfo: response.contact_info || undefined,
-          history: response.history.map((entry) => ({
-            id: entry.history_id,
-            timestamp: entry.timestamp,
-            stage: entry.stage,
-            action: entry.action,
-            performedBy: entry.performed_by,
-            note: entry.note ?? undefined,
-          })),
-        });
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        const status = (error as RequestApiError).status;
-        setApiError(
-          status === 401
-            ? 'Your session has expired. Please sign in again.'
-            : status === 403
-            ? 'Admin access is required to view this request.'
-            : status === 404
-            ? 'The selected request could not be found.'
-            : status === 409
-            ? 'This request status change is not allowed.'
-            : status === 422
-            ? 'The request data is invalid.'
-            : status && status >= 500
-            ? 'The request service is temporarily unavailable.'
-            : error instanceof Error
-            ? error.message
-            : 'Unable to load request details.'
-        );
-        setRequest(null);
-      })
-      .finally(() => active && setIsLoading(false));
-
-    return () => {
-      active = false;
-    };
+    try {
+      const response = await getRequest(requestId);
+      setRequest({
+        id: response.request_id,
+        requesterName: response.requester_name,
+        requesterEmail: response.requester_email,
+        department: response.department,
+        requestType: response.request_type,
+        requestedItem: response.requested_item,
+        category: response.category,
+        quantity: response.quantity,
+        priority: response.priority,
+        requestDate: response.request_date,
+        status: response.status,
+        justification: response.justification,
+        processingGuidelines: response.processing_guidelines,
+        requestSource: response.request_source,
+        estimatedCost: response.estimated_cost || undefined,
+        procurementReference: response.procurement_reference || undefined,
+        attachments: (response.attachments || []) as any,
+        dateReceived: response.date_received || undefined,
+        externalReference: response.external_reference || undefined,
+        contactInfo: response.contact_info || undefined,
+        history: response.history.map((entry) => ({
+          id: entry.history_id,
+          timestamp: entry.timestamp,
+          stage: entry.stage,
+          action: entry.action,
+          performedBy: entry.performed_by,
+          note: entry.note ?? undefined,
+        })),
+      });
+    } catch (error: unknown) {
+      const status = (error as RequestApiError).status;
+      setApiError(
+        status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : status === 403
+          ? 'Admin access is required to view this request.'
+          : status === 404
+          ? 'The selected request could not be found.'
+          : status === 409
+          ? 'This request status change is not allowed.'
+          : status === 422
+          ? 'The request data is invalid.'
+          : status && status >= 500
+          ? 'The request service is temporarily unavailable.'
+          : error instanceof Error
+          ? error.message
+          : 'Unable to load request details.'
+      );
+      setRequest(null);
+    } finally {
+      setIsLoading(false);
+    }
   }, [requestId]);
+
+  useEffect(() => {
+    loadRequestDetails();
+  }, [loadRequestDetails]);
+
+  // Clean up object URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+    };
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -121,35 +130,91 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
   };
 
   const handleNav = (subRoute: string) => {
-    if (subRoute === 'dashboard') {
-      onNavigate?.('dashboard');
-    } else if (subRoute === 'assets') {
-      onNavigate?.('assets');
-    } else if (subRoute === 'consumables') {
-      onNavigate?.('consumables');
-    } else if (subRoute === 'requests') {
-      onNavigate?.('requests');
-    } else if (subRoute === 'signout' || subRoute === 'login') {
+    if (subRoute === 'signout' || subRoute === 'login') {
       onSignOut?.();
     } else {
-      showToast(`${subRoute.charAt(0).toUpperCase() + subRoute.slice(1)} module — Scheduled for future backend integration.`);
       onNavigate?.(subRoute);
     }
   };
 
   if (isLoading) {
     return (
-      <DashboardLayout currentNav="Requests" onNavigate={handleNav} onSignOut={onSignOut}>
-        <div style={{ padding: '32px', textAlign: 'center' }}>Loading request details...</div>
+      <DashboardLayout
+        currentNav="Requests"
+        role={currentUser?.role || 'admin'}
+        userName={currentUser?.full_name || 'Administrator'}
+        userRoleSubtitle={currentUser?.role ? currentUser.role.toUpperCase() : 'ADMIN'}
+        onNavigate={handleNav}
+        onSignOut={onSignOut}
+      >
+        <div style={{ padding: '48px 32px', textAlign: 'center', color: 'var(--amx-dash-text-muted)' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+            <span
+              className="material-symbols-outlined"
+              style={{ animation: 'spin 1s linear infinite' }}
+              aria-hidden="true"
+            >
+              sync
+            </span>
+            <span>Loading request details...</span>
+          </div>
+        </div>
       </DashboardLayout>
     );
   }
 
   if (!request) {
     return (
-      <DashboardLayout currentNav="Requests" onNavigate={handleNav} onSignOut={onSignOut}>
-        <div style={{ padding: '32px', textAlign: 'center' }}>
-          {apiError || 'Request not found.'}
+      <DashboardLayout
+        currentNav="Requests"
+        role={currentUser?.role || 'admin'}
+        userName={currentUser?.full_name || 'Administrator'}
+        userRoleSubtitle={currentUser?.role ? currentUser.role.toUpperCase() : 'ADMIN'}
+        onNavigate={handleNav}
+        onSignOut={onSignOut}
+      >
+        <div className="amx-req-details-container" style={{ padding: '32px', textAlign: 'center' }}>
+          <div
+            style={{
+              maxWidth: '480px',
+              margin: '40px auto',
+              padding: '24px',
+              backgroundColor: '#ffffff',
+              borderRadius: '8px',
+              border: '1px solid var(--amx-dash-border-light)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: '48px', color: '#dc2626', marginBottom: '12px' }}
+              aria-hidden="true"
+            >
+              error_outline
+            </span>
+            <h3 style={{ margin: '0 0 8px', fontSize: '18px', color: 'var(--amx-dash-text)' }}>
+              Failed to Load Request
+            </h3>
+            <p style={{ margin: '0 0 20px', color: 'var(--amx-dash-text-muted)', fontSize: '14px' }}>
+              {apiError || 'The requested record could not be retrieved from the server.'}
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                type="button"
+                className="amx-btn-secondary"
+                onClick={() => onNavigate?.('requests')}
+              >
+                Back to Requests
+              </button>
+              <button
+                type="button"
+                className="amx-btn-primary"
+                onClick={() => loadRequestDetails()}
+              >
+                Retry
+              </button>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -170,6 +235,7 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
     const attId = (doc as any).attachment_id || doc.id;
     if (previewState?.objectUrl) {
       URL.revokeObjectURL(previewState.objectUrl);
+      previewUrlRef.current = null;
     }
     setPreviewState({ doc, isLoading: true });
 
@@ -183,11 +249,13 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(res.objectUrl);
+        previewUrlRef.current = null;
         setPreviewState(null);
         showToast(`Document "${doc.name}" downloaded.`);
         return;
       }
 
+      previewUrlRef.current = res.objectUrl;
       setPreviewState({
         doc,
         objectUrl: res.objectUrl,
@@ -232,6 +300,7 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
     if (previewState?.objectUrl) {
       URL.revokeObjectURL(previewState.objectUrl);
     }
+    previewUrlRef.current = null;
     setPreviewState(null);
   };
 
@@ -293,6 +362,9 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
   return (
     <DashboardLayout
       currentNav="Requests"
+      role={currentUser?.role || 'admin'}
+      userName={currentUser?.full_name || 'Administrator'}
+      userRoleSubtitle={currentUser?.role ? currentUser.role.toUpperCase() : 'ADMIN'}
       onNavigate={handleNav}
       onSignOut={onSignOut}
       onAddAsset={() => onNavigate?.('assets/new')}
@@ -300,7 +372,11 @@ export const RequestDetailsPage: React.FC<RequestDetailsPageProps> = ({
         showToast('1 Alert: High priority hardware request pending review.')
       }
       onHelpClick={() => showToast('AssetMX Requests Management Manual.')}
-      onProfileClick={() => showToast('Active User: Administrator (Role: Admin, Dept: IT).')}
+      onProfileClick={() =>
+        showToast(
+          `Active User: ${currentUser?.full_name || 'Administrator'} (Role: ${currentUser?.role || 'Admin'}).`
+        )
+      }
     >
       {/* Toast Notification */}
       {toastMessage && (

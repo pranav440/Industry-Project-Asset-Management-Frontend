@@ -104,6 +104,7 @@ export interface MaintenanceApiRecord {
   service_notes: string | null;
   created_at: string;
   created_by: string;
+  asset_status?: AssetStatus;
 }
 
 export type ConsumableStockStatus = 'In Stock' | 'Low Stock' | 'Out of Stock';
@@ -248,14 +249,19 @@ export function listAssets(params: {
   location?: string;
   custodian?: string;
   category?: string;
+  status?: string;
   search?: string;
   page?: number;
   pageSize?: number;
-}): Promise<AssetListResponse> {
+} = {}): Promise<AssetListResponse> {
   const query = new URLSearchParams();
-  Object.entries({ ...params, page_size: params.pageSize }).forEach(([key, value]) => {
-    if (value !== undefined && value !== '') query.set(key, String(value));
-  });
+  if (params.location) query.set('location', params.location);
+  if (params.custodian) query.set('custodian', params.custodian);
+  if (params.category) query.set('category', params.category);
+  if (params.status) query.set('status', params.status);
+  if (params.search) query.set('search', params.search);
+  if (params.page !== undefined) query.set('page', String(params.page));
+  if (params.pageSize !== undefined) query.set('page_size', String(params.pageSize));
   return request<AssetListResponse>(`/api/assets?${query.toString()}`);
 }
 
@@ -404,6 +410,7 @@ export function createMaintenance(
     technician?: string;
     maintenance_cost: number;
     service_notes?: string;
+    asset_status?: AssetStatus;
   },
 ): Promise<MaintenanceApiRecord> {
   return request<MaintenanceApiRecord>(`/api/assets/${encodeURIComponent(assetId)}/maintenance`, {
@@ -431,13 +438,25 @@ export function registerNewAsset(payload: NewAssetPayload): Promise<AssetRecord>
   });
 }
 
-export function updateAsset(assetId: string, payload: Partial<NewAssetPayload> & { status?: AssetStatus }): Promise<AssetRecord> {
+export function updateAsset(
+  assetId: string,
+  payload: Partial<NewAssetPayload> & {
+    status?: AssetStatus;
+    serialNumber?: string;
+    serial_number?: string;
+    depreciation?: string;
+    allocationDate?: string;
+    allocation_date?: string;
+  }
+): Promise<AssetRecord> {
   const normalizedPayload: Record<string, unknown> = {};
 
   if (payload.name !== undefined) normalizedPayload.name = payload.name;
   if (payload.status !== undefined) normalizedPayload.status = payload.status;
   if (payload.category !== undefined) normalizedPayload.category = payload.category;
   if (payload.specification !== undefined) normalizedPayload.specification = payload.specification;
+  if (payload.serialNumber !== undefined) normalizedPayload.serial_number = payload.serialNumber;
+  if (payload.serial_number !== undefined) normalizedPayload.serial_number = payload.serial_number;
   if (payload.location !== undefined) normalizedPayload.location = payload.location;
   if (payload.custodian !== undefined) normalizedPayload.custodian = payload.custodian;
   if (payload.purchaseDate !== undefined) normalizedPayload.purchase_date = payload.purchaseDate;
@@ -445,6 +464,9 @@ export function updateAsset(assetId: string, payload: Partial<NewAssetPayload> &
   if (payload.totalCost !== undefined) normalizedPayload.total_cost = payload.totalCost;
   if (payload.warrantyPeriod !== undefined) normalizedPayload.warranty_period = payload.warrantyPeriod;
   if (payload.invoiceReference !== undefined) normalizedPayload.invoice_reference = payload.invoiceReference;
+  if (payload.depreciation !== undefined) normalizedPayload.depreciation = payload.depreciation;
+  if (payload.allocationDate !== undefined) normalizedPayload.allocation_date = payload.allocationDate;
+  if (payload.allocation_date !== undefined) normalizedPayload.allocation_date = payload.allocation_date;
   if (payload.documents !== undefined) normalizedPayload.documents = payload.documents;
 
   return request<AssetRecord>(`/api/assets/${encodeURIComponent(assetId)}`, {

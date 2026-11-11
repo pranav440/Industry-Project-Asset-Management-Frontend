@@ -1805,3 +1805,23 @@
   gap: 12px;
 }
 
+/* Checkpoint Camera Viewfinder Integration */
+#amx-ggv-camera-preview {
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+#amx-ggv-camera-preview video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 10px !important;
+}
+
+#amx-ggv-camera-preview canvas {
+  display: none !important;
+}
+
+

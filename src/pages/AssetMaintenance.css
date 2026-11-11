@@ -1255,3 +1255,86 @@
   line-height: 1.5;
   color: var(--amx-dash-text, #191c1e);
 }
+
+/* Loading and Error States */
+.amx-maintenance-loading-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 80px 20px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.amx-maintenance-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #00687a;
+  border-radius: 50%;
+  animation: amx-maintenance-spin 0.8s linear infinite;
+}
+
+@keyframes amx-maintenance-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.amx-maintenance-error-card {
+  margin-top: 20px;
+  padding: 32px 24px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.amx-maintenance-error-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ba1a1a;
+  margin: 0;
+}
+
+.amx-maintenance-error-desc {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+  max-width: 480px;
+}
+
+.amx-maintenance-error-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.amx-maintenance-retry-btn {
+  padding: 8px 18px;
+  background-color: #00687a;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.amx-maintenance-retry-btn:hover {
+  background-color: #005260;
+}
+
+.amx-metric-badge.unscheduled {
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+

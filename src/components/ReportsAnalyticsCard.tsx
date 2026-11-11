@@ -19,13 +19,7 @@ export const ReportsAnalyticsCard: React.FC<ReportsAnalyticsCardProps> = ({
       <button
         type="button"
         className="amx-analytics-btn"
-        onClick={() => {
-          if (onViewAll) {
-            onViewAll();
-          } else {
-            alert('Reports & Analytics navigation placeholder');
-          }
-        }}
+        onClick={onViewAll}
       >
         View All Analytics
       </button>

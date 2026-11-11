@@ -556,6 +556,7 @@ class MaintenanceCreate(BaseModel):
     technician: str | None = Field(default=None, max_length=255)
     maintenance_cost: float = Field(ge=0, le=9999999999.99)
     service_notes: str | None = Field(default=None, max_length=2000)
+    asset_status: AssetStatusValue | None = None
 
 
 class MaintenanceOut(BaseModel):
@@ -570,6 +571,7 @@ class MaintenanceOut(BaseModel):
     service_notes: str | None
     created_at: datetime
     created_by: str
+    asset_status: str | None = None
 
 
 class MaintenanceHistoryOut(BaseModel):
@@ -1041,4 +1043,353 @@ class HostAlertListResponse(BaseModel):
     total: int
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardDashboardKpiItem(BaseModel):
+    total: int = 0
+    badgeText: str = ""
+    badge_text: str = ""
+    subtext: str = ""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardDashboardKpis(BaseModel):
+    expectedInbound: GuardDashboardKpiItem
+    expected_inbound: GuardDashboardKpiItem
+    expectedOutbound: GuardDashboardKpiItem
+    expected_outbound: GuardDashboardKpiItem
+    pendingVerification: GuardDashboardKpiItem
+    pending_verification: GuardDashboardKpiItem
+    todaysCompletedEntries: GuardDashboardKpiItem
+    todays_completed_entries: GuardDashboardKpiItem
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardVerificationQueueItemOut(BaseModel):
+    id: str
+    requesterName: str
+    requester_name: str
+    requesterBadge: str = "Staff"
+    requester_badge: str = "Staff"
+    department: str = "Administration"
+    assetName: str
+    asset_name: str
+    serialNumber: str = "—"
+    serial_number: str = "—"
+    type: str
+    status: str
+    action: str
+    carrier: str | None = None
+    destination: str | None = None
+    origin: str | None = None
+    flagReason: str | None = None
+    flag_reason: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardRecentActivityItemOut(BaseModel):
+    id: str
+    title: str
+    time: str
+    passId: str
+    pass_id: str
+    plateOrBadge: str
+    plate_or_badge: str
+    assetName: str
+    asset_name: str
+    notes: str
+    badgeText: str
+    badge_text: str
+    isFlagged: bool = False
+    is_flagged: bool = False
+    type: str
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardUpcomingMovementItemOut(BaseModel):
+    id: str
+    time: str
+    title: str
+    type: str
+    personLabel: str = "Requester"
+    person_label: str = "Requester"
+    personName: str
+    person_name: str
+    details: str
+    statusBadge: str
+    status_badge: str
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardCheckpointAlertItemOut(BaseModel):
+    id: str
+    title: str
+    severity: str
+    badgeText: str
+    badge_text: str
+    icon: str
+    description: str
+    passId: str | None = None
+    pass_id: str | None = None
+    serialNumber: str | None = None
+    serial_number: str | None = None
+    acknowledged: bool = False
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardDashboardResponse(BaseModel):
+    kpis: GuardDashboardKpis
+    verificationQueue: list[GuardVerificationQueueItemOut]
+    verification_queue: list[GuardVerificationQueueItemOut]
+    recentActivity: list[GuardRecentActivityItemOut]
+    recent_activity: list[GuardRecentActivityItemOut]
+    upcomingMovements: list[GuardUpcomingMovementItemOut]
+    upcoming_movements: list[GuardUpcomingMovementItemOut]
+    checkpointAlerts: list[GuardCheckpointAlertItemOut]
+    checkpoint_alerts: list[GuardCheckpointAlertItemOut]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardLogChecklistItemOut(BaseModel):
+    title: str
+    status: str
+    verified: bool
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardLogTimelineEventOut(BaseModel):
+    time: str
+    title: str
+    desc: str
+    completed: bool
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardMovementLogRecordOut(BaseModel):
+    id: str
+    passId: str
+    pass_id: str
+    assetId: str
+    asset_id: str
+    assetName: str
+    asset_name: str
+    serialNumber: str
+    serial_number: str
+    category: Literal["Physical Movement", "Administrative", "Security Escalation"] = "Physical Movement"
+    direction: Literal["Outward", "Inward", "N/A"]
+    directionLabel: str
+    direction_label: str
+    requesterName: str
+    requester_name: str
+    requesterBadge: str
+    requester_badge: str
+    department: str
+    date: str
+    dateDisplay: str
+    date_display: str
+    timeDisplay: str
+    time_display: str
+    status: Literal["Cleared", "Pending", "Flagged"]
+    guardName: str
+    guard_name: str
+    guardBadge: str
+    guard_badge: str
+    checkpoint: str
+    checkpointFull: str
+    checkpoint_full: str
+    approvingAdmin: str
+    approving_admin: str
+    custodian: str
+    carrierVehicle: str
+    carrier_vehicle: str
+    manifestHash: str
+    manifest_hash: str
+    tamperSealId: str
+    tamper_seal_id: str
+    inspectedQty: int
+    inspected_qty: int
+    expectedQty: int
+    expected_qty: int
+    hasDiscrepancy: bool
+    has_discrepancy: bool
+    discrepancyStatusTitle: str
+    discrepancy_status_title: str
+    discrepancyDetails: str
+    discrepancy_details: str
+    guardRemarks: str
+    guard_remarks: str
+    checklist: list[GuardLogChecklistItemOut] = Field(default_factory=list)
+    timeline: list[GuardLogTimelineEventOut] = Field(default_factory=list)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardLogsKpisOut(BaseModel):
+    totalMovements: int
+    total_movements: int
+    inboundEntries: int
+    inbound_entries: int
+    outboundExits: int
+    outbound_exits: int
+    flaggedMovements: int
+    flagged_movements: int
+    totalRecords: int = 0
+    total_records: int = 0
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardMovementLogListResponse(BaseModel):
+    items: list[GuardMovementLogRecordOut]
+    total: int
+    page: int
+    pageSize: int
+    page_size: int
+    totalPages: int
+    total_pages: int
+    kpis: GuardLogsKpisOut
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardEscalationTimelineEventOut(BaseModel):
+    id: str
+    timestamp: str
+    event: str
+    actor: str
+    actorRole: str = "Officer"
+    actor_role: str = "Officer"
+    note: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardEscalationRegisterItemOut(BaseModel):
+    id: str
+    passId: str
+    pass_id: str
+    assetId: str
+    asset_id: str
+    assetName: str
+    asset_name: str
+    requesterName: str
+    requester_name: str
+    department: str
+    destination: str
+    passType: str
+    pass_type: str
+    gatePassStatus: str
+    gate_pass_status: str
+    holdStatus: Literal["Active", "Cleared"]
+    hold_status: Literal["Active", "Cleared"]
+    holdStatusTitle: str
+    hold_status_title: str
+    escalationReason: str
+    escalation_reason: str
+    actionRequired: str | None = None
+    action_required: str | None = None
+    escalatedBy: str
+    escalated_by: str
+    escalationTimestamp: datetime
+    escalation_timestamp: datetime
+    dateDisplay: str
+    date_display: str
+    timeDisplay: str
+    time_display: str
+    checkpoint: str
+    overrideBy: str | None = None
+    override_by: str | None = None
+    overrideTimestamp: datetime | None = None
+    override_timestamp: datetime | None = None
+    overrideNote: str | None = None
+    override_note: str | None = None
+    timeline: list[GuardEscalationTimelineEventOut] = []
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardEscalationKpisOut(BaseModel):
+    totalHolds: int
+    total_holds: int
+    activeHolds: int
+    active_holds: int
+    clearedOverridden: int
+    cleared_overridden: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GuardEscalationRegisterResponse(BaseModel):
+    items: list[GuardEscalationRegisterItemOut]
+    total: int
+    page: int
+    pageSize: int
+    page_size: int
+    totalPages: int
+    total_pages: int
+    kpis: GuardEscalationKpisOut
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AdminDashboardSummary(BaseModel):
+    open_requests: int
+    pending_approvals: int
+    low_stock_alerts: int
+    monthly_spend: float | None = None
+    budget_utilized: float | None = None
+
+
+class AdminDashboardAssetInventory(BaseModel):
+    total_assets: int
+    by_status: dict[str, int]
+
+
+class AdminDashboardRequestItem(BaseModel):
+    request_id: str
+    requested_item: str
+    status: str
+    request_date: str
+    approval_date: str | None = None
+    fulfillment_date: str | None = None
+
+
+class AdminDashboardExpiryAlert(BaseModel):
+    item_id: str
+    name: str
+    expiry_date: str
+    severity: str
+    days_remaining: int
+
+
+class AdminDashboardStockLevel(BaseModel):
+    category: str
+    available_stock: int
+    threshold: int
+    status: str
+
+
+class AdminDashboardResponse(BaseModel):
+    summary: AdminDashboardSummary
+    asset_inventory: AdminDashboardAssetInventory
+    my_requests: list[AdminDashboardRequestItem]
+    expiry_alerts: list[AdminDashboardExpiryAlert]
+    stock_levels: list[AdminDashboardStockLevel]
+    department_consumption: dict[str, Any] | None = None
+    recent_pos: list[dict[str, Any]] | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+
+
 

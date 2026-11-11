@@ -3,11 +3,17 @@ import type { RequestItem } from '../data/dashboardData';
 
 interface RequestsTableProps {
   requests: RequestItem[];
+  onSelectRequest?: (requestId: string) => void;
+  onViewAll?: () => void;
 }
 
 type FilterTab = 'all' | 'open' | 'closed';
 
-export const RequestsTable: React.FC<RequestsTableProps> = ({ requests = [] }) => {
+export const RequestsTable: React.FC<RequestsTableProps> = ({
+  requests = [],
+  onSelectRequest,
+  onViewAll,
+}) => {
   const [filter, setFilter] = useState<FilterTab>('open');
 
   const filteredRequests = (requests || []).filter((req) => {
@@ -19,7 +25,32 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({ requests = [] }) =
     <section className="amx-card-panel amx-table-panel" aria-labelledby="my-requests-title">
       {/* Table Header with Filter Tabs */}
       <div className="amx-table-header">
-        <h3 id="my-requests-title" className="amx-section-title">My Requests</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <h3 id="my-requests-title" className="amx-section-title" style={{ margin: 0 }}>My Requests</h3>
+          {onViewAll && (
+            <button
+              type="button"
+              onClick={onViewAll}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#0891B2',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+              }}
+              aria-label="View all requests"
+            >
+              <span>View All</span>
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>arrow_forward</span>
+            </button>
+          )}
+        </div>
         <div className="amx-filter-tabs" role="tablist" aria-label="Request status filters">
           <button
             type="button"
@@ -82,7 +113,12 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({ requests = [] }) =
               filteredRequests.map((req) => {
                 const statusClass = (req.status || '').toLowerCase();
                 return (
-                  <tr key={req.id}>
+                  <tr
+                    key={req.id}
+                    onClick={() => onSelectRequest?.(req.id)}
+                    style={onSelectRequest ? { cursor: 'pointer' } : undefined}
+                    title={onSelectRequest ? `View request details for ${req.id}` : undefined}
+                  >
                     <td className="amx-code-text" title={req.id}>{req.id}</td>
                     <td title={req.itemName}>{req.itemName}</td>
                     <td>

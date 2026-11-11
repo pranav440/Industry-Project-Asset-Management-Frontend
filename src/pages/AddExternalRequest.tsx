@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
+import { getUser } from '../auth/session';
 import {
   createExternalRequest,
   uploadRequestAttachment,
@@ -74,6 +75,7 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
+  const currentUser = getUser();
   const [formData, setFormData] = useState<FormState>({
     dateReceived: '',
     externalReference: '',
@@ -108,18 +110,9 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
   };
 
   const handleNav = (subRoute: string) => {
-    if (subRoute === 'dashboard') {
-      onNavigate?.('dashboard');
-    } else if (subRoute === 'assets') {
-      onNavigate?.('assets');
-    } else if (subRoute === 'consumables') {
-      onNavigate?.('consumables');
-    } else if (subRoute === 'requests') {
-      onNavigate?.('requests');
-    } else if (subRoute === 'signout' || subRoute === 'login') {
+    if (subRoute === 'signout' || subRoute === 'login') {
       onSignOut?.();
     } else {
-      showToast(`${subRoute.charAt(0).toUpperCase() + subRoute.slice(1)} module — Scheduled for future backend integration.`);
       onNavigate?.(subRoute);
     }
   };
@@ -359,12 +352,19 @@ export const AddExternalRequestPage: React.FC<AddExternalRequestPageProps> = ({
   return (
     <DashboardLayout
       currentNav="Requests"
+      role={currentUser?.role || 'admin'}
+      userName={currentUser?.full_name || 'Administrator'}
+      userRoleSubtitle={currentUser?.role ? currentUser.role.toUpperCase() : 'ADMIN'}
       onNavigate={handleNav}
       onSignOut={onSignOut}
       onAddAsset={() => onNavigate?.('assets/new')}
       onNotificationsClick={() => showToast('No pending administrative notifications.')}
       onHelpClick={() => showToast('AssetMX External Request Documentation.')}
-      onProfileClick={() => showToast('Active User: Administrator (Role: Admin).')}
+      onProfileClick={() =>
+        showToast(
+          `Active User: ${currentUser?.full_name || 'Administrator'} (Role: ${currentUser?.role || 'Admin'}).`
+        )
+      }
     >
       {/* Toast Notification */}
       {toastMessage && (

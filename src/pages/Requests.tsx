@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
-import { listRequests, type RequestApiError } from '../api/requestApi';
-import { getStoredRequests } from '../data/requestsData';
+import { listRequests, type RequestApiError, type RequestListItemApiRecord } from '../api/requestApi';
+import { getUser } from '../auth/session';
 import './Requests.css';
 
 const REQUEST_FILTER_OPTIONS = {
@@ -25,6 +25,16 @@ const REQUEST_FILTER_OPTIONS = {
   ],
   departments: [
     { value: '', label: 'All Departments' },
+    { value: 'Software Engineering', label: 'Software Engineering' },
+    { value: 'IT Support', label: 'IT Support' },
+    { value: 'Finance & Operations', label: 'Finance & Operations' },
+    { value: 'Hardware Maintenance', label: 'Hardware Maintenance' },
+    { value: 'Research & Lab', label: 'Research & Lab' },
+    { value: 'Product Design', label: 'Product Design' },
+    { value: 'DevOps & Cloud', label: 'DevOps & Cloud' },
+    { value: 'Human Resources', label: 'Human Resources' },
+    { value: 'Operations', label: 'Operations' },
+    { value: 'General Operations', label: 'General Operations' },
   ],
 };
 
@@ -74,109 +84,191 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
   const [apiError, setApiError] = useState<string | null>(null);
   const pageSize = 10;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
-  useEffect(() => {
-    let active = true;
+  const currentUser = getUser();
+
+  const loadRequests = useCallback(async () => {
     setIsLoading(true);
     setApiError(null);
 
-    listRequests({
-      search: searchQuery,
-      requestType: requestTypeFilter,
-      status: statusFilter,
-      priority: priorityFilter,
-      department: departmentFilter,
-      requestDate: dateFilter,
-      page: currentPage,
-      pageSize,
-    })
-      .then((result) => {
-        if (!active) return;
-        const rows = Array.isArray(result.items)
-          ? result.items.map((item) => ({
-              id: item.request_id,
-              requesterName: item.requester_name,
-              requesterEmail: item.requester_email,
-              department: item.department,
-              requestType: item.request_type,
-              requestedItem: item.requested_item,
-              category: item.category,
-              quantity: item.quantity,
-              priority: item.priority,
-              requestDate: item.request_date,
-              status: item.status,
-              justification: item.justification,
-              processingGuidelines: item.processing_guidelines,
-              history: [],
-            }))
-          : [];
-        const stored = getStoredRequests();
-        const storedNew = stored
-          .filter((s) => !rows.some((r) => r.id === s.id))
-          .map((s) => ({
-            id: s.id,
-            requesterName: s.requesterName,
-            requesterEmail: s.requesterEmail,
-            department: s.department,
-            requestType: s.requestType,
-            requestedItem: s.requestedItem,
-            category: s.category,
-            quantity: s.quantity,
-            priority: s.priority,
-            requestDate: s.requestDate,
-            status: s.status,
-            justification: s.justification,
-            processingGuidelines: s.processingGuidelines,
-            history: s.history || [],
-          }));
-        const combined = [...storedNew, ...rows];
-        setRequests(combined);
-        setTotal(Number(result.total ?? 0) + storedNew.length);
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        const stored = getStoredRequests();
-        if (stored && stored.length > 0) {
-          setRequests(
-            stored.map((s) => ({
-              id: s.id,
-              requesterName: s.requesterName,
-              requesterEmail: s.requesterEmail,
-              department: s.department,
-              requestType: s.requestType,
-              requestedItem: s.requestedItem,
-              category: s.category,
-              quantity: s.quantity,
-              priority: s.priority,
-              requestDate: s.requestDate,
-              status: s.status,
-              justification: s.justification,
-              processingGuidelines: s.processingGuidelines,
-              history: s.history || [],
-            }))
-          );
-          setTotal(stored.length);
-          setApiError(null);
-          return;
-        }
-        const status = (error as RequestApiError).status;
-        setApiError(status === 401 ? 'Your session has expired. Please sign in again.' : status === 403 ? 'Admin access is required to view requests.' : status === 404 ? 'The selected request could not be found.' : status === 409 ? 'This request status change is not allowed.' : status === 422 ? 'The request filters or transition payload are invalid.' : status && status >= 500 ? 'The request service is temporarily unavailable.' : error instanceof Error ? error.message : 'Unable to load requests.');
-        setRequests([]);
-      })
-      .finally(() => active && setIsLoading(false));
+    try {
+      const result = await listRequests({
+        search: searchQuery.trim() || undefined,
+        requestType: requestTypeFilter || undefined,
+        status: statusFilter || undefined,
+        priority: priorityFilter || undefined,
+        department: departmentFilter || undefined,
+        requestDate: dateFilter || undefined,
+        page: currentPage,
+        pageSize,
+      });
 
-    return () => {
-      active = false;
-    };
+      const rows: RequestRowData[] = Array.isArray(result.items)
+        ? result.items.map((item) => ({
+            id: item.request_id,
+            requesterName: item.requester_name,
+            requesterEmail: item.requester_email,
+            department: item.department,
+            requestType: item.request_type,
+            requestedItem: item.requested_item,
+            category: item.category,
+            quantity: item.quantity,
+            priority: item.priority,
+            requestDate: item.request_date,
+            status: item.status,
+            justification: item.justification,
+            processingGuidelines: item.processing_guidelines,
+            history: [],
+          }))
+        : [];
+
+      setRequests(rows);
+      setTotal(Number(result.total ?? 0));
+    } catch (error: unknown) {
+      const status = (error as RequestApiError)?.status;
+      setApiError(
+        status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : status === 403
+          ? 'Admin access is required to view requests.'
+          : status === 404
+          ? 'The selected request could not be found.'
+          : status === 422
+          ? 'The request filters are invalid.'
+          : status && status >= 500
+          ? 'The request service is temporarily unavailable. Please retry.'
+          : error instanceof Error
+          ? error.message
+          : 'Unable to load requests. Please check your connection and retry.'
+      );
+      setRequests([]);
+      setTotal(0);
+    } finally {
+      setIsLoading(false);
+    }
   }, [searchQuery, requestTypeFilter, statusFilter, priorityFilter, departmentFilter, dateFilter, currentPage]);
+
+  useEffect(() => {
+    loadRequests();
+  }, [loadRequests]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2800);
   };
 
-  const handleExport = () => {
-    showToast('Exporting Organizational Requests & Fulfilment Ledger (.CSV)...');
+  const handleExport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+
+    try {
+      const exportParams = {
+        search: searchQuery.trim() || undefined,
+        requestType: requestTypeFilter || undefined,
+        status: statusFilter || undefined,
+        priority: priorityFilter || undefined,
+        department: departmentFilter || undefined,
+        requestDate: dateFilter || undefined,
+      };
+
+      const EXPORT_PAGE_SIZE = 100;
+      let currentPageNum = 1;
+      const firstResponse = await listRequests({
+        ...exportParams,
+        page: currentPageNum,
+        pageSize: EXPORT_PAGE_SIZE,
+      });
+
+      const totalMatching = Number(firstResponse.total ?? 0);
+      if (totalMatching === 0 || !firstResponse.items || firstResponse.items.length === 0) {
+        showToast('No requests available to export.');
+        setIsExporting(false);
+        return;
+      }
+
+      // Deduplicate by stable request_id
+      const recordMap = new Map<string, RequestListItemApiRecord>();
+      firstResponse.items.forEach((item) => {
+        if (item.request_id && !recordMap.has(item.request_id)) {
+          recordMap.set(item.request_id, item);
+        }
+      });
+
+      const actualPageSize = Math.max(1, Number(firstResponse.page_size || EXPORT_PAGE_SIZE));
+      const totalPages = Math.ceil(totalMatching / actualPageSize);
+
+      while (currentPageNum < totalPages) {
+        currentPageNum += 1;
+        const nextResponse = await listRequests({
+          ...exportParams,
+          page: currentPageNum,
+          pageSize: actualPageSize,
+        });
+
+        if (!nextResponse.items || nextResponse.items.length === 0) {
+          break;
+        }
+
+        nextResponse.items.forEach((item) => {
+          if (item.request_id && !recordMap.has(item.request_id)) {
+            recordMap.set(item.request_id, item);
+          }
+        });
+      }
+
+      const allRecords = Array.from(recordMap.values());
+      const exportedCount = allRecords.length;
+
+      const escapeCsv = (val: string | number | null | undefined): string => {
+        if (val == null) return '""';
+        const str = String(val);
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+
+      const lines: string[] = [];
+      lines.push('AssetMX Requests Ledger Export');
+      lines.push(`Generated,${new Date().toISOString()}`);
+      lines.push(`Total Matching Records,${totalMatching}`);
+      lines.push(`Exported Records,${exportedCount}`);
+      lines.push('');
+      lines.push('Request ID,Requester Name,Requester Email,Department,Request Type,Requested Item,Category,Quantity,Priority,Request Date,Status,Justification');
+
+      allRecords.forEach((item) => {
+        lines.push(
+          [
+            escapeCsv(item.request_id),
+            escapeCsv(item.requester_name),
+            escapeCsv(item.requester_email),
+            escapeCsv(item.department),
+            escapeCsv(item.request_type),
+            escapeCsv(item.requested_item),
+            escapeCsv(item.category),
+            item.quantity != null ? String(item.quantity) : '0',
+            escapeCsv(item.priority),
+            escapeCsv(item.request_date),
+            escapeCsv(item.status),
+            escapeCsv(item.justification || ''),
+          ].join(',')
+        );
+      });
+
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `assetmx-requests-ledger-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast(`Exported ${exportedCount} request record${exportedCount === 1 ? '' : 's'} to CSV.`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unable to complete CSV export';
+      showToast(`Failed to export requests: ${msg}`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleResetFilters = () => {
@@ -190,11 +282,7 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
     showToast('Request filters reset to default.');
   };
 
-  // Compute 4 Summary Cards Metrics
-  // 1. Open Requests (Pending + In Review)
-  // 2. Pending Action (Pending)
-  // 3. High Priority (High Priority & Open)
-  // 4. Backlog (Total unfinished or older pending requests)
+  // Compute 4 Summary Cards Metrics from currently displayed ledger page
   const summaryMetrics = useMemo(() => {
     let openRequests = 0;
     let pendingAction = 0;
@@ -239,10 +327,9 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
       onNavigate?.('consumables');
     } else if (subRoute === 'requests') {
       onNavigate?.('requests');
-    } else if (subRoute === 'signout' || subRoute === 'login') {
+    } else if (subRoute === 'signout' || subRoute === 'login' || subRoute === 'sign-out') {
       onSignOut?.();
     } else {
-      showToast(`${subRoute.charAt(0).toUpperCase() + subRoute.slice(1)} module — Scheduled for future backend integration.`);
       onNavigate?.(subRoute);
     }
   };
@@ -250,6 +337,9 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
   return (
     <DashboardLayout
       currentNav="Requests"
+      role={currentUser?.role || 'admin'}
+      userName={currentUser?.full_name || 'Administrator'}
+      userRoleSubtitle={currentUser?.role ? currentUser.role.toUpperCase() : 'ADMIN'}
       onNavigate={handleNav}
       onSignOut={onSignOut}
       onSearch={(q) => {
@@ -260,10 +350,10 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
       searchPlaceholder="Search requests by ID, requester, item..."
       onAddAsset={() => onNavigate?.('assets/new')}
       onNotificationsClick={() =>
-        showToast('1 Alert: High priority hardware request pending review.')
+        showToast('Administrative alerts: check pending requests in queue.')
       }
       onHelpClick={() => showToast('AssetMX Requests Management & Fulfilment Manual.')}
-      onProfileClick={() => showToast('Active User: Administrator (Role: Admin, Dept: IT).')}
+      onProfileClick={() => showToast(`Active User: ${currentUser?.full_name || 'Administrator'} (Role: ${currentUser?.role || 'Admin'}).`)}
     >
       {/* Toast Notification */}
       {toastMessage && (
@@ -322,17 +412,26 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
               type="button"
               className="amx-btn-secondary"
               onClick={handleExport}
-              aria-label="Export request records"
+              disabled={isExporting}
+              aria-label={isExporting ? 'Exporting request records...' : 'Export request records'}
+              id="export-requests-btn"
             >
-              <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
-                download
+              <span
+                className="material-symbols-outlined"
+                style={{
+                  fontSize: '18px',
+                  animation: isExporting ? 'spin 1s linear infinite' : undefined,
+                }}
+                aria-hidden="true"
+              >
+                {isExporting ? 'sync' : 'download'}
               </span>
-              <span>Export</span>
+              <span>{isExporting ? 'Exporting...' : 'Export'}</span>
             </button>
           </div>
         </div>
 
-        {/* 4 Summary Cards Grid (Strictly no SLA terminology) */}
+        {/* 4 Summary Cards Grid */}
         <div className="amx-requests-summary-grid">
           {/* Card 1: Open Requests */}
           <div className="amx-card-panel amx-metric-card">
@@ -360,7 +459,7 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
             <div className="amx-metric-subtext">Awaiting initial administrative triage</div>
           </div>
 
-          {/* Card 3: High Priority (Strictly "High Priority" without SLA terms) */}
+          {/* Card 3: High Priority */}
           <div className="amx-card-panel amx-metric-card">
             <div className="amx-metric-card-top">
               <span className="amx-metric-title">High Priority</span>
@@ -541,6 +640,15 @@ export const RequestsPage: React.FC<RequestsPageProps> = ({
                         </span>
                         <p className="amx-empty-title">Unable to load requests</p>
                         <p className="amx-empty-desc">{apiError}</p>
+                        <button
+                          type="button"
+                          className="amx-btn-secondary"
+                          style={{ marginTop: '12px' }}
+                          onClick={loadRequests}
+                          aria-label="Retry loading requests"
+                        >
+                          Retry
+                        </button>
                       </div>
                     </td>
                   </tr>

@@ -5,9 +5,11 @@ interface AssetFiltersProps {
   location: string;
   custodian: string;
   category: string;
+  status?: string;
   onLocationChange: (val: string) => void;
   onCustodianChange: (val: string) => void;
   onCategoryChange: (val: string) => void;
+  onStatusChange?: (val: string) => void;
   onReset: () => void;
 }
 
@@ -15,9 +17,11 @@ export const AssetFilters: React.FC<AssetFiltersProps> = ({
   location,
   custodian,
   category,
+  status = '',
   onLocationChange,
   onCustodianChange,
   onCategoryChange,
+  onStatusChange,
   onReset,
 }) => {
   return (
@@ -72,6 +76,25 @@ export const AssetFilters: React.FC<AssetFiltersProps> = ({
           ))}
         </select>
       </div>
+
+      {onStatusChange && (
+        <div className="amx-filter-group">
+          <label htmlFor="filter-status" className="sr-only">Filter by Status</label>
+          <select
+            id="filter-status"
+            className="amx-filter-select"
+            value={status}
+            onChange={(e) => onStatusChange(e.target.value)}
+            aria-label="Filter by Status"
+          >
+            {ASSET_FILTER_OPTIONS.statuses.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="amx-filter-reset-wrap">
         <button

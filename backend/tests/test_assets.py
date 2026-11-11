@@ -377,6 +377,121 @@ def test_maintenance_and_audit_are_atomic_when_audit_creation_fails(monkeypatch)
         assert db.query(AuditLog).filter_by(asset_id=asset.id).count() == 0
 
 
+def test_maintenance_with_atomic_asset_status_transition():
+    client, session_factory, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload()).json()
+    asset_id = created["asset_id"]
+
+    # Transition asset to "In Maintenance" first
+    client.put(f"/api/assets/{asset_id}", json={"status": "In Maintenance"})
+    assert client.get(f"/api/assets/{asset_id}").json()["status"] == "In Maintenance"
+
+    # Create maintenance record and transition asset_status back to "Active" atomically
+    response = client.post(
+        f"/api/assets/{asset_id}/maintenance",
+        json=maintenance_payload(asset_status="Active"),
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["asset_status"] == "Active"
+
+    # Verify asset is now Active
+    asset_detail = client.get(f"/api/assets/{asset_id}").json()
+    assert asset_detail["status"] == "Active"
+
+    # Verify audit log recorded atomic transition
+    with session_factory() as db:
+        asset = db.query(Asset).filter_by(asset_id=asset_id).one()
+        audit = (
+            db.query(AuditLog)
+            .filter_by(asset_id=asset.id, action="Maintenance record created")
+            .one()
+        )
+        assert audit.before_state["asset_status"] == "In Maintenance"
+        assert audit.after_state["asset_status"] == "Active"
+        assert audit.after_state["maintenance_id"] == body["maintenance_id"]
+
+
+def test_maintenance_rejection_when_asset_not_in_maintenance():
+    client, session_factory, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload()).json()
+    asset_id = created["asset_id"]
+
+    # Current status is "Active", not "In Maintenance" -> 409 Conflict
+    res_active = client.post(
+        f"/api/assets/{asset_id}/maintenance",
+        json=maintenance_payload(asset_status="Active"),
+    )
+    assert res_active.status_code == 409
+    assert "Asset must be In Maintenance to transition status to Active" in res_active.json()["detail"]
+
+    # Transition to "Disposed" -> 409 Conflict
+    client.put(f"/api/assets/{asset_id}", json={"status": "Disposed"})
+    res_disposed = client.post(
+        f"/api/assets/{asset_id}/maintenance",
+        json=maintenance_payload(asset_status="Active"),
+    )
+    assert res_disposed.status_code == 409
+    assert "Asset must be In Maintenance to transition status to Active" in res_disposed.json()["detail"]
+
+    # Transition to "In Maintenance", but pass unsupported target status (e.g. "Disposed") -> 409 Conflict
+    client.put(f"/api/assets/{asset_id}", json={"status": "In Maintenance"})
+    res_unsupported = client.post(
+        f"/api/assets/{asset_id}/maintenance",
+        json=maintenance_payload(asset_status="Disposed"),
+    )
+    assert res_unsupported.status_code == 409
+    assert "Only Active status transition is supported" in res_unsupported.json()["detail"]
+
+
+def test_maintenance_creation_without_asset_status_change():
+    client, _, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload()).json()
+    asset_id = created["asset_id"]
+
+    # 1. Asset is Active, no asset_status provided -> status remains Active
+    res1 = client.post(
+        f"/api/assets/{asset_id}/maintenance",
+        json=maintenance_payload(),
+    )
+    assert res1.status_code == 201
+    assert client.get(f"/api/assets/{asset_id}").json()["status"] == "Active"
+
+    # 2. Asset is In Maintenance, no asset_status provided -> status remains In Maintenance
+    client.put(f"/api/assets/{asset_id}", json={"status": "In Maintenance"})
+    res2 = client.post(
+        f"/api/assets/{asset_id}/maintenance",
+        json=maintenance_payload(),
+    )
+    assert res2.status_code == 201
+    assert client.get(f"/api/assets/{asset_id}").json()["status"] == "In Maintenance"
+
+
+def test_maintenance_no_partial_db_changes_after_rejection():
+    client, session_factory, _, _ = make_client()
+    created = client.post("/api/assets", json=asset_payload()).json()
+    asset_id = created["asset_id"]
+
+    with session_factory() as db:
+        asset = db.query(Asset).filter_by(asset_id=asset_id).one()
+        initial_maint_count = db.query(Maintenance).filter_by(asset_id=asset.id).count()
+        initial_audit_count = db.query(AuditLog).filter_by(asset_id=asset.id, action="Maintenance record created").count()
+
+    # Attempt rejected operation
+    rejected_res = client.post(
+        f"/api/assets/{asset_id}/maintenance",
+        json=maintenance_payload(asset_status="Active"),
+    )
+    assert rejected_res.status_code == 409
+
+    # Verify no partial records created and status preserved
+    with session_factory() as db:
+        asset = db.query(Asset).filter_by(asset_id=asset_id).one()
+        assert db.query(Maintenance).filter_by(asset_id=asset.id).count() == initial_maint_count
+        assert db.query(AuditLog).filter_by(asset_id=asset.id, action="Maintenance record created").count() == initial_audit_count
+        assert asset.status == AssetStatus.active
+
+
 def consumable_payload(**overrides) -> dict:
     payload = {
         "name": "Cyan Dye Ink Cartridge",
@@ -890,3 +1005,32 @@ def test_valuation_sequential_locking_and_consistency():
     hist = client.get(f"/api/assets/{asset_id}/valuations").json()
     assert hist["total"] == 3
     assert [item["new_recorded_value"] for item in hist["items"]] == [700.00, 800.00, 900.00]
+
+
+def test_admin_list_assets_status_and_filters_tolerance():
+    client, _, _, _ = make_client()
+    first = client.post("/api/assets", json=asset_payload("Asset Alpha", "HQ")).json()
+    second = client.post("/api/assets", json=asset_payload("Asset Beta", "Remote")).json()
+    client.put(f"/api/assets/{second['asset_id']}", json={"status": "In Maintenance"})
+
+    # Empty status and "All" status should not cause 422
+    res_empty = client.get("/api/assets", params={"status": ""})
+    assert res_empty.status_code == 200
+    assert res_empty.json()["total"] >= 2
+
+    res_all = client.get("/api/assets", params={"status": "All"})
+    assert res_all.status_code == 200
+    assert res_all.json()["total"] >= 2
+
+    # Status filter active
+    res_active = client.get("/api/assets", params={"status": "Active"})
+    assert res_active.status_code == 200
+    assert any(a["asset_id"] == first["asset_id"] for a in res_active.json()["items"])
+    assert not any(a["asset_id"] == second["asset_id"] for a in res_active.json()["items"])
+
+    # Status filter in maintenance
+    res_maint = client.get("/api/assets", params={"status": "In Maintenance"})
+    assert res_maint.status_code == 200
+    assert any(a["asset_id"] == second["asset_id"] for a in res_maint.json()["items"])
+    assert not any(a["asset_id"] == first["asset_id"] for a in res_maint.json()["items"])
+

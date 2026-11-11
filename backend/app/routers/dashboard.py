@@ -5,7 +5,13 @@ from sqlalchemy import and_, distinct, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_admin, require_authenticated_user, require_host, require_roles
+from app.deps import (
+    require_admin,
+    require_authenticated_user,
+    require_guard_or_admin,
+    require_host,
+    require_roles,
+)
 from app.models import (
     Asset,
     AssetMovement,
@@ -32,12 +38,20 @@ from app.routers.consumables import (
     _normalize_category_key,
 )
 from app.schemas import (
+    AdminDashboardResponse,
     AssetOut,
     EmployeeConsumableIssueOut,
     EmployeeConsumptionCategoryMetric,
     EmployeeConsumptionSummaryOut,
     EmployeeDashboardResponse,
     EmployeeDashboardSummaryMetrics,
+    GuardCheckpointAlertItemOut,
+    GuardDashboardKpiItem,
+    GuardDashboardKpis,
+    GuardDashboardResponse,
+    GuardRecentActivityItemOut,
+    GuardUpcomingMovementItemOut,
+    GuardVerificationQueueItemOut,
     HostAlertListResponse,
     HostDashboardKpis,
     HostDashboardResponse,
@@ -79,11 +93,19 @@ def _history_by_stage(db: Session, request_id: str) -> dict[str, date | str]:
     return result
 
 
-@router.get("/admin")
+def _format_date(val: object) -> str | None:
+    if val is None:
+        return None
+    if isinstance(val, (datetime, date)):
+        return val.isoformat()
+    return str(val)
+
+
+@router.get("/admin", response_model=AdminDashboardResponse)
 def get_admin_dashboard(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
-):
+) -> AdminDashboardResponse:
     summary = {
         "open_requests": db.scalar(
             select(func.count(Request.id)).where(
@@ -108,9 +130,15 @@ def get_admin_dashboard(
         asset_status_counts[asset.status.value] = asset_status_counts.get(asset.status.value, 0) + 1
 
     my_requests = []
+    user_email = (current_user.email or "").strip().lower()
     for request in db.scalars(
         select(Request)
-        .where(Request.requester_name == current_user.full_name)
+        .where(
+            or_(
+                Request.requester_name == current_user.full_name,
+                func.lower(func.trim(Request.requester_email)) == user_email,
+            )
+        )
         .order_by(Request.request_date.desc(), Request.id.desc())
     ).all():
         history_dates = _history_by_stage(db, request.request_id)
@@ -119,8 +147,8 @@ def get_admin_dashboard(
             "requested_item": request.requested_item,
             "status": request.status.value,
             "request_date": request.request_date.isoformat(),
-            "approval_date": history_dates.get("approval_date").isoformat() if history_dates.get("approval_date") else None,
-            "fulfillment_date": history_dates.get("fulfillment_date").isoformat() if history_dates.get("fulfillment_date") else None,
+            "approval_date": _format_date(history_dates.get("approval_date")),
+            "fulfillment_date": _format_date(history_dates.get("fulfillment_date")),
         })
 
     today = date.today()
@@ -1010,3 +1038,344 @@ def get_host_alerts(
     today_ist = datetime.now(timezone.utc).astimezone(IST).date()
     alert_list = _get_host_alerts(db, today_ist, host_user=_user)
     return HostAlertListResponse(items=alert_list, total=len(alert_list))
+
+
+@router.get("/guard", response_model=GuardDashboardResponse)
+def get_guard_dashboard(
+    _user: User = Depends(require_guard_or_admin),
+    db: Session = Depends(get_db),
+) -> GuardDashboardResponse:
+    today_start, today_end = get_ist_reporting_day_boundaries()
+    today_ist = datetime.now(timezone.utc).astimezone(IST).date()
+
+    # 1. Expected Inbound (Active Returnable passes that have exited and are awaiting inbound return)
+    inbound_count = (
+        db.scalar(
+            select(func.count(distinct(GatePass.id))).where(
+                GatePass.pass_type == GatePassType.returnable,
+                GatePass.status == GatePassStatus.active,
+                GatePass.exit_timestamp.isnot(None),
+                GatePass.entry_timestamp.is_(None),
+            )
+        )
+        or 0
+    )
+    kpi_inbound = GuardDashboardKpiItem(
+        total=inbound_count,
+        badgeText=f"{inbound_count} awaiting return" if inbound_count > 0 else "0 awaiting return",
+        badge_text=f"{inbound_count} awaiting return" if inbound_count > 0 else "0 awaiting return",
+        subtext="Active returnable dispatches awaiting return",
+    )
+
+    # 2. Expected Outbound (Approved passes authorized for exit clearance awaiting exit)
+    outbound_count = (
+        db.scalar(
+            select(func.count(distinct(GatePass.id))).where(
+                GatePass.status == GatePassStatus.approved,
+                GatePass.exit_timestamp.is_(None),
+            )
+        )
+        or 0
+    )
+    kpi_outbound = GuardDashboardKpiItem(
+        total=outbound_count,
+        badgeText=f"{outbound_count} pending clearance" if outbound_count > 0 else "0 pending clearance",
+        badge_text=f"{outbound_count} pending clearance" if outbound_count > 0 else "0 pending clearance",
+        subtext="Authorized dispatches awaiting exit",
+    )
+
+    # 3. Pending Gate Verification (Strictly actionable passes requiring Guard verification:
+    #    Approved passes awaiting exit verification + Active returnable passes awaiting entry verification.
+    #    Escalated passes are excluded because they require administrative exception handling, not gate clearance.)
+    pending_count = (
+        db.scalar(
+            select(func.count(distinct(GatePass.id))).where(
+                or_(
+                    and_(
+                        GatePass.status == GatePassStatus.approved,
+                        GatePass.exit_timestamp.is_(None),
+                    ),
+                    and_(
+                        GatePass.status == GatePassStatus.active,
+                        GatePass.pass_type == GatePassType.returnable,
+                        GatePass.exit_timestamp.isnot(None),
+                        GatePass.entry_timestamp.is_(None),
+                    ),
+                )
+            )
+        )
+        or 0
+    )
+    kpi_pending = GuardDashboardKpiItem(
+        total=pending_count,
+        badgeText="Priority Action" if pending_count > 0 else "Queue Clear",
+        badge_text="Priority Action" if pending_count > 0 else "Queue Clear",
+        subtext="Actionable exit & return queue",
+    )
+
+    # 4. Today's Completed Entries (Strictly counting qualifying inbound entry verifications
+    #    completed within today's IST reporting day boundary)
+    completed_entries_count = (
+        db.scalar(
+            select(func.count(distinct(GatePass.id))).where(
+                GatePass.entry_status == "Verified",
+                GatePass.entry_timestamp >= today_start,
+                GatePass.entry_timestamp < today_end,
+            )
+        )
+        or 0
+    )
+    kpi_completed = GuardDashboardKpiItem(
+        total=completed_entries_count,
+        badgeText=f"{completed_entries_count} Verified" if completed_entries_count > 0 else "Verified Today",
+        badge_text=f"{completed_entries_count} Verified" if completed_entries_count > 0 else "Verified Today",
+        subtext="Verified inbound returns today",
+    )
+
+    kpis = GuardDashboardKpis(
+        expectedInbound=kpi_inbound,
+        expected_inbound=kpi_inbound,
+        expectedOutbound=kpi_outbound,
+        expected_outbound=kpi_outbound,
+        pendingVerification=kpi_pending,
+        pending_verification=kpi_pending,
+        todaysCompletedEntries=kpi_completed,
+        todays_completed_entries=kpi_completed,
+    )
+
+    # 5. Gate Verification Queue
+    queue_passes = db.scalars(
+        select(GatePass)
+        .where(GatePass.status.in_([GatePassStatus.approved, GatePassStatus.active, GatePassStatus.escalated]))
+        .order_by(GatePass.request_date.desc(), GatePass.id.desc())
+        .limit(50)
+    ).all()
+
+    verification_queue: list[GuardVerificationQueueItemOut] = []
+    for gp in queue_passes:
+        if gp.status == GatePassStatus.approved:
+            type_str = "Outbound"
+        elif gp.status == GatePassStatus.active:
+            if gp.pass_type in [GatePassType.returnable, GatePassType.maintenance]:
+                type_str = "Inbound Return"
+            else:
+                type_str = "In Transit"
+        elif gp.status == GatePassStatus.escalated:
+            type_str = "Outbound" if gp.exit_timestamp is None else "Inbound Return"
+        else:
+            type_str = "Outbound"
+
+        if gp.status == GatePassStatus.escalated or gp.escalation_is_escalated:
+            status_str = "Flagged"
+            action_str = "flagged"
+        elif gp.status == GatePassStatus.approved:
+            status_str = "Awaiting Exit"
+            action_str = "verify"
+        elif gp.status == GatePassStatus.active:
+            if gp.pass_type == GatePassType.returnable and gp.entry_timestamp is None:
+                status_str = "Awaiting Entry"
+                action_str = "verify"
+            else:
+                status_str = "In Transit"
+                action_str = "verify"
+        else:
+            status_str = "Cleared"
+            action_str = "cleared"
+
+        # Unambiguous exact match against authoritative stored unique keys (asset_id or qr_code_value)
+        item_ref = (gp.asset_or_item or "").strip()
+        asset_rec = None
+        if item_ref:
+            asset_rec = db.scalar(
+                select(Asset).where(
+                    or_(
+                        Asset.asset_id == item_ref,
+                        Asset.qr_code_value == item_ref,
+                    )
+                )
+            )
+            if asset_rec is None:
+                exact_sn_matches = db.scalars(
+                    select(Asset).where(Asset.serial_number == item_ref).limit(2)
+                ).all()
+                if len(exact_sn_matches) == 1:
+                    asset_rec = exact_sn_matches[0]
+
+        serial_no = (asset_rec.serial_number if asset_rec and asset_rec.serial_number else None) or "Unavailable"
+
+        verification_queue.append(
+            GuardVerificationQueueItemOut(
+                id=gp.pass_id,
+                requesterName=gp.requester_name,
+                requester_name=gp.requester_name,
+                requesterBadge=gp.department or "Staff",
+                requester_badge=gp.department or "Staff",
+                department=gp.department or "Administration",
+                assetName=gp.asset_or_item,
+                asset_name=gp.asset_or_item,
+                serialNumber=serial_no,
+                serial_number=serial_no,
+                type=type_str,
+                status=status_str,
+                action=action_str,
+                carrier=gp.destination or gp.current_location,
+                destination=gp.destination,
+                origin=gp.current_location,
+                flagReason=gp.escalation_reason,
+                flag_reason=gp.escalation_reason,
+            )
+        )
+
+    # 6. Recent Gate Activity (From GatePassHistory)
+    recent_history_rows = db.execute(
+        select(GatePassHistory, GatePass)
+        .join(GatePass, GatePassHistory.pass_id == GatePass.pass_id)
+        .where(
+            GatePassHistory.action.in_([
+                "Exit Verification",
+                "Entry Verification",
+                "Escalated",
+                "Decision Updated",
+                "Gate Pass Created",
+            ])
+        )
+        .order_by(GatePassHistory.timestamp.desc(), GatePassHistory.id.desc())
+        .limit(10)
+    ).all()
+
+    recent_activity: list[GuardRecentActivityItemOut] = []
+    for h, gp in recent_history_rows:
+        if h.action == "Exit Verification":
+            title = "Record Exit / Cleared"
+            b_text = "Barrier Cleared"
+            act_type = "exit"
+            is_flg = False
+        elif h.action == "Entry Verification":
+            title = "Record Entry / Cleared"
+            b_text = "Barrier Cleared"
+            act_type = "entry"
+            is_flg = False
+        elif h.action == "Escalated":
+            title = "Discrepancy Flagged"
+            b_text = "Discrepancy"
+            act_type = "flagged"
+            is_flg = True
+        else:
+            title = h.action
+            b_text = "Logged Entry"
+            act_type = "entry"
+            is_flg = False
+
+        recent_activity.append(
+            GuardRecentActivityItemOut(
+                id=h.history_id,
+                title=title,
+                time=_format_time_ago(h.timestamp),
+                passId=gp.pass_id,
+                pass_id=gp.pass_id,
+                plateOrBadge=h.performed_by or "Officer on Duty",
+                plate_or_badge=h.performed_by or "Officer on Duty",
+                assetName=gp.asset_or_item,
+                asset_name=gp.asset_or_item,
+                notes=h.note or "Checkpoint observation recorded.",
+                badgeText=b_text,
+                badge_text=b_text,
+                isFlagged=is_flg,
+                is_flagged=is_flg,
+                type=act_type,
+            )
+        )
+
+    # 7. Upcoming Movements (Movements scheduled for today that have not yet been completed.
+    #    Excludes completed passes and passes whose outbound movement already finished.
+    #    Uses scheduled movement_date, falling back to request_date only if movement_date is not set.
+    #    Date-level precision only: backend stores Date without hours/minutes.)
+    scheduled_date_col = func.coalesce(GatePass.movement_date, GatePass.request_date)
+    upcoming_passes = db.scalars(
+        select(GatePass)
+        .where(
+            scheduled_date_col == today_ist,
+            GatePass.status.in_([GatePassStatus.pending, GatePassStatus.approved, GatePassStatus.active]),
+            or_(
+                # Approved pass awaiting exit
+                and_(
+                    GatePass.status == GatePassStatus.approved,
+                    GatePass.exit_timestamp.is_(None),
+                ),
+                # Active returnable pass awaiting return
+                and_(
+                    GatePass.status == GatePassStatus.active,
+                    GatePass.pass_type == GatePassType.returnable,
+                    GatePass.entry_timestamp.is_(None),
+                ),
+                # Pending pass awaiting approval
+                GatePass.status == GatePassStatus.pending,
+            ),
+        )
+        .order_by(GatePass.id.asc())
+        .limit(10)
+    ).all()
+
+    upcoming_movements: list[GuardUpcomingMovementItemOut] = []
+    for gp in upcoming_passes:
+        upcoming_movements.append(
+            GuardUpcomingMovementItemOut(
+                id=gp.pass_id,
+                time="Today",
+                title=gp.asset_or_item,
+                type="Outbound" if gp.status != GatePassStatus.active else "Inbound",
+                personLabel="Requester",
+                person_label="Requester",
+                personName=gp.requester_name,
+                person_name=gp.requester_name,
+                details=f"{gp.pass_type.value} • Dest: {gp.destination}",
+                statusBadge=gp.status.value,
+                status_badge=gp.status.value,
+            )
+        )
+
+    # 8. Checkpoint Alerts (Recorded escalations requiring administrative exception resolution)
+    escalated_passes = db.scalars(
+        select(GatePass)
+        .where(
+            or_(
+                GatePass.status == GatePassStatus.escalated,
+                GatePass.escalation_is_escalated.is_(True),
+            )
+        )
+        .order_by(GatePass.escalation_timestamp.desc().nullslast(), GatePass.id.desc())
+        .limit(10)
+    ).all()
+
+    checkpoint_alerts: list[GuardCheckpointAlertItemOut] = []
+    for gp in escalated_passes:
+        checkpoint_alerts.append(
+            GuardCheckpointAlertItemOut(
+                id=f"ALT-ESC-{gp.pass_id}",
+                title=f"Recorded Escalation: {gp.pass_id}",
+                severity="critical",
+                badgeText="Unresolved",
+                badge_text="Unresolved",
+                icon="gpp_maybe",
+                description=gp.escalation_reason or f"Discrepancy recorded for {gp.pass_id} ({gp.asset_or_item}). Clearance on hold.",
+                passId=gp.pass_id,
+                pass_id=gp.pass_id,
+                serialNumber=gp.asset_or_item,
+                serial_number=gp.asset_or_item,
+                acknowledged=False,
+            )
+        )
+
+    return GuardDashboardResponse(
+        kpis=kpis,
+        verificationQueue=verification_queue,
+        verification_queue=verification_queue,
+        recentActivity=recent_activity,
+        recent_activity=recent_activity,
+        upcomingMovements=upcoming_movements,
+        upcoming_movements=upcoming_movements,
+        checkpointAlerts=checkpoint_alerts,
+        checkpoint_alerts=checkpoint_alerts,
+    )
+
+

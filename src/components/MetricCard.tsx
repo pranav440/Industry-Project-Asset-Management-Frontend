@@ -28,7 +28,12 @@ export const MetricCard: React.FC<MetricCardProps> = ({ data }) => {
         </span>
       </div>
 
-      <div className="amx-metric-value">{data.value}</div>
+      <div
+        className="amx-metric-value"
+        style={data.value.length > 7 ? { fontSize: '18px', lineHeight: '1.3' } : undefined}
+      >
+        {data.value}
+      </div>
 
       {/* Footer info: trend, subtext, or progress bar */}
       {data.trend && (

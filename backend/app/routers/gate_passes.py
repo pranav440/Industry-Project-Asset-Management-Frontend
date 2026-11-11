@@ -1,12 +1,15 @@
 import base64
 import io
+import math
 import uuid
-from datetime import date, datetime, timezone
+from collections import defaultdict
+from datetime import date, datetime, time, timezone
+from typing import Literal
 
 import qrcode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, case, distinct, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -40,6 +43,15 @@ from app.schemas import (
     GatePassOverrideRequest,
     GatePassVerificationRequest,
     GatePassHistoryOut,
+    GuardLogChecklistItemOut,
+    GuardLogTimelineEventOut,
+    GuardMovementLogRecordOut,
+    GuardLogsKpisOut,
+    GuardMovementLogListResponse,
+    GuardEscalationTimelineEventOut,
+    GuardEscalationRegisterItemOut,
+    GuardEscalationKpisOut,
+    GuardEscalationRegisterResponse,
 )
 
 router = APIRouter(prefix="/api/gate-passes", tags=["gate-passes"])
@@ -454,6 +466,554 @@ def create_gate_pass(
     except SQLAlchemyError:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Gate pass creation failed")
+
+
+@router.get("/movement-logs", response_model=GuardMovementLogListResponse)
+def get_guard_movement_logs(
+    search: str | None = Query(default=None),
+    from_date: date | None = Query(default=None),
+    to_date: date | None = Query(default=None),
+    direction: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=1000),
+    _user: User = Depends(require_guard_or_admin),
+    db: Session = Depends(get_db),
+) -> GuardMovementLogListResponse:
+    # SQL Expressions for authoritative classification:
+    # 1. Exit Verification: actual outbound physical movement
+    # 2. Entry Verification: actual inbound physical movement
+    # 3. Escalated: recorded security escalation, not a physical movement
+    # 4. Gate Pass Created / Decision Updated / Status Overridden: administrative lifecycle events
+    is_exit_expr = GatePassHistory.action.ilike("%exit%")
+    is_entry_expr = GatePassHistory.action.ilike("%entry%")
+    is_escalation_expr = or_(
+        GatePassHistory.action.ilike("%escalat%"),
+        GatePassHistory.status_snapshot == "Escalated",
+    )
+    is_rejected_expr = or_(
+        GatePassHistory.action.ilike("%reject%"),
+        GatePassHistory.status_snapshot == "Rejected",
+    )
+
+    category_expr = case(
+        (or_(is_exit_expr, is_entry_expr), "Physical Movement"),
+        (is_escalation_expr, "Security Escalation"),
+        else_="Administrative",
+    )
+
+    direction_expr = case(
+        (is_exit_expr, "Outward"),
+        (is_entry_expr, "Inward"),
+        else_="N/A",
+    )
+
+    status_expr = case(
+        (or_(is_exit_expr, is_entry_expr), "Cleared"),
+        (or_(is_escalation_expr, is_rejected_expr), "Flagged"),
+        (GatePassHistory.status_snapshot == "Approved", "Pending"),
+        else_="Pending",
+    )
+
+    query = (
+        select(GatePassHistory, GatePass)
+        .join(GatePass, GatePassHistory.pass_id == GatePass.pass_id)
+    )
+
+    if search and search.strip():
+        pattern = f"%{search.strip().lower()}%"
+        query = query.where(
+            or_(
+                GatePass.pass_id.ilike(pattern),
+                GatePass.asset_or_item.ilike(pattern),
+                GatePass.requester_name.ilike(pattern),
+                GatePass.department.ilike(pattern),
+                GatePass.destination.ilike(pattern),
+                GatePassHistory.history_id.ilike(pattern),
+                GatePassHistory.performed_by.ilike(pattern),
+                GatePassHistory.note.ilike(pattern),
+            )
+        )
+
+    if from_date:
+        dt_from = datetime.combine(from_date, time.min).replace(tzinfo=timezone.utc)
+        query = query.where(GatePassHistory.timestamp >= dt_from)
+
+    if to_date:
+        dt_to = datetime.combine(to_date, time.max).replace(tzinfo=timezone.utc)
+        query = query.where(GatePassHistory.timestamp <= dt_to)
+
+    if direction and direction.strip().lower() in ("inward", "outward", "movements"):
+        dir_clean = direction.strip().lower()
+        if dir_clean == "inward":
+            query = query.where(is_entry_expr)
+        elif dir_clean == "outward":
+            query = query.where(is_exit_expr)
+        elif dir_clean == "movements":
+            query = query.where(or_(is_exit_expr, is_entry_expr))
+
+    if status and status.strip().lower() in ("cleared", "pending", "flagged"):
+        req_status = status.strip().capitalize()
+        query = query.where(status_case == req_status if "status_case" in locals() else status_expr == req_status)
+
+    # Calculate summary KPIs strictly over matching filter scope:
+    # Movement totals must count ONLY actual entry and exit verification events.
+    # Administrative events and escalations do NOT inflate movement totals.
+    total_movements_metric = func.count(case((or_(is_exit_expr, is_entry_expr), 1), else_=None))
+    inbound_metric = func.count(case((is_entry_expr, 1), else_=None))
+    outbound_metric = func.count(case((is_exit_expr, 1), else_=None))
+    flagged_metric = func.count(case((status_expr == "Flagged", 1), else_=None))
+
+    kpi_query = (
+        select(
+            func.count().label("total_records"),
+            total_movements_metric.label("total_movements"),
+            inbound_metric.label("inbound"),
+            outbound_metric.label("outbound"),
+            flagged_metric.label("flagged"),
+        )
+        .select_from(GatePassHistory)
+        .join(GatePass, GatePassHistory.pass_id == GatePass.pass_id)
+    )
+    if query._where_criteria:
+        kpi_query = kpi_query.where(*query._where_criteria)
+
+    kpi_row = db.execute(kpi_query).one()
+
+    total_records = int(kpi_row[0] or 0)
+    total_movements = int(kpi_row[1] or 0)
+    inbound_cnt = int(kpi_row[2] or 0)
+    outbound_cnt = int(kpi_row[3] or 0)
+    flagged_cnt = int(kpi_row[4] or 0)
+    total_pages = max(1, math.ceil(total_records / page_size)) if total_records > 0 else 1
+
+    ordered_query = query.order_by(GatePassHistory.timestamp.desc(), GatePassHistory.id.desc())
+    rows = db.execute(
+        ordered_query.offset((page - 1) * page_size).limit(page_size)
+    ).all()
+
+    # Pre-resolve assets for the current page
+    item_refs = {gp.asset_or_item.strip() for _, gp in rows if gp.asset_or_item}
+    matched_assets: dict[str, Asset] = {}
+    if item_refs:
+        assets = db.scalars(
+            select(Asset).where(
+                or_(
+                    Asset.asset_id.in_(item_refs),
+                    Asset.qr_code_value.in_(item_refs),
+                )
+            )
+        ).all()
+        for a in assets:
+            matched_assets[a.asset_id] = a
+            if a.qr_code_value:
+                matched_assets[a.qr_code_value] = a
+        for item_ref in item_refs:
+            if item_ref not in matched_assets:
+                sn_matches = db.scalars(
+                    select(Asset).where(Asset.serial_number == item_ref).limit(2)
+                ).all()
+                if len(sn_matches) == 1:
+                    matched_assets[item_ref] = sn_matches[0]
+
+    # Pre-resolve chronological pass histories for station timelines on this page
+    pass_ids_on_page = {gp.pass_id for _, gp in rows}
+    histories_by_pass: dict[str, list[GatePassHistory]] = defaultdict(list)
+    if pass_ids_on_page:
+        all_hists = db.scalars(
+            select(GatePassHistory)
+            .where(GatePassHistory.pass_id.in_(pass_ids_on_page))
+            .order_by(GatePassHistory.timestamp.asc(), GatePassHistory.id.asc())
+        ).all()
+        for h in all_hists:
+            histories_by_pass[h.pass_id].append(h)
+
+    items: list[GuardMovementLogRecordOut] = []
+    for history, gp in rows:
+        act_lower = history.action.lower()
+        is_exit = "exit" in act_lower
+        is_entry = "entry" in act_lower
+        is_escalated = "escalat" in act_lower or history.status_snapshot == "Escalated"
+        is_rejected = "reject" in act_lower or history.status_snapshot == "Rejected"
+
+        if is_exit:
+            cat_val = "Physical Movement"
+            dir_val = "Outward"
+            dir_label = "Outward / Exit"
+            status_val: Literal["Cleared", "Pending", "Flagged"] = "Cleared"
+        elif is_entry:
+            cat_val = "Physical Movement"
+            dir_val = "Inward"
+            dir_label = "Inward / Entry"
+            status_val = "Cleared"
+        elif is_escalated:
+            cat_val = "Security Escalation"
+            dir_val = "N/A"
+            dir_label = "Escalation Hold"
+            status_val = "Flagged"
+        elif is_rejected:
+            cat_val = "Administrative"
+            dir_val = "N/A"
+            dir_label = "Admin Rejection"
+            status_val = "Flagged"
+        else:
+            cat_val = "Administrative"
+            dir_val = "N/A"
+            dir_label = "Administrative"
+            status_val = "Pending"
+
+        asset = matched_assets.get((gp.asset_or_item or "").strip())
+        asset_id = asset.asset_id if asset else (gp.asset_or_item or "N/A")
+        asset_name = asset.name if asset else (gp.asset_or_item or "Item/Asset")
+        serial_number = asset.serial_number if (asset and asset.serial_number) else "Unavailable"
+
+        if is_exit:
+            checkpoint_gate = gp.exit_gate or "Guard Console"
+            checkpoint_full = f"{checkpoint_gate} (Outbound Barrier)"
+        elif is_entry:
+            checkpoint_gate = gp.entry_gate or "Guard Console"
+            checkpoint_full = f"{checkpoint_gate} (Inbound Intake)"
+        else:
+            checkpoint_gate = gp.exit_gate or gp.entry_gate or "Guard Console"
+            checkpoint_full = f"{checkpoint_gate} (Perimeter Station)"
+
+        has_disc = status_val == "Flagged"
+        disc_title = "Flagged Checkpoint Discrepancy" if has_disc else "None detected / Clean Pass"
+        disc_details = (
+            (history.note or gp.escalation_reason or "Escalated at checkpoint.")
+            if has_disc
+            else "Authoritative verification completed and logged at checkpoint."
+        )
+
+        ts = history.timestamp if history.timestamp.tzinfo else history.timestamp.replace(tzinfo=timezone.utc)
+        date_str = ts.strftime("%Y-%m-%d")
+        date_display = ts.strftime("%b %d, %Y")
+        time_display = ts.strftime("%H:%M:%S UTC")
+
+        # Checklist items are NOT individually persisted by the backend.
+        # Do NOT fabricate individual checklist items with verified: true.
+        # Leave checklist empty so UI honestly displays non-persisted status.
+        checklist: list[GuardLogChecklistItemOut] = []
+
+        # Chronological station timeline strictly uses actual recorded history events
+        timeline = [
+            GuardLogTimelineEventOut(
+                time=(h.timestamp if h.timestamp.tzinfo else h.timestamp.replace(tzinfo=timezone.utc)).strftime("%H:%M:%S UTC"),
+                title=h.action,
+                desc=h.note or f"{h.action} recorded by {h.performed_by}",
+                completed=True,
+            )
+            for h in histories_by_pass[gp.pass_id]
+        ]
+
+        remarks = history.note or (
+            "Physical verification logged at checkpoint."
+            if status_val == "Cleared"
+            else "Audit action recorded."
+        )
+
+        items.append(
+            GuardMovementLogRecordOut(
+                id=history.history_id,
+                passId=gp.pass_id,
+                pass_id=gp.pass_id,
+                assetId=asset_id,
+                asset_id=asset_id,
+                assetName=asset_name,
+                asset_name=asset_name,
+                serialNumber=serial_number,
+                serial_number=serial_number,
+                category=cat_val,
+                direction=dir_val,
+                directionLabel=dir_label,
+                direction_label=dir_label,
+                requesterName=gp.requester_name,
+                requester_name=gp.requester_name,
+                requesterBadge=gp.department or "Staff",
+                requester_badge=gp.department or "Staff",
+                department=gp.department or "Administration",
+                date=date_str,
+                dateDisplay=date_display,
+                date_display=date_display,
+                timeDisplay=time_display,
+                time_display=time_display,
+                status=status_val,
+                guardName=history.performed_by,
+                guard_name=history.performed_by,
+                guardBadge="SEC-GUARD",
+                guard_badge="SEC-GUARD",
+                checkpoint=checkpoint_gate,
+                checkpointFull=checkpoint_full,
+                checkpoint_full=checkpoint_full,
+                approvingAdmin=gp.decision_by or "Authorized by System",
+                approving_admin=gp.decision_by or "Authorized by System",
+                custodian=f"{gp.requester_name} ({gp.department or 'Staff'})",
+                carrierVehicle=f"{gp.requester_name} • Destination: {gp.destination}",
+                carrier_vehicle=f"{gp.requester_name} • Destination: {gp.destination}",
+                manifestHash="Standard Manifest (No Hash Stored)",
+                manifest_hash="Standard Manifest (No Hash Stored)",
+                tamperSealId="N/A (Untracked)",
+                tamper_seal_id="N/A (Untracked)",
+                inspectedQty=gp.quantity,
+                inspected_qty=gp.quantity,
+                expectedQty=gp.quantity,
+                expected_qty=gp.quantity,
+                hasDiscrepancy=has_disc,
+                has_discrepancy=has_disc,
+                discrepancyStatusTitle=disc_title,
+                discrepancy_status_title=disc_title,
+                discrepancyDetails=disc_details,
+                discrepancy_details=disc_details,
+                guardRemarks=remarks,
+                guard_remarks=remarks,
+                checklist=checklist,
+                timeline=timeline,
+            )
+        )
+
+    kpis = GuardLogsKpisOut(
+        totalMovements=total_movements,
+        total_movements=total_movements,
+        inboundEntries=inbound_cnt,
+        inbound_entries=inbound_cnt,
+        outboundExits=outbound_cnt,
+        outbound_exits=outbound_cnt,
+        flaggedMovements=flagged_cnt,
+        flagged_movements=flagged_cnt,
+        totalRecords=total_records,
+        total_records=total_records,
+    )
+
+    return GuardMovementLogListResponse(
+        items=items,
+        total=total_records,
+        page=page,
+        pageSize=page_size,
+        page_size=page_size,
+        totalPages=total_pages,
+        total_pages=total_pages,
+        kpis=kpis,
+    )
+
+
+@router.get("/escalation-register", response_model=GuardEscalationRegisterResponse)
+def get_guard_escalation_register(
+    search: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    from_date: date | None = Query(default=None),
+    to_date: date | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=1000),
+    _user: User = Depends(require_guard_or_admin),
+    db: Session = Depends(get_db),
+) -> GuardEscalationRegisterResponse:
+    # 1. Subquery of distinct pass_ids with a recorded escalation event in GatePassHistory
+    escalated_history_subquery = (
+        select(distinct(GatePassHistory.pass_id))
+        .where(
+            or_(
+                GatePassHistory.action == "Escalated",
+                GatePassHistory.action.ilike("%escalat%"),
+            )
+        )
+    )
+
+    # 2. Subquery of distinct pass_ids with the exact "Override Granted" action in GatePassHistory.
+    # Excludes generic "Decision Updated" events and does not infer an override from status.
+    override_history_subquery = (
+        select(distinct(GatePassHistory.pass_id))
+        .where(GatePassHistory.action == "Override Granted")
+    )
+
+    # Base filter: Strictly unique GatePass records with a recorded escalation event in GatePassHistory.
+    # Do not count a pass solely because status is Escalated or boolean is true if no recorded escalation exists.
+    is_escalated_pass = GatePass.pass_id.in_(escalated_history_subquery)
+
+    query = select(GatePass).where(is_escalated_pass)
+
+    if search and search.strip():
+        p = f"%{search.strip().lower()}%"
+        query = query.where(
+            or_(
+                GatePass.pass_id.ilike(p),
+                GatePass.asset_or_item.ilike(p),
+                GatePass.requester_name.ilike(p),
+                GatePass.department.ilike(p),
+                GatePass.destination.ilike(p),
+                GatePass.escalation_reason.ilike(p),
+                GatePass.escalation_escalated_by.ilike(p),
+            )
+        )
+
+    if status and status.strip():
+        st_clean = status.strip().lower()
+        if st_clean == "active":
+            query = query.where(GatePass.status == GatePassStatus.escalated)
+        elif st_clean in ("cleared", "overridden"):
+            query = query.where(GatePass.pass_id.in_(override_history_subquery))
+
+    effective_date = func.coalesce(GatePass.escalation_timestamp, GatePass.created_at)
+    if from_date:
+        dt_from = datetime.combine(from_date, time.min).replace(tzinfo=timezone.utc)
+        query = query.where(effective_date >= dt_from)
+    if to_date:
+        dt_to = datetime.combine(to_date, time.max).replace(tzinfo=timezone.utc)
+        query = query.where(effective_date <= dt_to)
+
+    # Compute KPIs across the matching filter criteria without duplicate counting
+    total_holds = db.scalar(
+        select(func.count(distinct(GatePass.id))).where(*query._where_criteria)
+    ) or 0
+
+    active_holds = db.scalar(
+        select(func.count(distinct(GatePass.id)))
+        .where(*query._where_criteria)
+        .where(GatePass.status == GatePassStatus.escalated)
+    ) or 0
+
+    cleared_overridden = db.scalar(
+        select(func.count(distinct(GatePass.id)))
+        .where(*query._where_criteria)
+        .where(GatePass.pass_id.in_(override_history_subquery))
+    ) or 0
+
+    kpis = GuardEscalationKpisOut(
+        totalHolds=total_holds,
+        total_holds=total_holds,
+        activeHolds=active_holds,
+        active_holds=active_holds,
+        clearedOverridden=cleared_overridden,
+        cleared_overridden=cleared_overridden,
+    )
+
+    total_pages = max(1, math.ceil(total_holds / page_size))
+    offset = (page - 1) * page_size
+
+    passes = db.scalars(
+        query.order_by(effective_date.desc()).offset(offset).limit(page_size)
+    ).all()
+
+    # Query all history for these passes to construct chronological timelines and resolve override details
+    pass_ids = [p.pass_id for p in passes]
+    history_map: dict[str, list[GatePassHistory]] = {pid: [] for pid in pass_ids}
+    if pass_ids:
+        hist_rows = db.scalars(
+            select(GatePassHistory)
+            .where(GatePassHistory.pass_id.in_(pass_ids))
+            .order_by(GatePassHistory.timestamp.asc())
+        ).all()
+        for h in hist_rows:
+            history_map[h.pass_id].append(h)
+
+    items: list[GuardEscalationRegisterItemOut] = []
+    for gp in passes:
+        pass_hist = history_map.get(gp.pass_id, [])
+        # Locate escalation event in history
+        esc_hist = next(
+            (h for h in reversed(pass_hist) if "escalat" in h.action.lower() or h.status_snapshot == "Escalated"),
+            None,
+        )
+        # Locate exact override event in history
+        override_hist = next(
+            (h for h in reversed(pass_hist) if h.action == "Override Granted"),
+            None,
+        )
+
+        esc_by = gp.escalation_escalated_by or (esc_hist.performed_by if esc_hist else None) or "Security Officer"
+        esc_reason = gp.escalation_reason or (esc_hist.note if esc_hist else None) or "Checkpoint discrepancy flagged"
+        esc_ts = gp.escalation_timestamp or (esc_hist.timestamp if esc_hist else None) or gp.created_at
+        if esc_ts and esc_ts.tzinfo is None:
+            esc_ts = esc_ts.replace(tzinfo=timezone.utc)
+
+        action_req = gp.escalation_action_required or "Administrative clearance required before movement"
+
+        is_currently_escalated = gp.status == GatePassStatus.escalated
+        has_override_record = override_hist is not None
+
+        if is_currently_escalated:
+            hold_status = "Active"
+            hold_status_title = "Active Escalation Hold"
+        elif has_override_record:
+            hold_status = "Cleared"
+            hold_status_title = "Cleared by Administrative Override"
+        else:
+            hold_status = "Cleared"
+            hold_status_title = f"Cleared ({gp.status.value})"
+
+        # Format timeline using real recorded GatePassHistory events
+        timeline_events = [
+            GuardEscalationTimelineEventOut(
+                id=h.history_id,
+                timestamp=(h.timestamp if h.timestamp.tzinfo else h.timestamp.replace(tzinfo=timezone.utc)).strftime("%b %d, %Y, %I:%M %p"),
+                event=h.action,
+                actor=h.performed_by,
+                actorRole="Administrator" if "override" in h.action.lower() or "decision" in h.action.lower() else "Security Officer",
+                actor_role="Administrator" if "override" in h.action.lower() or "decision" in h.action.lower() else "Security Officer",
+                note=h.note,
+            )
+            for h in pass_hist
+        ]
+
+        checkpoint_name = gp.exit_gate or gp.entry_gate or "Gate-01A Main Gate"
+
+        ov_ts = None
+        if override_hist and override_hist.timestamp:
+            ov_ts = override_hist.timestamp if override_hist.timestamp.tzinfo else override_hist.timestamp.replace(tzinfo=timezone.utc)
+
+        items.append(
+            GuardEscalationRegisterItemOut(
+                id=f"ESC-{gp.pass_id}",
+                passId=gp.pass_id,
+                pass_id=gp.pass_id,
+                assetId=gp.asset_or_item,
+                asset_id=gp.asset_or_item,
+                assetName=gp.asset_or_item,
+                asset_name=gp.asset_or_item,
+                requesterName=gp.requester_name,
+                requester_name=gp.requester_name,
+                department=gp.department,
+                destination=gp.destination,
+                passType=gp.pass_type.value,
+                pass_type=gp.pass_type.value,
+                gatePassStatus=gp.status.value,
+                gate_pass_status=gp.status.value,
+                holdStatus=hold_status,
+                hold_status=hold_status,
+                holdStatusTitle=hold_status_title,
+                hold_status_title=hold_status_title,
+                escalationReason=esc_reason,
+                escalation_reason=esc_reason,
+                actionRequired=action_req,
+                action_required=action_req,
+                escalatedBy=esc_by,
+                escalated_by=esc_by,
+                escalationTimestamp=esc_ts,
+                escalation_timestamp=esc_ts,
+                dateDisplay=esc_ts.strftime("%b %d, %Y"),
+                date_display=esc_ts.strftime("%b %d, %Y"),
+                timeDisplay=esc_ts.strftime("%I:%M %p"),
+                time_display=esc_ts.strftime("%I:%M %p"),
+                checkpoint=checkpoint_name,
+                overrideBy=override_hist.performed_by if override_hist else None,
+                override_by=override_hist.performed_by if override_hist else None,
+                overrideTimestamp=ov_ts,
+                override_timestamp=ov_ts,
+                overrideNote=override_hist.note if override_hist else None,
+                override_note=override_hist.note if override_hist else None,
+                timeline=timeline_events,
+            )
+        )
+
+    return GuardEscalationRegisterResponse(
+        items=items,
+        total=total_holds,
+        page=page,
+        pageSize=page_size,
+        page_size=page_size,
+        totalPages=total_pages,
+        total_pages=total_pages,
+        kpis=kpis,
+    )
 
 
 @router.get("/{pass_id}", response_model=GatePassOut)

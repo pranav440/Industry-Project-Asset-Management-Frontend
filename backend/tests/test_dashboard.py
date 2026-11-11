@@ -411,3 +411,47 @@ def test_dashboard_empty_database():
     assert body["stock_levels"] == []
     assert body["department_consumption"] is None
     assert body["recent_pos"] is None
+
+
+def test_admin_dashboard_role_restrictions_and_unsupported_metrics():
+    client, _, admin, _ = make_client()
+    guard = User(
+        id=3,
+        full_name="Guard User",
+        email="guard@example.com",
+        employee_id="GRD001",
+        role=UserRole.guard,
+        password_hash="x",
+    )
+    host = User(
+        id=4,
+        full_name="Host User",
+        email="host@example.com",
+        employee_id="HST001",
+        role=UserRole.host,
+        password_hash="x",
+    )
+
+    # Guard and Host must be forbidden (403)
+    client.app.dependency_overrides[get_current_user] = lambda: guard
+    res_guard = client.get("/api/dashboard/admin")
+    assert res_guard.status_code == 403
+    assert res_guard.json()["detail"] == "Admin role required"
+
+    client.app.dependency_overrides[get_current_user] = lambda: host
+    res_host = client.get("/api/dashboard/admin")
+    assert res_host.status_code == 403
+    assert res_host.json()["detail"] == "Admin role required"
+
+    # Admin is authorized (200)
+    client.app.dependency_overrides[get_current_user] = lambda: admin
+    res = client.get("/api/dashboard/admin")
+    assert res.status_code == 200
+    data = res.json()
+
+    # Unsupported metrics must be explicitly null
+    assert data["summary"]["monthly_spend"] is None
+    assert data["summary"]["budget_utilized"] is None
+    assert data["department_consumption"] is None
+    assert data["recent_pos"] is None
+

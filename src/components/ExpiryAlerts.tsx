@@ -3,9 +3,10 @@ import type { ExpiryAlertItem } from '../data/dashboardData';
 
 interface ExpiryAlertsProps {
   alerts: ExpiryAlertItem[];
+  onViewConsumables?: () => void;
 }
 
-export const ExpiryAlerts: React.FC<ExpiryAlertsProps> = ({ alerts = [] }) => {
+export const ExpiryAlerts: React.FC<ExpiryAlertsProps> = ({ alerts = [], onViewConsumables }) => {
   return (
     <section className="amx-card-panel amx-expiry-card" aria-labelledby="expiry-alerts-title">
       {/* Watermark Warning Icon */}
@@ -14,11 +15,36 @@ export const ExpiryAlerts: React.FC<ExpiryAlertsProps> = ({ alerts = [] }) => {
       </div>
 
       {/* Header */}
-      <div className="amx-expiry-header">
-        <span className="material-symbols-outlined" aria-hidden="true">calendar_today</span>
-        <h3 id="expiry-alerts-title" style={{ fontSize: 'inherit', fontWeight: 'inherit', margin: 0 }}>
-          Expiry Alerts
-        </h3>
+      <div className="amx-expiry-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="material-symbols-outlined" aria-hidden="true">calendar_today</span>
+          <h3 id="expiry-alerts-title" style={{ fontSize: 'inherit', fontWeight: 'inherit', margin: 0 }}>
+            Expiry Alerts
+          </h3>
+        </div>
+        {onViewConsumables && (
+          <button
+            type="button"
+            onClick={onViewConsumables}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#0891B2',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px',
+              padding: '2px 6px',
+              borderRadius: '4px',
+            }}
+            aria-label="View all consumables"
+          >
+            <span>View All</span>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>arrow_forward</span>
+          </button>
+        )}
       </div>
 
       {/* Alert List */}

@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
-import { registerNewAsset, type NewAssetPayload } from '../api/assetApi';
+import { registerNewAsset, type NewAssetPayload, type AssetApiError } from '../api/assetApi';
 import { ASSET_FILTER_OPTIONS } from '../data/assetsData';
+import { getUser } from '../auth/session';
 import './AddNewAsset.css';
 
 interface AddNewAssetPageProps {
@@ -37,6 +38,8 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
   onNavigate,
   onSignOut,
 }) => {
+  const currentUser = useMemo(() => getUser(), []);
+
   const [formData, setFormData] = useState<FormState>({
     name: '',
     category: '',
@@ -57,7 +60,13 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
   const [otherDocs, setOtherDocs] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [successInfo, setSuccessInfo] = useState<{ assetId: string; message: string } | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = useState<{
+    assetId: string;
+    qrCodeValue?: string;
+    qrCodeDataUrl?: string;
+    message: string;
+  } | null>(null);
 
   const invoiceInputRef = useRef<HTMLInputElement>(null);
   const warrantyInputRef = useRef<HTMLInputElement>(null);
@@ -131,18 +140,19 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
 
     setIsSubmitting(true);
     setSuccessInfo(null);
+    setApiError(null);
 
     const payload: NewAssetPayload = {
       name: formData.name.trim(),
       category: formData.category,
-      specification: formData.specification.trim(),
+      specification: formData.specification.trim() || undefined,
       location: formData.location,
       custodian: formData.custodian,
       purchaseDate: formData.purchaseDate,
       vendorName: formData.vendorName.trim(),
       totalCost: formData.totalCost.trim(),
       warrantyPeriod: formData.warrantyPeriod.trim(),
-      invoiceReference: formData.invoiceReference.trim(),
+      invoiceReference: formData.invoiceReference.trim() || undefined,
       documents: {
         invoiceFileName: invoiceFile || undefined,
         warrantyFileName: warrantyFile || undefined,
@@ -155,11 +165,28 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
       const result = await registerNewAsset(payload);
       setSuccessInfo({
         assetId: result.asset_id,
-        message: 'Asset has been added to the asset registry and a unique QR identification has been generated.',
+        qrCodeValue: result.qr_code_value,
+        qrCodeDataUrl: result.qr_code_data_url,
+        message: `Asset ${result.asset_id} has been added to the asset registry and a unique QR identification has been generated.`,
       });
+      setApiError(null);
       showToast('Asset registered successfully');
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Registration failed. Please try again.');
+    } catch (error: unknown) {
+      const status = (error as AssetApiError).status;
+      const errorMsg =
+        status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : status === 403
+          ? 'Admin access is required to register assets.'
+          : status === 422
+          ? (error as Error).message || 'Asset validation failed. Please check your inputs.'
+          : status && status >= 500
+          ? 'The asset service is temporarily unavailable. Please retry.'
+          : error instanceof Error
+          ? error.message
+          : 'Registration failed. Please try again.';
+      setApiError(errorMsg);
+      showToast(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -184,6 +211,7 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
     setPhotoFile(null);
     setOtherDocs([]);
     setSuccessInfo(null);
+    setApiError(null);
   };
 
   // Category and location options
@@ -228,7 +256,10 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
         showToast('1 Alert: Printer Ink (Cyan) expires today; Stationery low stock.')
       }
       onHelpClick={() => showToast('AssetMX Enterprise Help Center & User Manual.')}
-      onProfileClick={() => showToast('Active User: Administrator (Role: Admin, Dept: IT).')}
+      onProfileClick={() => showToast(`Active User: ${currentUser?.full_name || 'Administrator'} (Role: ${currentUser?.role || 'Admin'}).`)}
+      userName={currentUser?.full_name || 'Administrator'}
+      userRoleSubtitle={currentUser?.role ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1) : 'Administrator'}
+      role={currentUser?.role || 'admin'}
     >
       {/* Toast Notification */}
       {toastMessage && (
@@ -331,6 +362,31 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
           <span className="amx-breadcrumb-curr">Add New Asset</span>
         </nav>
 
+        {/* API Error Banner */}
+        {apiError && (
+          <div
+            role="alert"
+            style={{
+              marginBottom: '20px',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              backgroundColor: '#fef2f2',
+              color: '#991b1b',
+              border: '1px solid #fecaca',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '14px',
+              fontWeight: 500,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#dc2626' }}>
+              error
+            </span>
+            <span>{apiError}</span>
+          </div>
+        )}
+
         {/* Success Banner if Registered */}
         {successInfo && (
           <div className="amx-success-banner-card" role="alert">
@@ -395,7 +451,7 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
               disabled={isSubmitting}
               onClick={() => handleSubmit()}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '18px' }} aria-hidden="true">
                 verified
               </span>
               <span>{isSubmitting ? 'Registering...' : 'Register Asset'}</span>
@@ -636,7 +692,7 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
                       <span className="amx-card-dot" aria-hidden="true" />
                       <h2 className="amx-card-title">Supporting Documents & Media</h2>
                     </div>
-                    <p className="amx-card-sub">Upload purchase invoices, warranty cards, and physical unit inspection photos</p>
+                    <p className="amx-card-sub">Attach document references and photo file names (recorded in asset metadata)</p>
                   </div>
                   <span className="amx-section-tag">SECTION 03</span>
                 </div>
@@ -817,50 +873,58 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
                 <div className="amx-qr-preview-box">
                   <div className="amx-qr-tag-header">
                     <span className="amx-qr-tag-label">Asset Tag</span>
-                    <span className="amx-qr-preview-tag">PREVIEW ONLY</span>
+                    <span className="amx-qr-preview-tag">{successInfo ? 'ACTIVE QR' : 'PREVIEW ONLY'}</span>
                   </div>
 
                   <div className="amx-qr-svg-holder">
-                    <svg
-                      className="w-36 h-36"
-                      style={{ width: '130px', height: '130px' }}
-                      fill="none"
-                      viewBox="0 0 100 100"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-label="QR Preview Placeholder"
-                    >
-                      <rect fill="#0f172a" height="28" rx="2" width="28" x="5" y="5" />
-                      <rect fill="#ffffff" height="18" rx="1" width="18" x="10" y="10" />
-                      <rect fill="#00687a" height="10" rx="0.5" width="10" x="14" y="14" />
-                      <rect fill="#0f172a" height="28" rx="2" width="28" x="67" y="5" />
-                      <rect fill="#ffffff" height="18" rx="1" width="18" x="72" y="10" />
-                      <rect fill="#00687a" height="10" rx="0.5" width="10" x="76" y="14" />
-                      <rect fill="#0f172a" height="28" rx="2" width="28" x="5" y="67" />
-                      <rect fill="#ffffff" height="18" rx="1" width="18" x="10" y="72" />
-                      <rect fill="#00687a" height="10" rx="0.5" width="10" x="14" y="76" />
-                      <rect fill="#0f172a" height="6" width="6" x="38" y="8" />
-                      <rect fill="#0f172a" height="6" width="8" x="48" y="8" />
-                      <rect fill="#00687a" height="6" width="14" x="38" y="20" />
-                      <rect fill="#0f172a" height="6" width="18" x="42" y="32" />
-                      <rect fill="#0f172a" height="6" width="8" x="10" y="42" />
-                      <rect fill="#0f172a" height="8" width="14" x="22" y="48" />
-                      <rect fill="#00687a" height="6" width="10" x="8" y="56" />
-                      <rect fill="#0f172a" height="10" width="8" x="66" y="38" />
-                      <rect fill="#0f172a" height="6" width="14" x="78" y="44" />
-                      <rect fill="#00687a" height="6" width="8" x="68" y="56" />
-                      <rect fill="#0f172a" height="6" width="12" x="80" y="56" />
-                      <rect fill="#57dffe" height="16" rx="2" width="18" x="40" y="46" />
-                      <rect fill="#001f26" height="4" width="6" x="46" y="52" />
-                      <rect fill="#0f172a" height="8" width="6" x="38" y="68" />
-                      <rect fill="#0f172a" height="12" width="10" x="48" y="72" />
-                      <rect fill="#0f172a" height="6" width="8" x="66" y="68" />
-                      <rect fill="#00687a" height="14" width="14" x="66" y="78" />
-                      <rect fill="#0f172a" height="8" width="8" x="84" y="84" />
-                    </svg>
+                    {successInfo?.qrCodeDataUrl ? (
+                      <img
+                        src={successInfo.qrCodeDataUrl}
+                        alt={`QR Code for ${successInfo.assetId}`}
+                        style={{ width: '130px', height: '130px', objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <svg
+                        className="w-36 h-36"
+                        style={{ width: '130px', height: '130px' }}
+                        fill="none"
+                        viewBox="0 0 100 100"
+                        xmlns="http://www.w3.org/2000/svg"
+                        aria-label="QR Preview Placeholder"
+                      >
+                        <rect fill="#0f172a" height="28" rx="2" width="28" x="5" y="5" />
+                        <rect fill="#ffffff" height="18" rx="1" width="18" x="10" y="10" />
+                        <rect fill="#00687a" height="10" rx="0.5" width="10" x="14" y="14" />
+                        <rect fill="#0f172a" height="28" rx="2" width="28" x="67" y="5" />
+                        <rect fill="#ffffff" height="18" rx="1" width="18" x="72" y="10" />
+                        <rect fill="#00687a" height="10" rx="0.5" width="10" x="76" y="14" />
+                        <rect fill="#0f172a" height="28" rx="2" width="28" x="5" y="67" />
+                        <rect fill="#ffffff" height="18" rx="1" width="18" x="10" y="72" />
+                        <rect fill="#00687a" height="10" rx="0.5" width="10" x="14" y="76" />
+                        <rect fill="#0f172a" height="6" width="6" x="38" y="8" />
+                        <rect fill="#0f172a" height="6" width="8" x="48" y="8" />
+                        <rect fill="#00687a" height="6" width="14" x="38" y="20" />
+                        <rect fill="#0f172a" height="6" width="18" x="42" y="32" />
+                        <rect fill="#0f172a" height="6" width="8" x="10" y="42" />
+                        <rect fill="#0f172a" height="8" width="14" x="22" y="48" />
+                        <rect fill="#00687a" height="6" width="10" x="8" y="56" />
+                        <rect fill="#0f172a" height="10" width="8" x="66" y="38" />
+                        <rect fill="#0f172a" height="6" width="14" x="78" y="44" />
+                        <rect fill="#00687a" height="6" width="8" x="68" y="56" />
+                        <rect fill="#0f172a" height="6" width="12" x="80" y="56" />
+                        <rect fill="#57dffe" height="16" rx="2" width="18" x="40" y="46" />
+                        <rect fill="#001f26" height="4" width="6" x="46" y="52" />
+                        <rect fill="#0f172a" height="8" width="6" x="38" y="68" />
+                        <rect fill="#0f172a" height="12" width="10" x="48" y="72" />
+                        <rect fill="#0f172a" height="6" width="8" x="66" y="68" />
+                        <rect fill="#00687a" height="14" width="14" x="66" y="78" />
+                        <rect fill="#0f172a" height="8" width="8" x="84" y="84" />
+                      </svg>
+                    )}
                   </div>
 
                   <span className="amx-qr-binding-pill">
-                    QR WILL BE BOUND UPON REGISTRATION
+                    {successInfo ? `BOUND: ${successInfo.qrCodeValue}` : 'QR WILL BE BOUND UPON REGISTRATION'}
                   </span>
                 </div>
               </section>
@@ -907,7 +971,7 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
                     className="amx-btn-submit-full"
                     disabled={isSubmitting}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }} aria-hidden="true">
                       add_circle
                     </span>
                     <span>{isSubmitting ? 'Registering...' : 'Register Asset'}</span>
