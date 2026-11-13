@@ -1,0 +1,387 @@
+/* =====================================================================
+   AssetMX SuperAdmin Audit Event Details Stylesheet (Page 2)
+   Faithfully reproduces approved Stitch screenshot & design specifications
+   ===================================================================== */
+
+:root {
+  --amx-ad-bg: #f7f9fb;
+  --amx-ad-surface: #ffffff;
+  --amx-ad-surface-low: #f2f4f6;
+  --amx-ad-surface-mid: #eceef0;
+  --amx-ad-surface-high: #e6e8ea;
+  --amx-ad-surface-variant: #e0e3e5;
+  --amx-ad-text: #191c1e;
+  --amx-ad-text-muted: #5f6368;
+  --amx-ad-navy: #131b2e;
+  --amx-ad-navy-dark: #090e1a;
+  --amx-ad-secondary: #00687a;
+  --amx-ad-secondary-bright: #57dffe;
+  --amx-ad-border: #e0e3e5;
+  --amx-ad-border-light: rgba(224, 227, 229, 0.6);
+  --amx-ad-font-mono: 'JetBrains Mono', monospace, SFMono-Regular, Consolas;
+}
+
+.amx-ad-page-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 4px 8px 40px 8px;
+  color: var(--amx-ad-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-sizing: border-box;
+}
+
+/* -------------------------------------------------------------
+   Header / Breadcrumb & Title Bar
+   ------------------------------------------------------------- */
+.amx-ad-header-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.amx-ad-breadcrumb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.amx-ad-breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amx-ad-text-muted);
+}
+
+.amx-ad-breadcrumb-link {
+  color: var(--amx-ad-text-muted);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.12s ease;
+}
+
+.amx-ad-breadcrumb-link:hover {
+  color: var(--amx-ad-secondary);
+}
+
+.amx-ad-breadcrumb-current {
+  color: var(--amx-ad-text);
+  font-weight: 700;
+}
+
+.amx-ad-btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background-color: var(--amx-ad-surface);
+  color: var(--amx-ad-text);
+  border: 1px solid var(--amx-ad-border);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
+}
+
+.amx-ad-btn-back:hover {
+  background-color: var(--amx-ad-surface-low);
+  border-color: #cbd5e1;
+}
+
+.amx-ad-title-card {
+  background-color: var(--amx-ad-surface);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--amx-ad-border-light);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.amx-ad-title-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.amx-ad-title-text h1 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--amx-ad-text);
+  margin: 0 0 6px 0;
+  line-height: 1.2;
+}
+
+.amx-ad-title-badges {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.amx-ad-evt-id-badge {
+  font-family: var(--amx-ad-font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--amx-ad-secondary);
+}
+
+.amx-ad-timestamp-text {
+  font-family: var(--amx-ad-font-mono);
+  font-size: 12px;
+  color: var(--amx-ad-text-muted);
+}
+
+/* -------------------------------------------------------------
+   Core Metadata Card
+   ------------------------------------------------------------- */
+.amx-ad-meta-card {
+  background-color: var(--amx-ad-surface);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--amx-ad-border-light);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.amx-ad-section-heading {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--amx-ad-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-ad-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  background-color: var(--amx-ad-surface-low);
+  padding: 16px 20px;
+  border-radius: 8px;
+  border: 1px solid var(--amx-ad-border-light);
+}
+
+@media (max-width: 900px) {
+  .amx-ad-meta-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .amx-ad-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.amx-ad-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amx-ad-meta-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--amx-ad-text-muted);
+}
+
+.amx-ad-meta-value {
+  font-family: var(--amx-ad-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--amx-ad-text);
+  word-break: break-all;
+}
+
+.amx-ad-meta-value-empty {
+  font-family: var(--amx-ad-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--amx-ad-text-muted);
+}
+
+/* -------------------------------------------------------------
+   JSON Panels (Before State, After State, Metadata)
+   ------------------------------------------------------------- */
+.amx-ad-state-card {
+  background-color: var(--amx-ad-surface);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--amx-ad-border-light);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.amx-ad-json-tag {
+  font-family: var(--amx-ad-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: var(--amx-ad-surface-mid);
+  color: var(--amx-ad-text-muted);
+}
+
+.amx-ad-code-block {
+  background-color: var(--amx-ad-navy);
+  color: #e2e8f0;
+  padding: 16px 20px;
+  border-radius: 8px;
+  font-family: var(--amx-ad-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.amx-ad-empty-state-panel {
+  background-color: var(--amx-ad-surface-low);
+  padding: 16px 20px;
+  border-radius: 8px;
+  border: 1px dashed var(--amx-ad-border);
+  color: var(--amx-ad-text-muted);
+  font-size: 13px;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* -------------------------------------------------------------
+   Syntax Highlighting Colors for JSON
+   ------------------------------------------------------------- */
+.amx-json-key {
+  color: #6ee7b7; /* Emerald green */
+}
+
+.amx-json-string {
+  color: #67e8f9; /* Cyan */
+}
+
+.amx-json-number {
+  color: #fcd34d; /* Amber */
+}
+
+.amx-json-boolean {
+  color: #f472b6; /* Pink */
+}
+
+.amx-json-null {
+  color: #94a3b8; /* Muted slate */
+}
+
+/* -------------------------------------------------------------
+   Footer Banner
+   ------------------------------------------------------------- */
+.amx-ad-footer-banner {
+  background-color: var(--amx-ad-surface);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--amx-ad-border-light);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.amx-ad-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.amx-ad-footer-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: var(--amx-ad-surface-low);
+  color: var(--amx-ad-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.amx-ad-footer-text {
+  font-size: 12px;
+  color: var(--amx-ad-text-muted);
+  line-height: 1.4;
+}
+
+.amx-ad-footer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background-color: var(--amx-ad-surface-low);
+  border: 1px solid var(--amx-ad-border);
+  font-family: var(--amx-ad-font-mono);
+  font-size: 11px;
+  color: var(--amx-ad-text-muted);
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------
+   Not Found / Error Screen
+   ------------------------------------------------------------- */
+.amx-ad-error-card {
+  background-color: var(--amx-ad-surface);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--amx-ad-border-light);
+  padding: 60px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.amx-ad-error-icon {
+  font-size: 48px;
+  color: #ba1a1a;
+}
+
+.amx-ad-error-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--amx-ad-text);
+}
+
+.amx-ad-error-desc {
+  font-size: 14px;
+  color: var(--amx-ad-text-muted);
+  max-width: 480px;
+}
+

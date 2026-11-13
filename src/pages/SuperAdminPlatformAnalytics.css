@@ -1,0 +1,588 @@
+/* =====================================================================
+   AssetMX SuperAdmin Platform Analytics Stylesheet
+   Faithfully reproduces approved Stitch screenshot & design specifications
+   ===================================================================== */
+
+:root {
+  --amx-an-bg: #f7f9fb;
+  --amx-an-surface: #ffffff;
+  --amx-an-surface-low: #f2f4f6;
+  --amx-an-surface-mid: #eceef0;
+  --amx-an-surface-high: #e6e8ea;
+  --amx-an-surface-variant: #e0e3e5;
+  --amx-an-text: #191c1e;
+  --amx-an-text-muted: #5f6368;
+  --amx-an-navy: #131b2e;
+  --amx-an-secondary: #00687a;
+  --amx-an-secondary-bright: #57dffe;
+  --amx-an-border: #e0e3e5;
+  --amx-an-border-light: rgba(224, 227, 229, 0.7);
+  --amx-an-font-mono: 'JetBrains Mono', monospace, SFMono-Regular, Consolas;
+}
+
+.amx-an-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 4px 8px 40px 8px;
+  color: var(--amx-an-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-sizing: border-box;
+}
+
+/* -------------------------------------------------------------
+   Header / Breadcrumb & Title Bar
+   ------------------------------------------------------------- */
+.amx-an-header-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.amx-an-breadcrumb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.amx-an-breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amx-an-text-muted);
+}
+
+.amx-an-breadcrumb-current {
+  color: var(--amx-an-text);
+  font-weight: 700;
+}
+
+.amx-an-breadcrumb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background-color: var(--amx-an-surface-high);
+  color: var(--amx-an-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.amx-an-title-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.amx-an-title-text h1 {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--amx-an-text);
+  margin: 0 0 4px 0;
+  line-height: 1.2;
+}
+
+.amx-an-title-text p {
+  font-size: 14px;
+  color: var(--amx-an-text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.amx-an-btn-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background-color: var(--amx-an-surface);
+  color: var(--amx-an-text);
+  border: 1px solid var(--amx-an-border);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
+}
+
+.amx-an-btn-refresh:hover:not(:disabled) {
+  background-color: var(--amx-an-surface-low);
+  border-color: #cbd5e1;
+}
+
+.amx-an-btn-refresh:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* -------------------------------------------------------------
+   Top KPI Cards Row (5 Columns)
+   ------------------------------------------------------------- */
+.amx-an-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1400px) {
+  .amx-an-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .amx-an-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .amx-an-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.amx-an-kpi-card {
+  background-color: var(--amx-an-surface);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--amx-an-border-light);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  transition: all 0.2s ease;
+}
+
+.amx-an-kpi-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.amx-an-kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amx-an-kpi-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--amx-an-text-muted);
+}
+
+.amx-an-kpi-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: var(--amx-an-surface-low);
+  color: var(--amx-an-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.amx-an-kpi-val {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--amx-an-text);
+  line-height: 1.1;
+}
+
+.amx-an-kpi-sub {
+  font-size: 12px;
+  color: var(--amx-an-text-muted);
+  margin-top: 4px;
+}
+
+.amx-an-kpi-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--amx-an-font-mono);
+  font-size: 11px;
+  color: var(--amx-an-text-muted);
+  padding-top: 10px;
+  border-top: 1px solid var(--amx-an-surface-mid);
+}
+
+.amx-an-kpi-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* -------------------------------------------------------------
+   Section Grid Arrangements
+   ------------------------------------------------------------- */
+.amx-an-row-middle {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: 20px;
+}
+
+@media (max-width: 1100px) {
+  .amx-an-row-middle {
+    grid-template-columns: 1fr;
+  }
+}
+
+.amx-an-row-lower {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 1000px) {
+  .amx-an-row-lower {
+    grid-template-columns: 1fr;
+  }
+}
+
+.amx-an-card {
+  background-color: var(--amx-an-surface);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--amx-an-border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.amx-an-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amx-an-card-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--amx-an-secondary);
+}
+
+.amx-an-card-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--amx-an-text);
+  margin: 2px 0 0 0;
+}
+
+.amx-an-pill {
+  font-family: var(--amx-an-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background-color: var(--amx-an-surface-low);
+  color: var(--amx-an-text);
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------
+   Multi-segment Stacked Distribution Bar
+   ------------------------------------------------------------- */
+.amx-an-stack-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 9999px;
+  overflow: hidden;
+  background-color: var(--amx-an-surface-mid);
+  width: 100%;
+}
+
+.amx-an-stack-seg {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* -------------------------------------------------------------
+   Structured Table
+   ------------------------------------------------------------- */
+.amx-an-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.amx-an-table th {
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--amx-an-text-muted);
+  border-bottom: 1px solid var(--amx-an-border);
+}
+
+.amx-an-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--amx-an-surface-mid);
+  vertical-align: middle;
+}
+
+.amx-an-role-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.amx-an-role-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* -------------------------------------------------------------
+   Panels Grid (Asset, Inventory, Gate Passes)
+   ------------------------------------------------------------- */
+.amx-an-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 600px) {
+  .amx-an-panel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.amx-an-panel {
+  padding: 14px;
+  border-radius: 8px;
+  background-color: var(--amx-an-surface-low);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.amx-an-panel-alert {
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+}
+
+.amx-an-panel-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--amx-an-text-muted);
+}
+
+.amx-an-panel-val {
+  font-family: var(--amx-an-font-mono);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--amx-an-text);
+  line-height: 1.1;
+}
+
+.amx-an-panel-sub {
+  font-size: 11px;
+  color: var(--amx-an-text-muted);
+}
+
+/* -------------------------------------------------------------
+   Radial / Circular Progress Meter
+   ------------------------------------------------------------- */
+.amx-an-circular-wrap {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.amx-an-circle-container {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.amx-an-circle-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.amx-an-circle-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.amx-an-circle-pct {
+  font-family: var(--amx-an-font-mono);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--amx-an-text);
+  line-height: 1;
+}
+
+.amx-an-circle-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--amx-an-text-muted);
+  margin-top: 2px;
+}
+
+/* -------------------------------------------------------------
+   Platform Governance Full-width Card
+   ------------------------------------------------------------- */
+.amx-an-gov-card {
+  background-color: var(--amx-an-navy);
+  color: #ffffff;
+  border-radius: 12px;
+  padding: 28px 32px;
+  box-shadow: 0 4px 16px rgba(19, 27, 46, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.amx-an-gov-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.amx-an-gov-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.amx-an-gov-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background-color: var(--amx-an-secondary);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.amx-an-gov-title {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.amx-an-gov-counter {
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 10px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.amx-an-gov-counter-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.amx-an-gov-counter-val {
+  font-family: var(--amx-an-font-mono);
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.1;
+}
+
+.amx-an-gov-desc {
+  font-size: 13px;
+  color: #cbd5e1;
+  margin: 0;
+  max-width: 800px;
+  line-height: 1.6;
+}
+
+.amx-an-gov-badges {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.amx-an-gov-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--amx-an-font-mono);
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.amx-an-gov-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981;
+}
+
+/* -------------------------------------------------------------
+   Loading & Error States
+   ------------------------------------------------------------- */
+.amx-an-state-card {
+  background-color: var(--amx-an-surface);
+  border-radius: 12px;
+  padding: 60px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--amx-an-border-light);
+}
+
+.amx-an-error-icon {
+  font-size: 40px;
+  color: #ba1a1a;
+}
+
