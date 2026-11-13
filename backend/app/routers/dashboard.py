@@ -1,7 +1,7 @@
 from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, distinct, func, or_, select
+from sqlalchemy import and_, case, distinct, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -1343,7 +1343,11 @@ def get_guard_dashboard(
                 GatePass.escalation_is_escalated.is_(True),
             )
         )
-        .order_by(GatePass.escalation_timestamp.desc().nullslast(), GatePass.id.desc())
+        .order_by(
+            case((GatePass.escalation_timestamp.is_(None), 1), else_=0),
+            GatePass.escalation_timestamp.desc(),
+            GatePass.id.desc(),
+        )
         .limit(10)
     ).all()
 
