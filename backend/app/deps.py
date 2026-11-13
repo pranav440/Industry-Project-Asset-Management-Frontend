@@ -96,4 +96,5 @@ require_gate_staff = require_roles(
     [UserRole.admin, UserRole.superadmin, UserRole.guard, UserRole.host],
     detail="Admin, guard, or host role required",
 )
+require_superadmin = require_roles([UserRole.superadmin], detail="SuperAdmin role required")
 

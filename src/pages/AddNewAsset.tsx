@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
-import { registerNewAsset, type NewAssetPayload, type AssetApiError } from '../api/assetApi';
+import { registerNewAsset, uploadAssetBulkExcel, type NewAssetPayload, type AssetApiError } from '../api/assetApi';
 import { ASSET_FILTER_OPTIONS } from '../data/assetsData';
 import { getUser } from '../auth/session';
 import './AddNewAsset.css';
@@ -72,10 +72,35 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
   const warrantyInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const generalDocInputRef = useRef<HTMLInputElement>(null);
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleBulkFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsSubmitting(true);
+    setApiError(null);
+    try {
+      const res = await uploadAssetBulkExcel(file);
+      if (res.successful_count > 0) {
+        showToast(`Bulk upload successful: ${res.successful_count} assets registered.`);
+        setTimeout(() => onNavigate?.('assets'), 1200);
+      } else {
+        const firstErr = res.errors?.[0]?.error || 'No valid rows found in file';
+        setApiError(`Bulk upload failed: ${firstErr}`);
+        showToast('Bulk upload contained validation errors');
+      }
+    } catch (err: any) {
+      setApiError(err.message || 'Failed to process bulk upload file');
+      showToast(err.message || 'Bulk upload error');
+    } finally {
+      setIsSubmitting(false);
+      if (bulkFileInputRef.current) bulkFileInputRef.current.value = '';
+    }
   };
 
   const handleNav = (subRoute: string) => {
@@ -428,15 +453,23 @@ export const AddNewAssetPage: React.FC<AddNewAssetPageProps> = ({
           </div>
 
           <div className="amx-page-actions-group">
+            <input
+              ref={bulkFileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              style={{ display: 'none' }}
+              onChange={handleBulkFileChange}
+            />
             <button
               type="button"
               className="amx-btn-bulk-upload"
-              onClick={() => showToast('Bulk Excel Upload workflow — Scheduled for next module release.')}
+              disabled={isSubmitting}
+              onClick={() => bulkFileInputRef.current?.click()}
             >
               <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--amx-dash-secondary)' }}>
                 table_view
               </span>
-              <span>Bulk Upload via Excel</span>
+              <span>{isSubmitting ? 'Uploading...' : 'Bulk Upload via Excel'}</span>
             </button>
             <button
               type="button"

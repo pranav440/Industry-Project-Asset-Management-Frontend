@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { getUser, type UserRole } from '../auth/session';
+import React, { useState, useEffect, useRef } from 'react';
+import { getUser, clearSession, type UserRole, type AuthUser } from '../auth/session';
+import { updateCurrentUserProfile } from '../api/auth';
 
 interface HeaderProps {
   onSearch?: (query: string) => void;
@@ -7,6 +8,7 @@ interface HeaderProps {
   onNotificationsClick?: () => void;
   onHelpClick?: () => void;
   onProfileClick?: () => void;
+  onSignOut?: () => void;
   searchPlaceholder?: string;
   userName?: string;
   userRoleSubtitle?: string;
@@ -19,13 +21,22 @@ export const Header: React.FC<HeaderProps> = ({
   onNotificationsClick,
   onHelpClick,
   onProfileClick,
+  onSignOut,
   searchPlaceholder,
   userName,
   userRoleSubtitle,
   role,
 }) => {
   const [internalVal, setInternalVal] = useState(searchValue ?? '');
-  const currentUser = getUser();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDept, setEditDept] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const [userState, setUserState] = useState<AuthUser | null>(getUser());
+  const currentUser = userState;
   const resolvedRole = role ?? currentUser?.role ?? 'admin';
   const resolvedName = userName ?? (
     resolvedRole === 'employee'
@@ -34,7 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
       ? (currentUser?.full_name || 'Sarah Jenkins')
       : resolvedRole === 'guard'
       ? (currentUser?.full_name || 'Marcus Vance')
-      : currentUser?.full_name
+      : (currentUser?.full_name || 'Platform Administrator')
   );
   const resolvedSubtitle = userRoleSubtitle ?? (
     resolvedRole === 'employee'
@@ -43,6 +54,8 @@ export const Header: React.FC<HeaderProps> = ({
       ? 'Host Security Officer'
       : resolvedRole === 'guard'
       ? 'Checkpoint Security Guard (Gate 1)'
+      : resolvedRole === 'superadmin'
+      ? 'Governance & Platform Administration'
       : 'Administrator (Admin)'
   );
   const resolvedPlaceholder = searchPlaceholder ?? (
@@ -52,6 +65,8 @@ export const Header: React.FC<HeaderProps> = ({
       ? 'Search gate passes, assets, movement...'
       : resolvedRole === 'employee'
       ? 'Search my requests, assets...'
+      : resolvedRole === 'superadmin'
+      ? 'Search users, roles, audits, system logs...'
       : 'Search assets, requests...'
   );
 
@@ -60,6 +75,82 @@ export const Header: React.FC<HeaderProps> = ({
       setInternalVal(searchValue);
     }
   }, [searchValue]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsProfileOpen(false);
+      }
+    };
+    if (isProfileOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isProfileOpen]);
+
+  const toggleProfile = () => {
+    setIsProfileOpen((prev) => !prev);
+    if (onProfileClick) {
+      onProfileClick();
+    }
+  };
+
+  const handleSignOut = () => {
+    setIsProfileOpen(false);
+    if (onSignOut) {
+      onSignOut();
+    } else {
+      clearSession();
+      window.location.href = '/login';
+    }
+  };
+
+  const handleStartEdit = () => {
+    setEditName(currentUser?.full_name || '');
+    setEditDept(currentUser?.department || '');
+    setProfileFeedback(null);
+    setIsEditingProfile(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingProfile(false);
+    setProfileFeedback(null);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) {
+      setProfileFeedback({ type: 'error', msg: 'Full name cannot be blank.' });
+      return;
+    }
+    setProfileSaving(true);
+    setProfileFeedback(null);
+    try {
+      const updated = await updateCurrentUserProfile({
+        full_name: editName.trim(),
+        department: editDept.trim() || undefined,
+      });
+      setUserState(updated);
+      setIsEditingProfile(false);
+      setProfileFeedback({ type: 'success', msg: 'Profile updated successfully!' });
+    } catch (err) {
+      setProfileFeedback({
+        type: 'error',
+        msg: err instanceof Error ? err.message : 'Failed to update profile',
+      });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -140,37 +231,303 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
-        <div
-          className="amx-user-avatar"
-          title={`User Profile (${resolvedRole})`}
-          role="button"
-          tabIndex={0}
-          aria-label="User Profile menu"
-          onClick={onProfileClick}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onProfileClick?.(); }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#131b2e',
-            color: '#acedff',
-            fontWeight: 700,
-            fontSize: '13px',
-            overflow: 'hidden',
-          }}
-        >
-          {resolvedRole === 'host' ? (
-            <span style={{ letterSpacing: '0.04em' }}>SJ</span>
-          ) : resolvedRole === 'guard' ? (
-            <span style={{ letterSpacing: '0.04em' }}>MV</span>
-          ) : (
-            <img
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_gJW4-CiPC6EvQEY0S7_1SjwP3YwK8dtCA94bMz6dNHkDEJvQQXGRnVBF6vaL-qVwSdQn1hmhw_OkKiEMTxo-2zPwn8E0U-d1KXH9wsXNkN_xhPX4c-CnzrwSanbjSh4U2QysBM8wosable9WgGubS-OS0fgNgQwgirHge94FKuGZfwVx4-KtZC7Uy8-VhEajhmCA_jOaXSK3hoU1S-PUHIbbeY0MMyx-Sm5Pb25C_eqf01L-IJgMmw"
-              alt="User profile avatar"
-              onError={(e) => {
-                (e.currentTarget as HTMLElement).style.display = 'none';
+        <div ref={profileRef} style={{ position: 'relative' }}>
+          <div
+            className="amx-user-avatar"
+            title={`User Profile (${resolvedRole})`}
+            role="button"
+            tabIndex={0}
+            aria-label="User Profile menu"
+            aria-expanded={isProfileOpen}
+            onClick={toggleProfile}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleProfile(); }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#131b2e',
+              color: '#acedff',
+              fontWeight: 700,
+              fontSize: '13px',
+              overflow: 'hidden',
+              cursor: 'pointer',
+            }}
+          >
+            {resolvedRole === 'host' ? (
+              <span style={{ letterSpacing: '0.04em' }}>SJ</span>
+            ) : resolvedRole === 'guard' ? (
+              <span style={{ letterSpacing: '0.04em' }}>MV</span>
+            ) : (
+              <img
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_gJW4-CiPC6EvQEY0S7_1SjwP3YwK8dtCA94bMz6dNHkDEJvQQXGRnVBF6vaL-qVwSdQn1hmhw_OkKiEMTxo-2zPwn8E0U-d1KXH9wsXNkN_xhPX4c-CnzrwSanbjSh4U2QysBM8wosable9WgGubS-OS0fgNgQwgirHge94FKuGZfwVx4-KtZC7Uy8-VhEajhmCA_jOaXSK3hoU1S-PUHIbbeY0MMyx-Sm5Pb25C_eqf01L-IJgMmw"
+                alt="User profile avatar"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
+              />
+            )}
+          </div>
+
+          {/* Profile Dropdown Popover */}
+          {isProfileOpen && (
+            <div
+              className="amx-profile-dropdown"
+              role="dialog"
+              aria-label="User Account Menu"
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 8px)',
+                right: 0,
+                width: '280px',
+                backgroundColor: '#ffffff',
+                borderRadius: '10px',
+                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                border: '1px solid rgba(0, 0, 0, 0.08)',
+                zIndex: 1000,
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                animation: 'amx-fade-in 0.15s ease-out',
               }}
-            />
+            >
+              {/* User Identity Info */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '50%',
+                    backgroundColor: '#131b2e',
+                    color: '#acedff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '15px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {(resolvedName || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                    {resolvedName}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                    {currentUser?.email || `${resolvedRole}@assetmx.local`}
+                  </div>
+                </div>
+              </div>
+
+              {/* Feedback Alert */}
+              {profileFeedback && (
+                <div
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    backgroundColor: profileFeedback.type === 'success' ? '#dcfce7' : '#fee2e2',
+                    color: profileFeedback.type === 'success' ? '#166534' : '#991b1b',
+                    border: `1px solid ${profileFeedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
+                  }}
+                >
+                  {profileFeedback.msg}
+                </div>
+              )}
+
+              {isEditingProfile ? (
+                /* Inline Edit Profile Form */
+                <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: '3px' }}>
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      required
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        fontSize: '13px',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '4px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: '3px' }}>
+                      Department
+                    </label>
+                    <input
+                      type="text"
+                      value={editDept}
+                      onChange={(e) => setEditDept(e.target.value)}
+                      placeholder="e.g. Operations, Engineering"
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        fontSize: '13px',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '4px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <button
+                      type="submit"
+                      disabled={profileSaving}
+                      style={{
+                        flex: 1,
+                        padding: '7px 12px',
+                        backgroundColor: '#2563eb',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontWeight: 600,
+                        fontSize: '12px',
+                        cursor: profileSaving ? 'not-allowed' : 'pointer',
+                        opacity: profileSaving ? 0.7 : 1,
+                      }}
+                    >
+                      {profileSaving ? 'Saving...' : 'Save Profile'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      disabled={profileSaving}
+                      style={{
+                        padding: '7px 12px',
+                        backgroundColor: '#f1f5f9',
+                        color: '#475569',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '4px',
+                        fontWeight: 500,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* Department & Role Pills */
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '6px',
+                    border: '1px solid #e2e8f0',
+                    fontSize: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#64748b', fontWeight: 500 }}>System Role:</span>
+                    <span
+                      style={{
+                        textTransform: 'uppercase',
+                        fontWeight: 800,
+                        fontSize: '10px',
+                        letterSpacing: '0.05em',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        backgroundColor: resolvedRole === 'superadmin' ? '#e0e7ff' : '#dae2fd',
+                        color: resolvedRole === 'superadmin' ? '#4338ca' : '#131b2e',
+                      }}
+                    >
+                      {resolvedRole}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b', fontWeight: 500 }}>Employee ID:</span>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: '#334155' }}>
+                      {currentUser?.employee_id || (resolvedRole === 'superadmin' ? 'SAD001' : 'EMP-2026')}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b', fontWeight: 500 }}>Department:</span>
+                    <span style={{ color: '#334155', fontWeight: 600 }}>
+                      {currentUser?.department || (resolvedRole === 'guard' ? 'Facilities & Security' : 'Operations')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Edit Profile Action */}
+              {!isEditingProfile && (
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '7px 10px',
+                    backgroundColor: '#f1f5f9',
+                    color: '#1e293b',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#e2e8f0'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                    edit
+                  </span>
+                  <span>Edit Profile</span>
+                </button>
+              )}
+
+              {/* Account Setting Notice */}
+              <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', lineHeight: 1.3 }}>
+                Profile directory records managed via enterprise authentication. Profile updates require administrative authorization.
+              </div>
+
+              {/* Divider & Actions */}
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    backgroundColor: '#fee2e2',
+                    color: '#991b1b',
+                    border: '1px solid #fecaca',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fecaca'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#fee2e2'; }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                    logout
+                  </span>
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

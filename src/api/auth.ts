@@ -83,3 +83,26 @@ export async function fetchCurrentUser(token: string): Promise<AuthUser> {
   if (user) return user;
   throw new Error('No active session');
 }
+
+export async function updateCurrentUserProfile(payload: { full_name?: string; department?: string }): Promise<AuthUser> {
+  const { getToken, replaceUser } = await import('../auth/session');
+  const token = getToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch('/api/auth/me', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const body = (await response.json().catch(() => ({}))) as AuthUser & ApiError;
+  if (!response.ok) {
+    throw new Error(errorMessage(body, 'Failed to update profile'));
+  }
+
+  replaceUser(body as AuthUser);
+  return body as AuthUser;
+}

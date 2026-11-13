@@ -538,3 +538,32 @@ export function recordAssetValuation(
     body: JSON.stringify(payload),
   });
 }
+
+export interface AssetBulkUploadRowError {
+  row: number;
+  error: string;
+}
+
+export interface AssetBulkUploadResponse {
+  total_rows: number;
+  successful_count: number;
+  failed_count: number;
+  created_assets: any[];
+  errors: AssetBulkUploadRowError[];
+}
+
+export async function uploadAssetBulkExcel(file: File): Promise<AssetBulkUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const token = getToken();
+  const response = await fetch('/api/assets/bulk', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null);
+    throw new Error(errorBody?.detail || `Upload failed with status ${response.status}`);
+  }
+  return response.json();
+}

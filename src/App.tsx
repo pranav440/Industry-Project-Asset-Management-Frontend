@@ -35,6 +35,11 @@ import { GuardDashboardPage } from './pages/GuardDashboard';
 import { GuardGateVerificationPage } from './pages/GuardGateVerification';
 import { GuardEntryExitLogsPage } from './pages/GuardEntryExitLogs';
 import { GuardSecurityIncidentsPage } from './pages/GuardSecurityIncidents';
+import { SuperAdminUserManagementPage } from './pages/SuperAdminUserManagement';
+import { SuperAdminAuditLogsPage } from './pages/SuperAdminAuditLogs';
+import { SuperAdminAuditDetailsPage } from './pages/SuperAdminAuditDetails';
+import { SuperAdminSystemConfigPage } from './pages/SuperAdminSystemConfig';
+import { SuperAdminPlatformAnalyticsPage } from './pages/SuperAdminPlatformAnalytics';
 import { clearSession, getToken, getTokenExpiry, getUser, replaceUser } from './auth/session';
 import { fetchCurrentUser } from './api/auth';
 
@@ -70,11 +75,42 @@ type Route =
   | 'reports-requests'
   | 'reports-reassignment'
   | 'reports-maintenance'
-  | 'reports-disposal';
+  | 'reports-disposal'
+  | 'superadmin-users'
+  | 'superadmin-audit-logs'
+  | 'superadmin-audit-details'
+  | 'superadmin-config'
+  | 'superadmin-analytics';
 
-function currentRoute(): { name: Route; assetId?: string; consumableId?: string; requestId?: string; passId?: string } {
+function currentRoute(): {
+  name: Route;
+  assetId?: string;
+  consumableId?: string;
+  requestId?: string;
+  passId?: string;
+  auditEventId?: string;
+} {
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
+    if (path === '/superadmin/users' || path === '/superadmin/users/') {
+      return { name: 'superadmin-users' };
+    }
+    if (path === '/superadmin/audit-logs' || path === '/superadmin/audit-logs/') {
+      return { name: 'superadmin-audit-logs' };
+    }
+    if (path.startsWith('/superadmin/audit-logs/')) {
+      const rest = path.slice('/superadmin/audit-logs/'.length).replace(/\/$/, '');
+      if (rest) {
+        return { name: 'superadmin-audit-details', auditEventId: rest };
+      }
+      return { name: 'superadmin-audit-logs' };
+    }
+    if (path === '/superadmin/config' || path === '/superadmin/config/') {
+      return { name: 'superadmin-config' };
+    }
+    if (path === '/superadmin/analytics' || path === '/superadmin/analytics/') {
+      return { name: 'superadmin-analytics' };
+    }
     if (path.startsWith('/forgot-password')) {
       return { name: 'forgot-password' };
     }
@@ -137,11 +173,19 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
     if (path === '/movement' || path === '/movement/' || path === '/movement-activity' || path === '/movement-activity/') {
       return { name: 'movement' };
     }
+    if (path === '/maintenance' || path === '/maintenance/') {
+      return { name: 'asset-maintenance', assetId: 'AST-NC-2026-0012' };
+    }
     if (path === '/gate-pass' || path === '/gate-pass/') {
       return { name: 'gate-pass' };
     }
     // Requests Routes
-    if (path === '/requests/new-external' || path === '/requests/new-external/') {
+    if (
+      path === '/requests/new' ||
+      path === '/requests/new/' ||
+      path === '/requests/new-external' ||
+      path === '/requests/new-external/'
+    ) {
       return { name: 'add-external-request' };
     }
     if (path.startsWith('/requests/')) {
@@ -152,7 +196,12 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
       return { name: 'requests' };
     }
     // Consumables Routes
-    if (path === '/consumables/new' || path === '/consumables/new/') {
+    if (
+      path === '/consumables/new' ||
+      path === '/consumables/new/' ||
+      path === '/consumables/add' ||
+      path === '/consumables/add/'
+    ) {
       return { name: 'add-consumable' };
     }
     if (path.startsWith('/consumables/')) {
@@ -163,7 +212,12 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
       return { name: 'consumables' };
     }
     // Assets Routes
-    if (path === '/assets/new' || path === '/assets/new/') {
+    if (
+      path === '/assets/new' ||
+      path === '/assets/new/' ||
+      path === '/assets/add' ||
+      path === '/assets/add/'
+    ) {
       return { name: 'add-asset' };
     }
     if (path.startsWith('/assets/')) {
@@ -192,7 +246,14 @@ function currentRoute(): { name: Route; assetId?: string; consumableId?: string;
 }
 
 export default function App() {
-  const [routeInfo, setRouteInfo] = useState<{ name: Route; assetId?: string; consumableId?: string; requestId?: string; passId?: string }>(currentRoute());
+  const [routeInfo, setRouteInfo] = useState<{
+    name: Route;
+    assetId?: string;
+    consumableId?: string;
+    requestId?: string;
+    passId?: string;
+    auditEventId?: string;
+  }>(currentRoute());
   const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
@@ -219,6 +280,7 @@ export default function App() {
       route !== 'add-external-request' &&
       route !== 'gate-pass' &&
       route !== 'gate-pass-details' &&
+      route !== 'movement' &&
       route !== 'gate-verification' &&
       route !== 'entry-exit-logs' &&
       route !== 'security-incidents' &&
@@ -227,7 +289,12 @@ export default function App() {
       route !== 'reports-requests' &&
       route !== 'reports-reassignment' &&
       route !== 'reports-maintenance' &&
-      route !== 'reports-disposal'
+      route !== 'reports-disposal' &&
+      route !== 'superadmin-users' &&
+      route !== 'superadmin-audit-logs' &&
+      route !== 'superadmin-audit-details' &&
+      route !== 'superadmin-config' &&
+      route !== 'superadmin-analytics'
     ) {
       setSessionChecked(true);
       return;
@@ -314,10 +381,66 @@ export default function App() {
         window.history.replaceState({}, '', '/dashboard');
         setRouteInfo({ name: 'dashboard' });
       }
+      if (
+        user?.role === 'host' &&
+        route !== 'dashboard' &&
+        route !== 'gate-pass' &&
+        route !== 'gate-pass-details' &&
+        route !== 'movement' &&
+        route !== 'login' &&
+        route !== 'forgot-password'
+      ) {
+        window.history.replaceState({}, '', '/dashboard');
+        setRouteInfo({ name: 'dashboard' });
+      }
+      if (
+        user?.role !== 'superadmin' &&
+        (route === 'superadmin-users' ||
+          route === 'superadmin-audit-logs' ||
+          route === 'superadmin-audit-details' ||
+          route === 'superadmin-config' ||
+          route === 'superadmin-analytics')
+      ) {
+        window.history.replaceState({}, '', '/dashboard');
+        setRouteInfo({ name: 'dashboard' });
+      }
     }
   }, [route, sessionChecked]);
 
   const handleSubRouteNav = (subRoute: string) => {
+    if (currentUser?.role === 'superadmin') {
+      if (subRoute === 'superadmin/users' || subRoute === 'superadmin-users' || subRoute === 'users') {
+        navigate('/superadmin/users');
+      } else if (
+        subRoute === 'superadmin/audit-logs' ||
+        subRoute === 'audit-logs' ||
+        subRoute === 'superadmin-audit-logs'
+      ) {
+        navigate('/superadmin/audit-logs');
+      } else if (subRoute.startsWith('superadmin/audit-logs/')) {
+        navigate(`/${subRoute}`);
+      } else if (
+        subRoute === 'superadmin/analytics' ||
+        subRoute === 'analytics' ||
+        subRoute === 'superadmin-analytics'
+      ) {
+        navigate('/superadmin/analytics');
+      } else if (
+        subRoute === 'superadmin/config' ||
+        subRoute === 'config' ||
+        subRoute === 'superadmin-config'
+      ) {
+        navigate('/superadmin/config');
+      } else if (subRoute === 'dashboard') {
+        navigate('/superadmin/users');
+      } else if (subRoute === 'signout' || subRoute === 'login' || subRoute === 'sign-out') {
+        signOut();
+      } else {
+        navigate(`/${subRoute}`);
+      }
+      return;
+    }
+
     if (isEmployee) {
       if (subRoute === 'dashboard') {
         navigate('/dashboard');
@@ -364,8 +487,13 @@ export default function App() {
       return;
     }
 
-    if (currentUser?.role === 'host' && (subRoute === 'movement' || subRoute === 'movement-activity')) {
+    if (subRoute === 'movement' || subRoute === 'movement-activity') {
       navigate('/movement');
+      return;
+    }
+
+    if (subRoute === 'maintenance') {
+      navigate('/maintenance');
       return;
     }
 
@@ -551,9 +679,9 @@ export default function App() {
     );
   }
 
-  // Host Movement Activity Route
+  // Movement Activity Route (Host & Admin)
   if (route === 'movement' && getToken()) {
-    if (currentUser?.role === 'host') {
+    if (currentUser?.role === 'host' || currentUser?.role === 'admin' || currentUser?.role === 'superadmin') {
       return (
         <HostMovementActivityPage
           onNavigate={handleSubRouteNav}
@@ -734,8 +862,68 @@ export default function App() {
       );
     }
 
+    if (currentUser?.role === 'superadmin') {
+      return (
+        <SuperAdminUserManagementPage
+          onNavigate={handleSubRouteNav}
+          onSignOut={signOut}
+        />
+      );
+    }
+
     return (
       <DashboardPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // SuperAdmin User Management Route
+  if (route === 'superadmin-users' && getToken()) {
+    return (
+      <SuperAdminUserManagementPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // SuperAdmin Audit Logs Route (Page 1)
+  if (route === 'superadmin-audit-logs' && getToken()) {
+    return (
+      <SuperAdminAuditLogsPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // SuperAdmin Audit Details Route (Page 2)
+  if (route === 'superadmin-audit-details' && getToken()) {
+    return (
+      <SuperAdminAuditDetailsPage
+        eventId={routeInfo.auditEventId || ''}
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // SuperAdmin System Config Route
+  if (route === 'superadmin-config' && getToken()) {
+    return (
+      <SuperAdminSystemConfigPage
+        onNavigate={handleSubRouteNav}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // SuperAdmin Platform Analytics Route
+  if (route === 'superadmin-analytics' && getToken()) {
+    return (
+      <SuperAdminPlatformAnalyticsPage
         onNavigate={handleSubRouteNav}
         onSignOut={signOut}
       />

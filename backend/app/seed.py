@@ -13,6 +13,7 @@ from app.models import (
     ConsumableIssue,
     ConsumableOperationType,
     ConsumableStockMovement,
+    Department,
     GatePass,
     GatePassHistory,
     GatePassStatus,
@@ -32,36 +33,65 @@ from app.security import hash_password
 
 SEED_PASSWORD = "AssetMX@123"
 
+SEED_DEPARTMENTS = [
+    {"code": "IT", "name": "IT Operations", "cost_center": "CC-101", "budget_annual": 500000.00},
+    {"code": "ENG", "name": "Engineering", "cost_center": "CC-102", "budget_annual": 750000.00},
+    {"code": "SEC", "name": "Facilities & Security", "cost_center": "CC-103", "budget_annual": 300000.00},
+    {"code": "OPS", "name": "Operations", "cost_center": "CC-104", "budget_annual": 450000.00},
+    {"code": "FIN", "name": "Finance & Accounting", "cost_center": "CC-105", "budget_annual": 250000.00},
+    {"code": "HR", "name": "Human Resources", "cost_center": "CC-106", "budget_annual": 200000.00},
+    {"code": "EXEC", "name": "Executive Administration", "cost_center": "CC-100", "budget_annual": 600000.00},
+]
+
 SEED_USERS = [
     {
         "full_name": "Employee",
         "email": "employee@assetmx.local",
         "employee_id": "EMP001",
         "role": UserRole.employee,
+        "department": "Engineering",
     },
     {
         "full_name": "Host",
         "email": "host@assetmx.local",
         "employee_id": "HST001",
         "role": UserRole.host,
+        "department": "Facilities & Security",
     },
     {
         "full_name": "Admin",
         "email": "admin@assetmx.local",
         "employee_id": "ADM001",
         "role": UserRole.admin,
+        "department": "Operations",
     },
     {
         "full_name": "Guard",
         "email": "guard@assetmx.local",
         "employee_id": "GRD001",
         "role": UserRole.guard,
+        "department": "Facilities & Security",
     },
     {
         "full_name": "SuperAdmin",
         "email": "superadmin@assetmx.local",
         "employee_id": "SAD001",
         "role": UserRole.superadmin,
+        "department": "Executive Administration",
+    },
+    {
+        "full_name": "Department Head",
+        "email": "depthead@assetmx.local",
+        "employee_id": "DHD001",
+        "role": UserRole.department_head,
+        "department": "Engineering",
+    },
+    {
+        "full_name": "Finance Officer",
+        "email": "finance@assetmx.local",
+        "employee_id": "FIN001",
+        "role": UserRole.finance,
+        "department": "Finance & Accounting",
     },
 ]
 
@@ -219,14 +249,28 @@ DEMO_ASSETS = [
 ]
 
 
-def seed_users(db: Session) -> None:
-    existing = db.scalar(select(User.id).limit(1))
-    if existing is not None:
-        return
+def seed_departments(db: Session) -> None:
+    for d in SEED_DEPARTMENTS:
+        existing = db.scalar(select(Department).where(Department.code == d["code"]))
+        if existing is None:
+            db.add(Department(**d, is_active=True))
+    db.commit()
 
+
+def seed_users(db: Session) -> None:
+    seed_departments(db)
     password_hash = hash_password(SEED_PASSWORD)
     for row in SEED_USERS:
-        db.add(User(**row, password_hash=password_hash, is_active=True))
+        user = db.scalar(select(User).where(User.email == row["email"]))
+        if user is None:
+            dept = db.scalar(select(Department).where(Department.name == row.get("department")))
+            dept_id = dept.id if dept else None
+            db.add(User(**row, department_id=dept_id, password_hash=password_hash, is_active=True))
+        elif user.department is None and row.get("department"):
+            user.department = row["department"]
+            dept = db.scalar(select(Department).where(Department.name == row["department"]))
+            if dept:
+                user.department_id = dept.id
     db.commit()
 
 

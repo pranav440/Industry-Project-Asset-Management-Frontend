@@ -57,6 +57,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           onNotificationsClick={onNotificationsClick}
           onHelpClick={onHelpClick}
           onProfileClick={onProfileClick}
+          onSignOut={onSignOut}
           searchPlaceholder={searchPlaceholder}
           role={role}
           userName={userName}

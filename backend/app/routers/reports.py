@@ -12,6 +12,9 @@ from app.models import (
     Asset,
     AssetMovement,
     AssetStatus,
+    Consumable,
+    ConsumableIssue,
+    Department,
     Maintenance,
     Request,
     RequestHistory,
@@ -275,6 +278,83 @@ def get_admin_reports(
                     ) if total_assets else 0.0
                 )
             },
+        },
+        "monthly_spend": (lambda: [
+            {"month": k, "spend": v}
+            for k, v in sorted({
+                m_key: round(
+                    sum(_as_float(a.total_cost) for a in filtered_assets if a.purchase_date and a.purchase_date.strftime("%Y-%m") == m_key) +
+                    sum(_as_float(m.maintenance_cost) for m in maintenance_records if m.service_date and m.service_date.strftime("%Y-%m") == m_key),
+                    2,
+                )
+                for m_key in {a.purchase_date.strftime("%Y-%m") for a in filtered_assets if a.purchase_date} |
+                             {m.service_date.strftime("%Y-%m") for m in maintenance_records if m.service_date}
+            }.items())
+        ])(),
+        "budget_utilized": [
+            {
+                "department": d.name,
+                "cost_center": d.cost_center,
+                "annual_budget": float(d.budget_annual or 0.0),
+                "actual_spend": round(sum(_as_float(a.total_cost) for a in filtered_assets if a.custodian and d.name.lower() in a.custodian.lower()), 2),
+                "utilization_percent": round(
+                    (sum(_as_float(a.total_cost) for a in filtered_assets if a.custodian and d.name.lower() in a.custodian.lower()) / float(d.budget_annual) * 100), 1
+                ) if d.budget_annual and float(d.budget_annual) > 0 else 0.0,
+            }
+            for d in db.scalars(select(Department)).all()
+        ],
+        "department_consumption": (lambda: {
+            dept_name: {
+                "total_units": sum(issue.quantity for issue in issues),
+                "issue_count": len(issues),
+            }
+            for dept_name, issues in (lambda all_issues: {
+                d: [i for i in all_issues if (lambda req: req.department if req else "Operations")(
+                    db.scalar(select(Request).where(Request.request_id == i.request_reference)) if i.request_reference else None
+                ) == d]
+                for d in {
+                    (lambda req: req.department if req else "Operations")(
+                        db.scalar(select(Request).where(Request.request_id == i.request_reference)) if i.request_reference else None
+                    )
+                    for i in all_issues
+                }
+            })(db.scalars(select(ConsumableIssue)).all()).items()
+        })(),
+        "recent_purchase_orders": sorted([
+            {
+                "po_number": a.invoice_reference or f"PO-{a.asset_id}",
+                "asset_id": a.asset_id,
+                "asset_name": a.name,
+                "vendor": a.vendor_name,
+                "purchase_date": a.purchase_date.strftime("%Y-%m-%d") if a.purchase_date else "",
+                "total_cost": _as_float(a.total_cost),
+                "status": "Delivered" if a.status == AssetStatus.active else str(a.status.value),
+            }
+            for a in filtered_assets if a.invoice_reference or a.vendor_name
+        ], key=lambda x: x["purchase_date"], reverse=True)[:15],
+        "procurement_registry": sorted([
+            {
+                "po_number": a.invoice_reference or f"PO-{a.asset_id}",
+                "supplier": a.vendor_name,
+                "item_name": a.name,
+                "category": a.category,
+                "cost": _as_float(a.total_cost),
+                "received_date": a.purchase_date.strftime("%Y-%m-%d") if a.purchase_date else "",
+            }
+            for a in filtered_assets
+        ], key=lambda x: x["received_date"], reverse=True)[:15],
+        "wastage": {
+            "expired_consumable_count": sum(1 for c in db.scalars(select(Consumable)).all() if c.expiry_date and c.expiry_date < date.today()),
+            "expired_items": [
+                {"consumable_id": c.consumable_id, "name": c.name, "category": c.category, "batch_id": c.batch_id, "available_stock": c.available_stock, "expiry_date": c.expiry_date.isoformat() if c.expiry_date else ""}
+                for c in db.scalars(select(Consumable)).all() if c.expiry_date and c.expiry_date < date.today()
+            ],
+            "disposed_asset_count": sum(1 for a in filtered_assets if a.status == AssetStatus.disposed),
+            "disposed_items": [
+                {"asset_id": a.asset_id, "name": a.name, "category": a.category, "total_cost": _as_float(a.total_cost)}
+                for a in filtered_assets if a.status == AssetStatus.disposed
+            ],
+            "estimated_loss_value": round(sum(_as_float(a.total_cost) for a in filtered_assets if a.status == AssetStatus.disposed), 2),
         },
         "unsupported": {
             "monthly_spend": None,

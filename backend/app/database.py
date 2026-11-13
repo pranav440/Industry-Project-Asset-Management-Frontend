@@ -85,6 +85,35 @@ def ensure_asset_valuation_schema() -> None:
         return
 
 
+def ensure_department_and_user_schema() -> None:
+    """Ensure department columns on users exist."""
+    if engine.dialect.name != "mysql":
+        return
+    inspector = inspect(engine)
+    if "users" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("users")}
+        statements: list[str] = []
+        if "department" not in columns:
+            statements.append("ALTER TABLE users ADD COLUMN department VARCHAR(120) NULL")
+        if "department_id" not in columns:
+            statements.append("ALTER TABLE users ADD COLUMN department_id INT NULL")
+        if statements:
+            with engine.begin() as connection:
+                for statement in statements:
+                    connection.execute(text(statement))
+
+
+def ensure_notification_schema() -> None:
+    """Ensure notifications table is created on MySQL if missing."""
+    if engine.dialect.name != "mysql":
+        return
+    inspector = inspect(engine)
+    if "notifications" not in inspector.get_table_names():
+        from app.models import Notification
+        Notification.__table__.create(bind=engine, checkfirst=True)
+
+
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 

@@ -7,6 +7,9 @@ export type AuthUser = {
   email: string;
   employee_id: string;
   role: UserRole;
+  department?: string | null;
+  department_id?: number | null;
+  is_active?: boolean;
 };
 
 const TOKEN_KEY = 'assetmx_token';

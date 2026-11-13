@@ -11,6 +11,8 @@ from app.database import (
     engine,
     ensure_consumable_audit_schema,
     ensure_asset_valuation_schema,
+    ensure_department_and_user_schema,
+    ensure_notification_schema,
     ensure_request_attachment_schema,
     ensure_request_metadata_schema,
 )
@@ -18,9 +20,12 @@ from app.routers import assets
 from app.routers import auth
 from app.routers import consumables
 from app.routers import dashboard
+from app.routers import departments
 from app.routers import gate_passes
+from app.routers import notifications
 from app.routers import reports
 from app.routers import requests
+from app.routers import superadmin
 from app.seed import seed_demo_assets, seed_development_demo_data, seed_users
 
 
@@ -31,6 +36,8 @@ async def lifespan(_app: FastAPI):
     ensure_request_metadata_schema()
     ensure_request_attachment_schema()
     ensure_asset_valuation_schema()
+    ensure_department_and_user_schema()
+    ensure_notification_schema()
     db = SessionLocal()
     try:
         seed_users(db)
@@ -57,7 +64,10 @@ app.include_router(consumables.router)
 app.include_router(requests.router)
 app.include_router(gate_passes.router)
 app.include_router(dashboard.router)
+app.include_router(departments.router)
+app.include_router(notifications.router)
 app.include_router(reports.router)
+app.include_router(superadmin.router)
 
 
 @app.get("/api/health")
