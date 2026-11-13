@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
+import { getUser } from '../auth/session';
 import {
   getHostMovements,
   getHostDashboard,
@@ -515,10 +516,13 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
     return 'info';
   };
 
+  const currentRole = getUser()?.role ?? 'host';
+  const isHost = currentRole === 'host';
+
   return (
     <DashboardLayout
       currentNav="movement"
-      role="host"
+      role={currentRole}
       onNavigate={handleNav}
       onSignOut={onSignOut}
     >
@@ -540,7 +544,7 @@ export const HostMovementActivityPage: React.FC<HostMovementActivityPageProps> =
               className="amx-hma-breadcrumb-link"
               onClick={() => handleNav('dashboard')}
             >
-              Host Dashboard
+              {isHost ? 'Host Dashboard' : 'Dashboard'}
             </span>
             <span className="material-symbols-outlined amx-hma-breadcrumb-sep">
               chevron_right

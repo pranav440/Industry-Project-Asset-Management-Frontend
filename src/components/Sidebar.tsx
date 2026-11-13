@@ -20,6 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isEmployee = activeRole === 'employee';
   const isHost = activeRole === 'host';
   const isGuard = activeRole === 'guard';
+  const isSuperAdmin = activeRole === 'superadmin';
 
   const adminNavItems = [
     { label: 'Dashboard', path: 'dashboard', icon: 'dashboard', fill: true },
@@ -55,12 +56,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { label: 'Security Incidents', path: 'security-incidents', icon: 'report_problem' },
   ];
 
+  const superadminNavItems = [
+    { label: 'Platform Analytics', path: 'superadmin/analytics', icon: 'analytics', fill: true },
+    { label: 'User & Role Management', path: 'superadmin/users', icon: 'manage_accounts' },
+    { label: 'Audit & Logs', path: 'superadmin/audit-logs', icon: 'policy' },
+    { label: 'System Configuration', path: 'superadmin/config', icon: 'settings' },
+  ];
+
   const navItems = isEmployee
     ? employeeNavItems
     : isHost
     ? hostNavItems
     : isGuard
     ? guardNavItems
+    : isSuperAdmin
+    ? superadminNavItems
     : adminNavItems;
 
   const handleNavClick = (e: React.MouseEvent, path: string) => {
@@ -82,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Brand Header */}
       <div className="amx-sidebar-brand">
         <span className="material-symbols-outlined amx-brand-logo-icon" aria-hidden="true">
-          {isEmployee ? 'inventory_2' : isGuard ? 'security' : 'dataset'}
+          {isEmployee ? 'inventory_2' : isGuard ? 'security' : isSuperAdmin ? 'admin_panel_settings' : 'dataset'}
         </span>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -123,14 +133,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 GUARD
               </span>
             )}
+            {isSuperAdmin && (
+              <span
+                className="amx-superadmin-badge"
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  letterSpacing: '0.06em',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
+                  backgroundColor: 'rgba(99, 102, 241, 0.16)',
+                  color: '#818cf8',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  lineHeight: 1.2,
+                }}
+              >
+                SUPERADMIN
+              </span>
+            )}
           </div>
           <p className="amx-brand-subtitle">
-            {isEmployee ? 'Employee Portal' : isGuard ? 'Checkpoint Security' : 'Enterprise Management'}
+            {isEmployee ? 'Employee Portal' : isGuard ? 'Checkpoint Security' : isSuperAdmin ? 'Gov Core' : 'Enterprise Management'}
           </p>
         </div>
       </div>
 
-      {/* Action CTA for Admin or Section Label for Host / Guard / Employee */}
+      {/* Action CTA for Admin or Section Label for Host / Guard / Employee / SuperAdmin */}
       {isHost ? (
         <div className="amx-sidebar-section-header" style={{ padding: '6px 24px 10px 24px' }}>
           <span
@@ -157,6 +185,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
           >
             Checkpoint Operations
+          </span>
+        </div>
+      ) : isSuperAdmin ? (
+        <div className="amx-sidebar-section-header" style={{ padding: '6px 24px 10px 24px' }}>
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: 'var(--amx-dash-navy-muted, #8b95ad)',
+            }}
+          >
+            Administration
           </span>
         </div>
       ) : !isEmployee ? (
@@ -307,7 +349,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               v2.4.12-ent
             </span>
           </div>
-        ) : isHost && (
+        ) : isHost ? (
           <div
             className="amx-sidebar-host-version"
             style={{
@@ -333,7 +375,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title="Perimeter Node Synchronized"
             />
           </div>
-        )}
+        ) : isSuperAdmin ? (
+          <div
+            className="amx-sidebar-superadmin-version"
+            style={{
+              padding: '12px 24px 8px 24px',
+              borderTop: '1px solid rgba(139, 149, 173, 0.15)',
+              marginTop: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: '#818cf8',
+                  display: 'inline-block',
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: 'JetBrains Mono, monospace',
+                  fontSize: '11px',
+                  color: 'var(--amx-dash-navy-muted, #8b95ad)',
+                }}
+              >
+                SuperAdmin Governance
+              </span>
+            </div>
+            <span
+              style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: '10px',
+                color: 'rgba(139, 149, 173, 0.7)',
+                paddingLeft: '12px',
+              }}
+            >
+              v2.4.12-gov
+            </span>
+          </div>
+        ) : null}
       </div>
     </nav>
   );

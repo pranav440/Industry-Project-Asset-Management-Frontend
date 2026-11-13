@@ -86,6 +86,19 @@ const mockDashboardData: guardDashboardApi.GuardDashboardApiResponse = {
       action: 'flagged',
       flagReason: 'Serial mismatch at checkpoint',
     },
+    {
+      id: 'GP-2026-0104',
+      requesterName: 'Sarah Jenkins',
+      requesterBadge: 'Operations',
+      department: 'Operations',
+      assetName: 'Zebra TC21 Scanner',
+      serialNumber: 'ZBR-5541',
+      type: 'Outbound',
+      status: 'Cleared',
+      action: 'cleared',
+      carrier: 'DHL Express',
+      destination: 'Regional Logistics Center',
+    },
   ],
   recentActivity: [
     {
@@ -295,5 +308,38 @@ describe('GuardDashboardPage', () => {
     });
 
     expect(guardDashboardApi.fetchGuardDashboard).toHaveBeenCalledTimes(2);
+  });
+
+  it('displays correct action labels: Verify for pending, Flagged for flagged, and Cleared for completed passes', async () => {
+    vi.mocked(guardDashboardApi.fetchGuardDashboard).mockResolvedValue(mockDashboardData);
+
+    render(<GuardDashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('GP-2026-0101').length).toBeGreaterThan(0);
+    });
+
+    // 1. Eligible pending passes display "Verify" button
+    const verifyButtons = screen.getAllByRole('button', { name: 'Verify' });
+    expect(verifyButtons.length).toBe(2);
+
+    // 2. Flagged pass displays "Flagged" label with alert styling
+    const flaggedLabels = screen.getAllByText('Flagged');
+    const flaggedActionPill = flaggedLabels.find((el) => el.closest('.amx-guard-action-onhold'));
+    expect(flaggedActionPill).toBeDefined();
+
+    // 3. Completed pass displays "Cleared" label with success styling
+    const clearedLabels = screen.getAllByText('Cleared');
+    const clearedActionPill = clearedLabels.find((el) => el.closest('.amx-guard-action-completed'));
+    expect(clearedActionPill).toBeDefined();
+
+    // 4. Old labels "On Hold" and "Completed" are NOT displayed in action cells
+    expect(screen.queryByText('On Hold')).toBeNull();
+    const actionCells = document.querySelectorAll('.amx-guard-table td:last-child');
+    expect(actionCells.length).toBe(4);
+    actionCells.forEach((cell) => {
+      expect(cell.textContent).not.toContain('On Hold');
+      expect(cell.textContent).not.toContain('Completed');
+    });
   });
 });

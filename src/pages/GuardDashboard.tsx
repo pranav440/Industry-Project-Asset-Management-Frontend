@@ -440,7 +440,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
               <div className="amx-guard-card-title-group">
                 <h2 className="amx-guard-card-title">Gate Verification Queue</h2>
                 <span className="amx-guard-count-badge">
-                  {pendingActionableCount} Pending Verification{onHoldCount > 0 ? ` • ${onHoldCount} On Hold` : ''}
+                  {pendingActionableCount} Pending Verification{onHoldCount > 0 ? ` • ${onHoldCount} Flagged` : ''}
                 </span>
               </div>
               <div className="amx-guard-search-wrap">
@@ -556,7 +556,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
                                 <span className="material-symbols-outlined text-[13px] text-[#ba1a1a]">
                                   lock
                                 </span>
-                                On Hold
+                                Flagged
                               </span>
                             )}
                             {item.action === 'cleared' && (
@@ -564,7 +564,7 @@ export const GuardDashboardPage: React.FC<GuardDashboardPageProps> = ({
                                 <span className="material-symbols-outlined text-[14px] text-[#00687a]">
                                   check_circle
                                 </span>
-                                Completed
+                                Cleared
                               </span>
                             )}
                           </td>
