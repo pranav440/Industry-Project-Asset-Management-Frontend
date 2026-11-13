@@ -408,6 +408,34 @@ def export_audit_logs(
     )
 
 
+@router.get("/audit-logs/{log_id}", response_model=AuditLogListItem)
+def get_audit_log(
+    log_id: int,
+    _superadmin: User = Depends(require_superadmin),
+    db: Session = Depends(get_db),
+) -> AuditLogListItem:
+    log = db.get(AuditLog, log_id)
+    if log is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Audit log with ID {log_id} not found",
+        )
+    return AuditLogListItem(
+        id=log.id,
+        action=log.action,
+        asset_identifier=log.asset_identifier,
+        consumable_identifier=log.consumable_identifier,
+        request_identifier=log.request_identifier,
+        gate_pass_identifier=log.gate_pass_identifier,
+        actor_user_id=log.actor_user_id,
+        occurred_at=log.occurred_at,
+        before_state=log.before_state,
+        after_state=log.after_state,
+        movement_id=log.movement_id,
+        metadata=log.metadata_json if isinstance(log.metadata_json, dict) else None,
+    )
+
+
 # ── System Configuration (SA-03) ─────────────────────────────────────────
 
 @router.get("/config", response_model=SystemConfigResponse)

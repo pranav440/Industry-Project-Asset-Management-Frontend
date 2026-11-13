@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.email_service import EmailDeliveryError, send_password_reset_email
-from app.models import PasswordResetToken, User, UserRole
-from app.schemas import LoginRequest, LoginResponse, PasswordResetConfirm, PasswordResetRequest, UserOut
+from app.models import AuditLog, PasswordResetToken, User, UserRole
+from app.schemas import LoginRequest, LoginResponse, PasswordResetConfirm, PasswordResetRequest, UserOut, UserProfileUpdate
 from app.security import create_access_token, hash_password, verify_password
 from app.config import settings
 
@@ -64,6 +64,32 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse:
 
 @router.get("/me", response_model=UserOut)
 def me(current: User = Depends(get_current_user)) -> User:
+    return current
+
+
+@router.put("/me", response_model=UserOut)
+def update_profile(
+    body: UserProfileUpdate,
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    before_state = {"full_name": current.full_name, "department": current.department}
+    if body.full_name is not None and body.full_name.strip():
+        current.full_name = body.full_name.strip()
+    if body.department is not None:
+        current.department = body.department.strip() or None
+
+    audit = AuditLog(
+        actor_user_id=current.id,
+        action="user_profile_updated",
+        occurred_at=datetime.now(timezone.utc),
+        before_state=before_state,
+        after_state={"full_name": current.full_name, "department": current.department},
+        metadata_json={"user_id": current.id, "email": current.email},
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(current)
     return current
 
 

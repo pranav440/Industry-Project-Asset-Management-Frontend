@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getUser, clearSession, type UserRole } from '../auth/session';
+import { getUser, clearSession, type UserRole, type AuthUser } from '../auth/session';
+import { updateCurrentUserProfile } from '../api/auth';
 
 interface HeaderProps {
   onSearch?: (query: string) => void;
@@ -28,8 +29,14 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [internalVal, setInternalVal] = useState(searchValue ?? '');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDept, setEditDept] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
-  const currentUser = getUser();
+  const [userState, setUserState] = useState<AuthUser | null>(getUser());
+  const currentUser = userState;
   const resolvedRole = role ?? currentUser?.role ?? 'admin';
   const resolvedName = userName ?? (
     resolvedRole === 'employee'
@@ -38,7 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
       ? (currentUser?.full_name || 'Sarah Jenkins')
       : resolvedRole === 'guard'
       ? (currentUser?.full_name || 'Marcus Vance')
-      : currentUser?.full_name
+      : (currentUser?.full_name || 'Platform Administrator')
   );
   const resolvedSubtitle = userRoleSubtitle ?? (
     resolvedRole === 'employee'
@@ -104,6 +111,44 @@ export const Header: React.FC<HeaderProps> = ({
     } else {
       clearSession();
       window.location.href = '/login';
+    }
+  };
+
+  const handleStartEdit = () => {
+    setEditName(currentUser?.full_name || '');
+    setEditDept(currentUser?.department || '');
+    setProfileFeedback(null);
+    setIsEditingProfile(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingProfile(false);
+    setProfileFeedback(null);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) {
+      setProfileFeedback({ type: 'error', msg: 'Full name cannot be blank.' });
+      return;
+    }
+    setProfileSaving(true);
+    setProfileFeedback(null);
+    try {
+      const updated = await updateCurrentUserProfile({
+        full_name: editName.trim(),
+        department: editDept.trim() || undefined,
+      });
+      setUserState(updated);
+      setIsEditingProfile(false);
+      setProfileFeedback({ type: 'success', msg: 'Profile updated successfully!' });
+    } catch (err) {
+      setProfileFeedback({
+        type: 'error',
+        msg: err instanceof Error ? err.message : 'Failed to update profile',
+      });
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -275,49 +320,177 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
 
-              {/* Department & Role Pills */}
-              <div
-                style={{
-                  padding: '10px 12px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '6px',
-                  border: '1px solid #e2e8f0',
-                  fontSize: '12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#64748b', fontWeight: 500 }}>System Role:</span>
-                  <span
-                    style={{
-                      textTransform: 'uppercase',
-                      fontWeight: 800,
-                      fontSize: '10px',
-                      letterSpacing: '0.05em',
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      backgroundColor: resolvedRole === 'superadmin' ? '#e0e7ff' : '#dae2fd',
-                      color: resolvedRole === 'superadmin' ? '#4338ca' : '#131b2e',
-                    }}
-                  >
-                    {resolvedRole}
-                  </span>
+              {/* Feedback Alert */}
+              {profileFeedback && (
+                <div
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    backgroundColor: profileFeedback.type === 'success' ? '#dcfce7' : '#fee2e2',
+                    color: profileFeedback.type === 'success' ? '#166534' : '#991b1b',
+                    border: `1px solid ${profileFeedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
+                  }}
+                >
+                  {profileFeedback.msg}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b', fontWeight: 500 }}>Employee ID:</span>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: '#334155' }}>
-                    {currentUser?.employee_id || (resolvedRole === 'superadmin' ? 'SAD001' : 'EMP-2026')}
-                  </span>
+              )}
+
+              {isEditingProfile ? (
+                /* Inline Edit Profile Form */
+                <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: '3px' }}>
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      required
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        fontSize: '13px',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '4px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: '3px' }}>
+                      Department
+                    </label>
+                    <input
+                      type="text"
+                      value={editDept}
+                      onChange={(e) => setEditDept(e.target.value)}
+                      placeholder="e.g. Operations, Engineering"
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        fontSize: '13px',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '4px',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <button
+                      type="submit"
+                      disabled={profileSaving}
+                      style={{
+                        flex: 1,
+                        padding: '7px 12px',
+                        backgroundColor: '#2563eb',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontWeight: 600,
+                        fontSize: '12px',
+                        cursor: profileSaving ? 'not-allowed' : 'pointer',
+                        opacity: profileSaving ? 0.7 : 1,
+                      }}
+                    >
+                      {profileSaving ? 'Saving...' : 'Save Profile'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      disabled={profileSaving}
+                      style={{
+                        padding: '7px 12px',
+                        backgroundColor: '#f1f5f9',
+                        color: '#475569',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '4px',
+                        fontWeight: 500,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* Department & Role Pills */
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '6px',
+                    border: '1px solid #e2e8f0',
+                    fontSize: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#64748b', fontWeight: 500 }}>System Role:</span>
+                    <span
+                      style={{
+                        textTransform: 'uppercase',
+                        fontWeight: 800,
+                        fontSize: '10px',
+                        letterSpacing: '0.05em',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        backgroundColor: resolvedRole === 'superadmin' ? '#e0e7ff' : '#dae2fd',
+                        color: resolvedRole === 'superadmin' ? '#4338ca' : '#131b2e',
+                      }}
+                    >
+                      {resolvedRole}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b', fontWeight: 500 }}>Employee ID:</span>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: '#334155' }}>
+                      {currentUser?.employee_id || (resolvedRole === 'superadmin' ? 'SAD001' : 'EMP-2026')}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b', fontWeight: 500 }}>Department:</span>
+                    <span style={{ color: '#334155', fontWeight: 600 }}>
+                      {currentUser?.department || (resolvedRole === 'guard' ? 'Facilities & Security' : 'Operations')}
+                    </span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b', fontWeight: 500 }}>Department:</span>
-                  <span style={{ color: '#334155', fontWeight: 600 }}>
-                    {currentUser?.department || (resolvedRole === 'guard' ? 'Facilities & Security' : 'Operations')}
+              )}
+
+              {/* Edit Profile Action */}
+              {!isEditingProfile && (
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '7px 10px',
+                    backgroundColor: '#f1f5f9',
+                    color: '#1e293b',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#e2e8f0'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                    edit
                   </span>
-                </div>
-              </div>
+                  <span>Edit Profile</span>
+                </button>
+              )}
 
               {/* Account Setting Notice */}
               <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', lineHeight: 1.3 }}>

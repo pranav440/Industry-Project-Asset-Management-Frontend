@@ -320,6 +320,16 @@ export async function fetchAuditEventById(id: number): Promise<AuditLogListItem 
   if (cached) return cached;
 
   try {
+    const item = await request<AuditLogListItem>(`/api/superadmin/audit-logs/${encodeURIComponent(id)}`, { method: 'GET' });
+    if (item && item.id) {
+      setCachedAuditEvent(item);
+      return item;
+    }
+  } catch {
+    // Fallback if direct ID route is unavailable or cached elsewhere
+  }
+
+  try {
     // Attempt to locate via search query or large initial page
     const listRes = await listAuditLogs({ search: String(id), page: 1, page_size: 100 });
     const directMatch = listRes.items.find((item) => item.id === id);

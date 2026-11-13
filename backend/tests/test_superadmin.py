@@ -167,6 +167,41 @@ def test_superadmin_audit_logs_and_export():
     assert export_resp.headers["content-type"].startswith("text/csv")
     assert "system.startup" in export_resp.text
 
+    # Query audit log by ID
+    first_id = audits["items"][0]["id"]
+    single_resp = client.get(f"/api/superadmin/audit-logs/{first_id}", headers=headers)
+    assert single_resp.status_code == 200
+    assert single_resp.json()["id"] == first_id
+
+    # Verify 404 for non-existent log ID
+    missing_resp = client.get("/api/superadmin/audit-logs/999999", headers=headers)
+    assert missing_resp.status_code == 404
+
+
+def test_user_profile_update():
+    client, _, _ = make_superadmin_test_setup()
+
+    login_resp = client.post(
+        "/api/auth/login",
+        json={"role": "superadmin", "identifier": "superadmin.master@assetmx.local", "password": "SuperSecret@123"},
+    )
+    token = login_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    update_resp = client.put(
+        "/api/auth/me",
+        headers=headers,
+        json={"full_name": "SuperAdmin Executive", "department": "Executive Leadership"},
+    )
+    assert update_resp.status_code == 200
+    user_data = update_resp.json()
+    assert user_data["full_name"] == "SuperAdmin Executive"
+    assert user_data["department"] == "Executive Leadership"
+
+    me_resp = client.get("/api/auth/me", headers=headers)
+    assert me_resp.status_code == 200
+    assert me_resp.json()["full_name"] == "SuperAdmin Executive"
+
 
 def test_superadmin_system_config():
     client, _, _ = make_superadmin_test_setup()

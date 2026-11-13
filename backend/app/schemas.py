@@ -38,6 +38,11 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UserProfileUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=2, max_length=120)
+    department: str | None = Field(default=None, max_length=120)
+
+
 class DepartmentCreate(BaseModel):
     code: str = Field(min_length=2, max_length=32)
     name: str = Field(min_length=2, max_length=120)
