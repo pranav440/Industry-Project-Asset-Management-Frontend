@@ -5,7 +5,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-Role = Literal["employee", "host", "admin", "guard", "superadmin"]
+Role = Literal[
+    "employee",
+    "host",
+    "admin",
+    "guard",
+    "superadmin",
+    "department_head",
+    "finance",
+    "procurement",
+    "maintenance_vendor",
+]
 
 
 class LoginRequest(BaseModel):
@@ -21,8 +31,55 @@ class UserOut(BaseModel):
     email: str
     employee_id: str
     role: Role
+    department: str | None = None
+    department_id: int | None = None
+    is_active: bool = True
 
     model_config = {"from_attributes": True}
+
+
+class DepartmentCreate(BaseModel):
+    code: str = Field(min_length=2, max_length=32)
+    name: str = Field(min_length=2, max_length=120)
+    cost_center: str | None = Field(default=None, max_length=64)
+    budget_annual: decimal.Decimal | None = None
+
+
+class DepartmentUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    cost_center: str | None = Field(default=None, max_length=64)
+    budget_annual: decimal.Decimal | None = None
+    is_active: bool | None = None
+
+
+class DepartmentOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    cost_center: str | None = None
+    budget_annual: decimal.Decimal | None = None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DepartmentListResponse(BaseModel):
+    items: list[DepartmentOut]
+    total: int
+
+
+class AssetBulkUploadRowError(BaseModel):
+    row: int
+    error: str
+
+
+class AssetBulkUploadResponse(BaseModel):
+    total_rows: int
+    successful_count: int
+    failed_count: int
+    created_assets: list[Any] = []
+    errors: list[AssetBulkUploadRowError] = []
 
 
 class LoginResponse(BaseModel):
@@ -160,13 +217,13 @@ class AssetMovementOut(BaseModel):
 class AuditLogOut(BaseModel):
     id: int
     action: str
-    asset_identifier: str
+    asset_identifier: str | None = None
     actor_user_id: int
     occurred_at: datetime
-    before_state: dict[str, Any] | None
-    after_state: dict[str, Any] | None
-    movement_id: str | None
-    metadata: dict[str, Any] | None
+    before_state: dict[str, Any] | None = None
+    after_state: dict[str, Any] | None = None
+    movement_id: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 RequestTypeValue = Literal["Asset Request", "Consumable Request"]
@@ -1388,6 +1445,131 @@ class AdminDashboardResponse(BaseModel):
     recent_pos: list[dict[str, Any]] | None = None
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+# SuperAdmin Schemas
+class SuperAdminUserCreate(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    email: str = Field(min_length=5, max_length=255)
+    employee_id: str = Field(min_length=2, max_length=64)
+    role: Role
+    department: str | None = Field(default=None, max_length=120)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class SuperAdminUserUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=2, max_length=120)
+    email: str | None = Field(default=None, min_length=5, max_length=255)
+    role: Role | None = None
+    department: str | None = Field(default=None, max_length=120)
+    is_active: bool | None = None
+
+
+class SuperAdminUserStatusUpdate(BaseModel):
+    is_active: bool
+
+
+class SuperAdminPasswordReset(BaseModel):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class SuperAdminUserListResponse(BaseModel):
+    items: list[UserOut]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class AuditLogListItem(BaseModel):
+    id: int
+    action: str
+    asset_identifier: str | None = None
+    consumable_identifier: str | None = None
+    request_identifier: str | None = None
+    gate_pass_identifier: str | None = None
+    actor_user_id: int
+    occurred_at: datetime
+    before_state: dict[str, Any] | None = None
+    after_state: dict[str, Any] | None = None
+    movement_id: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class AuditLogListResponse(BaseModel):
+    items: list[AuditLogListItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class SystemConfigItem(BaseModel):
+    key: str
+    value: Any
+    category: str
+    description: str | None = None
+
+
+class SystemConfigResponse(BaseModel):
+    configs: list[SystemConfigItem]
+
+
+class SystemConfigUpdate(BaseModel):
+    configs: list[dict[str, Any]]
+
+
+class SuperAdminAnalyticsResponse(BaseModel):
+    total_users: int
+    active_users: int
+    users_by_role: dict[str, int]
+    total_assets: int
+    assets_in_service: int
+    total_consumables: int
+    low_stock_consumables: int
+    total_requests: int
+    open_requests: int
+    fulfilled_requests: int
+    fulfillment_rate_percent: float
+    average_approval_cycle_hours: float
+    total_gate_passes: int
+    active_gate_passes: int
+    overdue_gate_passes: int
+    total_audit_events: int
+
+
+class NotificationOut(BaseModel):
+    id: int
+    notification_id: str
+    user_id: int | None = None
+    recipient_email: str | None = None
+    target_role: str | None = None
+    target_department: str | None = None
+    title: str
+    message: str
+    category: str
+    priority: str
+    link: str | None = None
+    is_read: bool
+    read_at: datetime | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationListResponse(BaseModel):
+    items: list[NotificationOut]
+    total: int
+    unread_count: int
+
+
+class AlertEvaluationResult(BaseModel):
+    overdue_gate_passes_escalated: int
+    low_stock_alerts_generated: int
+    maintenance_alerts_generated: int
+    total_notifications_created: int
+
+
 
 
 

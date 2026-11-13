@@ -1,17 +1,20 @@
 import base64
+import csv
 import decimal
 import io
 import re
 import uuid
-from datetime import datetime, time
+from datetime import date as dt_date, datetime, time
+from typing import Any
 
+import openpyxl
 import qrcode
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_admin, require_authenticated_user
+from app.deps import require_admin, require_admin_or_superadmin, require_authenticated_user
 from app.models import (
     Asset,
     AssetMovement,
@@ -26,6 +29,8 @@ from app.models import (
     UserRole,
 )
 from app.schemas import (
+    AssetBulkUploadResponse,
+    AssetBulkUploadRowError,
     AssetCreate,
     AssetListResponse,
     AssetMovementOut,
@@ -471,6 +476,162 @@ def create_asset(body: AssetCreate, _admin: User = Depends(require_admin), db: S
     db.commit()
     db.refresh(asset)
     return _to_response(asset)
+
+
+@router.post("/bulk", response_model=AssetBulkUploadResponse, status_code=status.HTTP_201_CREATED)
+async def bulk_upload_assets(
+    file: UploadFile = File(...),
+    _admin: User = Depends(require_admin_or_superadmin),
+    db: Session = Depends(get_db),
+) -> AssetBulkUploadResponse:
+    if not file.filename:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file provided")
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file uploaded")
+
+    filename = file.filename.lower()
+    raw_rows: list[dict[str, Any]] = []
+
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+            sheet = wb.active
+            rows_iter = sheet.iter_rows(values_only=True)
+            header_row = next(rows_iter, None)
+            if not header_row:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel sheet has no header row")
+            headers = [str(c).strip().lower().replace(" ", "_") if c is not None else f"col_{idx}" for idx, c in enumerate(header_row)]
+            for r_idx, r_values in enumerate(rows_iter, start=2):
+                if not any(v is not None and str(v).strip() for v in r_values):
+                    continue
+                row_dict = {headers[c_idx]: r_values[c_idx] for c_idx in range(min(len(headers), len(r_values)))}
+                row_dict["_row_number"] = r_idx
+                raw_rows.append(row_dict)
+        except Exception as exc:
+            if isinstance(exc, HTTPException):
+                raise exc
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Failed to parse Excel file: {str(exc)}") from exc
+    elif filename.endswith(".csv"):
+        try:
+            text_stream = io.StringIO(contents.decode("utf-8", errors="replace"))
+            reader = csv.DictReader(text_stream)
+            for r_idx, r_dict in enumerate(reader, start=2):
+                normalized = {k.strip().lower().replace(" ", "_"): v for k, v in r_dict.items() if k}
+                normalized["_row_number"] = r_idx
+                raw_rows.append(normalized)
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Failed to parse CSV file: {str(exc)}") from exc
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file format. Please upload .xlsx or .csv")
+
+    if not raw_rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No data rows found in uploaded file")
+
+    created_assets: list[Asset] = []
+    errors: list[AssetBulkUploadRowError] = []
+
+    def _get_val(row: dict[str, Any], *keys: str) -> str | None:
+        for k in keys:
+            normalized_k = k.lower().replace(" ", "_")
+            if normalized_k in row and row[normalized_k] is not None:
+                val = str(row[normalized_k]).strip()
+                if val:
+                    return val
+        return None
+
+    for row in raw_rows:
+        r_num = row.get("_row_number", 0)
+        name = _get_val(row, "name", "asset_name", "item_name", "title")
+        category = _get_val(row, "category", "asset_category", "type")
+        location = _get_val(row, "location", "site", "office", "facility")
+        custodian = _get_val(row, "custodian", "assigned_to", "owner", "user")
+
+        if not name:
+            errors.append(AssetBulkUploadRowError(row=r_num, error="Missing required field: Asset Name"))
+            continue
+        if not category:
+            errors.append(AssetBulkUploadRowError(row=r_num, error="Missing required field: Category"))
+            continue
+        if not location:
+            errors.append(AssetBulkUploadRowError(row=r_num, error="Missing required field: Location"))
+            continue
+        if not custodian:
+            errors.append(AssetBulkUploadRowError(row=r_num, error="Missing required field: Custodian"))
+            continue
+
+        specification = _get_val(row, "specification", "spec", "specs", "subcategory", "description")
+        serial_number = _get_val(row, "serial_number", "serial_no", "serial", "sn")
+        vendor_name = _get_val(row, "vendor_name", "vendor", "supplier") or "Direct Vendor"
+        total_cost = _get_val(row, "total_cost", "cost", "price", "amount") or "0.00"
+        warranty_period = _get_val(row, "warranty_period", "warranty", "warranty_end") or "12 Months"
+        invoice_reference = _get_val(row, "invoice_reference", "invoice_no", "invoice", "po_number", "po")
+        depreciation = _get_val(row, "depreciation", "depreciation_method", "rate")
+
+        raw_pdate = row.get("purchase_date") or row.get("purchased_on") or row.get("date")
+        parsed_pdate = None
+        if isinstance(raw_pdate, datetime):
+            parsed_pdate = raw_pdate
+        elif isinstance(raw_pdate, dt_date):
+            parsed_pdate = datetime.combine(raw_pdate, time.min)
+        elif raw_pdate:
+            try:
+                parsed_pdate = datetime.strptime(str(raw_pdate).strip()[:10], "%Y-%m-%d")
+            except ValueError:
+                try:
+                    parsed_pdate = datetime.strptime(str(raw_pdate).strip()[:10], "%d-%m-%Y")
+                except ValueError:
+                    parsed_pdate = datetime.now()
+        else:
+            parsed_pdate = datetime.now()
+
+        asset_id = _asset_id(db)
+        qr_value = f"assetmx:{asset_id}:{uuid.uuid4().hex}"
+        qr_data_url = _qr_data_url(qr_value)
+
+        new_asset = Asset(
+            asset_id=asset_id,
+            name=name,
+            category=category,
+            specification=specification,
+            serial_number=serial_number,
+            location=location,
+            custodian=custodian,
+            purchase_date=parsed_pdate,
+            vendor_name=vendor_name,
+            total_cost=total_cost,
+            warranty_period=warranty_period,
+            invoice_reference=invoice_reference,
+            depreciation=depreciation,
+            allocation_date=parsed_pdate,
+            status=AssetStatus.active,
+            qr_code_value=qr_value,
+            qr_code_data_url=qr_data_url,
+        )
+        db.add(new_asset)
+        created_assets.append(new_asset)
+
+    if created_assets:
+        db.commit()
+        for a in created_assets:
+            db.refresh(a)
+        audit = AuditLog(
+            action="asset.bulk_upload",
+            asset_identifier=created_assets[0].asset_id if created_assets else "BULK-UPLOAD",
+            actor_user_id=_admin.id,
+            metadata_json=f'{{"total": {len(raw_rows)}, "created": {len(created_assets)}, "errors": {len(errors)}}}',
+        )
+        db.add(audit)
+        db.commit()
+
+    return AssetBulkUploadResponse(
+        total_rows=len(raw_rows),
+        successful_count=len(created_assets),
+        failed_count=len(errors),
+        created_assets=[_to_response(a) for a in created_assets],
+        errors=errors,
+    )
 
 
 @router.put("/{asset_id}", response_model=AssetOut)

@@ -14,6 +14,29 @@ class UserRole(str, enum.Enum):
     admin = "admin"
     guard = "guard"
     superadmin = "superadmin"
+    department_head = "department_head"
+    finance = "finance"
+    procurement = "procurement"
+    maintenance_vendor = "maintenance_vendor"
+
+
+class Department(Base):
+    __tablename__ = "departments"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_departments_code"),
+        UniqueConstraint("name", name="uq_departments_name"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(32), index=True)
+    name: Mapped[str] = mapped_column(String(120), index=True)
+    cost_center: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    budget_annual: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
 
 
 class User(Base):
@@ -29,6 +52,8 @@ class User(Base):
     employee_id: Mapped[str] = mapped_column(String(64))
     password_hash: Mapped[str] = mapped_column(String(72))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, native_enum=False, length=32))
+    department: Mapped[str | None] = mapped_column(String(120), nullable=True, default=None)
+    department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"), nullable=True, default=None)
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -333,7 +358,7 @@ class AuditLog(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     action: Mapped[str] = mapped_column(String(120), index=True)
     asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), index=True, nullable=True)
-    asset_identifier: Mapped[str] = mapped_column(String(64), index=True)
+    asset_identifier: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True, default=None)
     consumable_id: Mapped[int | None] = mapped_column(ForeignKey("consumables.id"), index=True, nullable=True)
     consumable_identifier: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     request_id: Mapped[int | None] = mapped_column(ForeignKey("requests.id"), index=True, nullable=True)
@@ -487,3 +512,30 @@ class AssetValuation(Base):
         server_default=func.now(),
         index=True,
     )
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        UniqueConstraint("notification_id", name="uq_notifications_notification_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    notification_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
+    recipient_email: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
+    target_role: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    target_department: Mapped[str | None] = mapped_column(String(160), index=True, nullable=True)
+    title: Mapped[str] = mapped_column(String(255))
+    message: Mapped[str] = mapped_column(Text)
+    category: Mapped[str] = mapped_column(String(64), default="general")
+    priority: Mapped[str] = mapped_column(String(32), default="normal")
+    link: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_read: Mapped[bool] = mapped_column(default=False, index=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+

@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.deps import require_admin, require_authenticated_user
-from app.models import AuditLog, Request, RequestAttachment, RequestHistory, RequestPriority, RequestStatus, RequestType, User, UserRole
+from app.models import AuditLog, Notification, Request, RequestAttachment, RequestHistory, RequestPriority, RequestStatus, RequestType, User, UserRole
 from app.schemas import (
     EmployeeRequestCreate,
     ExternalRequestCreate,
@@ -730,6 +730,24 @@ def transition_request(
             operational_note=body.operational_note,
         )
         db.add(audit)
+
+        # In-app notification for requester (NOT-01)
+        db.add(
+            Notification(
+                notification_id=f"NTF-{uuid.uuid4().hex[:10].upper()}",
+                recipient_email=request.requester_email,
+                target_role=None,
+                title=f"Requisition {request.request_id} Update: {target_status.value}",
+                message=(
+                    f"Your request for '{request.requested_item}' ({request.category}) has been marked as {target_status.value}."
+                    + (f" Note: {body.operational_note}" if body.operational_note else "")
+                ),
+                category="requisition",
+                priority="high" if target_status == RequestStatus.rejected else "normal",
+                link=f"/employee/requests/{request.request_id}",
+            )
+        )
+
         db.commit()
         db.refresh(request)
         db.refresh(history)

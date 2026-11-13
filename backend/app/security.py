@@ -14,7 +14,13 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
-def create_access_token(*, user_id: int, role: str, remember: bool) -> tuple[str, int]:
+def create_access_token(
+    *,
+    user_id: int,
+    role: str,
+    department: str | None = None,
+    remember: bool = False,
+) -> tuple[str, int]:
     minutes = (
         settings.jwt_remember_expire_minutes if remember else settings.jwt_expire_minutes
     )
@@ -22,6 +28,7 @@ def create_access_token(*, user_id: int, role: str, remember: bool) -> tuple[str
     payload = {
         "sub": str(user_id),
         "role": role,
+        "department": department or "",
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }

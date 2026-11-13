@@ -52,6 +52,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse:
     token, expires_in = create_access_token(
         user_id=user.id,
         role=user.role.value,
+        department=user.department,
         remember=body.remember,
     )
     return LoginResponse(
